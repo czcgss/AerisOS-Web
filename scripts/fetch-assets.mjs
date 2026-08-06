@@ -46,15 +46,43 @@ const download = (url, target, redirects = 5) => new Promise((resolveDownload, r
     }
     const total = Number(response.headers['content-length']) || 0;
     let received = 0;
+    let lastReportedBytes = 0;
+    let lastReportedAt = Date.now();
+    let lastReportedPercent = -5;
+    const formatMegabytes = bytes => (bytes / 1024 / 1024).toFixed(1);
+    const reportProgress = force => {
+      const now = Date.now();
+      const percent = total ? Math.min(100, Math.floor(received / total * 100)) : null;
+      if (!force && (
+        (percent !== null && percent < lastReportedPercent + 5)
+        || (percent === null && now - lastReportedAt < 3000)
+      )) return;
+      const elapsedSeconds = Math.max((now - lastReportedAt) / 1000, 0.001);
+      const megabytesPerSecond = (received - lastReportedBytes) / 1024 / 1024 / elapsedSeconds;
+      const amount = total
+        ? `${percent}% · ${formatMegabytes(received)} / ${formatMegabytes(total)} MB`
+        : `${formatMegabytes(received)} MB`;
+      console.log(`Downloading ${amount} · ${megabytesPerSecond.toFixed(1)} MB/s`);
+      lastReportedBytes = received;
+      lastReportedAt = now;
+      if (percent !== null) lastReportedPercent = percent;
+    };
     response.on('data', chunk => {
       received += chunk.length;
-      if (total && received % (8 * 1024 * 1024) < chunk.length) {
-        process.stdout.write(`\rDownloading ${Math.floor(received / total * 100)}%`);
-      }
+      reportProgress(false);
     });
-    pipeline(response, createWriteStream(target)).then(resolveDownload, reject);
+    const progressTimer = setInterval(() => reportProgress(true), 3000);
+    pipeline(response, createWriteStream(target)).then(() => {
+      clearInterval(progressTimer);
+      if (!total || lastReportedPercent < 100) reportProgress(true);
+      resolveDownload();
+    }, error => {
+      clearInterval(progressTimer);
+      reject(error);
+    });
   });
   request.on('error', reject);
+  request.setTimeout(30000, () => request.destroy(new Error('Download stalled for 30 seconds')));
 });
 
 if (await isValid()) {
@@ -73,7 +101,7 @@ await rm(temporary, { force: true });
 console.log(`Fetching ${asset.name}…`);
 try {
   await download(asset.url, temporary);
-  process.stdout.write('\nVerifying SHA-256…\n');
+  console.log('Verifying SHA-256…');
   const actual = await digest(temporary);
   if (actual !== asset.sha256) throw new Error(`Checksum mismatch: expected ${asset.sha256}, received ${actual}`);
   await rename(temporary, asset.path);
