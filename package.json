@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.20.0"
   },
   "scripts": {
     "assets": "node scripts/fetch-assets.mjs",

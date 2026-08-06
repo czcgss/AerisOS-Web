@@ -4,7 +4,7 @@ Thanks for helping improve Aeris. The project is an experimental browser-hosted 
 
 ## Development setup
 
-1. Install Node.js 20.19 or newer and enable Corepack.
+1. Install Node.js 22.20 or newer and enable Corepack.
 2. Run `pnpm install --frozen-lockfile`.
 3. Run `pnpm assets` to fetch and verify the Alpine boot image.
 4. Run `pnpm dev` and open the printed local URL.

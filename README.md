@@ -30,7 +30,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the runtime layers and appl
 
 ## Requirements
 
-- Node.js 20.19 or newer
+- Node.js 22.20 or newer
 - pnpm 11 (Corepack is recommended)
 - A modern desktop browser with WebAssembly and IndexedDB
 - About 300MB of free space for the Alpine installation image, plus space for browser snapshots
