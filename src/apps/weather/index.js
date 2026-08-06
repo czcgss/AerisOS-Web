@@ -1,0 +1,35 @@
+import {icon} from '../../icons.js';
+import {weatherCondition} from '../../services/WeatherService.js';
+const esc=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const n=value=>Math.round(Number(value)||0);
+
+export default{
+  id:'weather',title:'weather',icon:'sun',color:'cyan',width:1050,height:690,singleInstance:true,
+  mount(root,{weather,i18n,kernel}){
+    let searchOpen=false,searchQuery='',results=[],searchTimer=0,searchSequence=0,searching=false,composing=false;
+    const locale=()=>i18n.t('dateFormat'),state=()=>weather.snapshot();
+    const resultsMarkup=()=>searching?`<div class="weather-searching"><i></i>${i18n.t('searching')}</div>`:results.map((place,index)=>`<button data-weather-place="${index}"><span><strong>${esc(place.name)}</strong><small>${esc([place.admin1,place.country].filter(Boolean).join(', '))}</small></span><b>${esc(place.country_code||'')}</b></button>`).join('');
+    const searchMarkup=()=>`<section class="weather-search"><div><label>${icon('search',16)}<input value="${esc(searchQuery)}" placeholder="${i18n.t('searchCity')}" autocomplete="off" spellcheck="false"><button data-weather-close>×</button></label><div data-weather-results>${resultsMarkup()}</div></div></section>`;
+    const draw=()=>{
+      const s=state(),d=s.data,c=d?.current,condition=weatherCondition(c?.weather_code,i18n.locale);
+      const hours=d?.hourly?.time?.map((time,index)=>({time,temp:d.hourly.temperature_2m[index],code:d.hourly.weather_code[index],rain:d.hourly.precipitation_probability[index]})).filter(hour=>new Date(hour.time)>=new Date()).slice(0,24)||[];
+      const days=d?.daily?.time?.map((date,index)=>({date,code:d.daily.weather_code[index],high:d.daily.temperature_2m_max[index],low:d.daily.temperature_2m_min[index],rain:d.daily.precipitation_probability_max[index],uv:d.daily.uv_index_max[index],sunrise:d.daily.sunrise[index],sunset:d.daily.sunset[index]}))||[];
+      root.innerHTML=`<div class="system-app weather-app weather-${condition.key}"><aside><header>${icon('sun',22)}<strong>${i18n.t('weather')}</strong><button data-weather-search>${icon('search',15)}</button></header><button class="weather-place selected"><span><strong>${esc(s.location.name)}</strong><small>${esc(s.location.admin1||s.location.country)}</small></span><b>${c?`${n(c.temperature_2m)}°`:'—'}</b></button><footer>${s.error?`<span class="weather-error">${esc(s.error)}</span>`:`<span>${i18n.t('weatherUpdated')} ${d?new Intl.DateTimeFormat(locale(),{hour:'2-digit',minute:'2-digit'}).format(d.fetchedAt):'—'}</span>`}</footer></aside><main><div class="weather-toolbar"><div><h1>${esc(s.location.name)}</h1><p>${esc([s.location.admin1,s.location.country].filter(Boolean).join(', '))}</p></div><button data-weather-search>${icon('location',15)} ${i18n.t('changeLocation')}</button><button data-weather-refresh class="${s.loading?'spinning':''}">${icon('refresh',15)}</button></div>${!d?`<div class="weather-empty">${icon('cloud',58)}<strong>${s.loading?i18n.t('loadingWeather'):i18n.t('weatherUnavailable')}</strong></div>`:`<section class="weather-hero"><div><span>${icon(condition.glyph,72)}</span><strong>${n(c.temperature_2m)}°</strong></div><h2>${condition.label}</h2><p>${i18n.t('feelsLike')} ${n(c.apparent_temperature)}° · H:${n(days[0]?.high)}° L:${n(days[0]?.low)}°</p></section><section class="weather-panel weather-hourly"><header>${icon('clock',14)} ${i18n.t('hourlyForecast')}</header><div>${hours.map((hour,index)=>{const con=weatherCondition(hour.code,i18n.locale);return`<article><b>${index===0?i18n.t('now'):new Intl.DateTimeFormat(locale(),{hour:'numeric'}).format(new Date(hour.time))}</b>${icon(con.glyph,25)}<strong>${n(hour.temp)}°</strong><small>${hour.rain||0}%</small></article>`}).join('')}</div></section><div class="weather-lower"><section class="weather-panel weather-days"><header>${icon('calendar',14)} ${i18n.t('tenDayForecast')}</header>${days.map((day,index)=>{const con=weatherCondition(day.code,i18n.locale);return`<article><strong>${index===0?i18n.t('today'):new Intl.DateTimeFormat(locale(),{weekday:'short'}).format(new Date(`${day.date}T12:00`))}</strong><small>${day.rain||0}%</small>${icon(con.glyph,22)}<span>${n(day.low)}° <i><b style="--low:${n(day.low)};--high:${n(day.high)}"></b></i> ${n(day.high)}°</span></article>`}).join('')}</section><div class="weather-details"><section class="weather-panel"><header>${icon('rain',14)} ${i18n.t('precipitation')}</header><strong>${n(c.precipitation)} <small>mm</small></strong><p>${days[0]?.rain||0}% ${i18n.t('today').toLowerCase()}</p></section><section class="weather-panel"><header>${icon('wind',14)} ${i18n.t('wind')}</header><strong>${n(c.wind_speed_10m)} <small>km/h</small></strong><p>${n(c.relative_humidity_2m)}% ${i18n.t('humidity').toLowerCase()}</p></section><section class="weather-panel"><header>${icon('sun',14)} UV</header><strong>${n(days[0]?.uv)}</strong><p>${i18n.t('sunset')} ${days[0]?.sunset?.slice(11,16)||'—'}</p></section></div></div>`}</main>${searchOpen?searchMarkup():''}</div>`;
+      bind();
+    };
+    const bindPlaces=()=>root.querySelectorAll('[data-weather-place]').forEach(button=>button.onclick=()=>{const place=results[Number(button.dataset.weatherPlace)];if(!place)return;searchOpen=false;weather.select(place).catch(()=>{});draw()});
+    const updateResults=()=>{const container=root.querySelector('[data-weather-results]');if(!container)return;container.innerHTML=resultsMarkup();bindPlaces()};
+    const runSearch=()=>{clearTimeout(searchTimer);const query=searchQuery.trim(),sequence=++searchSequence;if(query.length<2){results=[];searching=false;updateResults();return}searchTimer=setTimeout(async()=>{searching=true;updateResults();try{const next=await weather.search(query);if(sequence!==searchSequence)return;results=next}catch{if(sequence!==searchSequence)return;results=[]}finally{if(sequence===searchSequence){searching=false;updateResults()}}},280)};
+    const openSearch=()=>{searchOpen=true;searchQuery='';results=[];searching=false;draw();requestAnimationFrame(()=>root.querySelector('.weather-search input')?.focus())};
+    const closeSearch=()=>{clearTimeout(searchTimer);searchSequence++;searchOpen=false;draw()};
+    const bind=()=>{
+      root.querySelectorAll('[data-weather-search]').forEach(button=>button.onclick=openSearch);
+      root.querySelector('[data-weather-close]')?.addEventListener('click',closeSearch);
+      root.querySelector('[data-weather-refresh]')?.addEventListener('click',()=>weather.refresh(true).catch(()=>{}));
+      const input=root.querySelector('.weather-search input');
+      if(input){input.oncompositionstart=()=>{composing=true};input.oncompositionend=()=>{composing=false;searchQuery=input.value;runSearch()};input.oninput=()=>{searchQuery=input.value;if(!composing)runSearch()}}
+      bindPlaces();
+    };
+    const off=kernel.bus.on('weather:update',()=>{if(!searchOpen)draw()});draw();weather.refresh().catch(()=>{});return()=>{clearTimeout(searchTimer);off()};
+  }
+};

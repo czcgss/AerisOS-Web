@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/settings-panels.css"><title>Aeris Setup Assistant Test</title></head><body><div id="app"></div><script type="module">
+import { SetupAssistant } from '/src/shell/SetupAssistant.js';
+import en from '/src/locales/en.js';import zh from '/src/locales/zh.js';
+const values={locale:'en',theme:'light'},packs={en,zh},settings={get:key=>values[key],set:(key,value)=>values[key]=value,update:next=>Object.assign(values,next)};
+const i18n={get locale(){return values.locale},t:key=>packs[values.locale]?.[key]??packs.en[key]??key,list:()=>Object.entries(packs).map(([code,pack])=>({code,name:pack._name})),use:locale=>values.locale=locale};
+const context={settings,i18n,system:{configureProfile:async profile=>{window.testProfile=profile}},machine:{checkpoint:async()=>true}};
+new SetupAssistant(document.querySelector('#app'),context,async()=>{document.body.dataset.setupTest='complete'}).mount();
+</script></body></html>

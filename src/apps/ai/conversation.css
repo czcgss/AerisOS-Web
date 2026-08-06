@@ -1,0 +1,191 @@
+/* The user owns the right edge of a conversation; Aeris AI owns the left. */
+.ai-conversation {
+  scroll-behavior: auto;
+  overflow-anchor: none;
+}
+
+.ai-message-user {
+  grid-template-columns: minmax(0, 1fr) 31px;
+}
+
+.ai-message-user .ai-message-avatar {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.ai-message-user .ai-message-body {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.ai-message-user .ai-message-body.editing {
+  width: min(620px, 92%);
+  max-width: none;
+  padding: 8px;
+  border-radius: 16px 16px 5px 16px;
+}
+
+.ai-inline-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 66px;
+  max-height: 220px;
+  padding: 8px 9px;
+  overflow: auto;
+  resize: none;
+  border: 0;
+  outline: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  box-shadow: var(--inset);
+  color: var(--text);
+  font: 13px/1.55 inherit;
+  user-select: text;
+}
+
+.ai-inline-editor footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding-top: 8px;
+}
+
+.ai-inline-editor footer button {
+  min-width: 60px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--text);
+  font-size: 10px;
+}
+
+.ai-message-body {
+  position: relative;
+  min-width: 0;
+}
+
+.ai-message-content { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.ai-message-content pre,.ai-tool-call pre,.ai-tool-call>p { max-width: 100%; overflow-wrap: anywhere; }
+
+.ai-message-actions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2;
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  transform: translateY(-3px);
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.ai-message-user .ai-message-actions {
+  right: 0;
+  left: auto;
+}
+
+.ai-message:hover .ai-message-actions,
+.ai-message:focus-within .ai-message-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.ai-message-actions button {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  box-shadow: var(--small-shadow);
+  color: var(--muted);
+}
+
+.ai-message-actions button:hover {
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.ai-message-stack .ai-message {
+  padding-bottom: 22px;
+}
+
+.ai-editing-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(700px, calc(100% - 20px));
+  box-sizing: border-box;
+  margin: 0 auto 6px;
+  padding: 6px 9px 4px;
+  border-radius: 10px 10px 0 0;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.ai-editing-bar span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-editing-bar button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ai-editing-bar + .ai-composer-shell {
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
+}
+
+.ai-system-app .ai-message-content,
+.ai-system-app .ai-copyable-error,
+.ai-system-app .ai-tool-call [data-copyable] {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.ai-copyable-error {
+  position: relative;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.ai-error-icon { flex: 0 0 auto; margin-top: 1px; user-select: none; }
+.ai-error-text { min-width: 0; flex: 1; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ai-copyable-error > button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 25px;
+  width: 25px;
+  height: 25px;
+  margin: -5px -5px -5px 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 130ms ease;
+  user-select: none;
+}
+.ai-copyable-error:hover > button,.ai-copyable-error:focus-within > button { opacity: 1; pointer-events: auto; }
+.ai-center-error { display:flex;align-items:flex-start;gap:8px;max-width:560px;margin-top:8px;padding:10px 12px;border-radius:11px;background:rgba(199,80,99,.09);color:#bd5264;font-size:11px;text-align:left; }

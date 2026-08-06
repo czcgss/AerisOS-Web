@@ -1,0 +1,29 @@
+{
+  "name": "aeris-webos",
+  "version": "0.4.0",
+  "description": "A modular browser-hosted operating system with a v86 Linux runtime and native AI agent tools.",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "assets": "node scripts/fetch-assets.mjs",
+    "assets:check": "node scripts/fetch-assets.mjs --check",
+    "predev": "pnpm assets:check",
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "build:release": "pnpm assets:check && vite build",
+    "check": "vite build",
+    "prepreview": "pnpm assets:check",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.83.0",
+    "@earendil-works/pi-ai": "0.83.0"
+  }
+}

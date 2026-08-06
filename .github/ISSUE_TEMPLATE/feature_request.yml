@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose a focused improvement to Aeris
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Aeris. Please describe the user problem before the proposed UI.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What operating-system workflow is missing or difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include expected interaction, persistence, accessibility, and language behavior where relevant.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Desktop and window management
+        - Linux guest and v86
+        - Built-in application
+        - AI Agent and tools
+        - Localization
+        - Developer experience
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for the same request.
+          required: true
