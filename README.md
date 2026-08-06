@@ -1,21 +1,22 @@
-# Aeris WebOS
+# AerisOS
 
-Aeris is an experimental browser-hosted operating-system research project. It combines a modular desktop shell with an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86), plus an AI Agent that can call explicitly registered application tools.
+AerisOS is a fully AI-coded, browser-hosted WebOS research project. All Aeris-owned implementation code—including the desktop shell, built-in applications, system services, Linux integration, and Agent layer—was written by AI through iterative development directed and tested by a human. Third-party components retain their original authorship and licenses.
 
-The browser hosts the emulated hardware, compositor, windows, and local persistence. Linux supplies the process and filesystem runtime. Aeris applications consume system services rather than reaching into v86 directly.
+AerisOS combines a modular desktop environment with an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86). The browser hosts the emulated hardware, desktop compositor, windows, and local persistence; Linux provides the process and filesystem runtime; and Aeris applications access the guest through defined system services.
 
-> **Aeris is not a complete, general-purpose operating system for daily or production use.** It is a working research prototype for exploring how an operating system with AI integrated as a native system capability—not merely added as a chatbot—might evolve in the future.
+> **AerisOS is not a complete, general-purpose operating system for daily or production use.** It is a working research prototype for exploring two connected questions: how far an operating-system environment can be built through AI-directed software development, and how an operating system with AI integrated as a native capability—not merely added as a chatbot—might evolve in the future.
 
 ## Project vision
 
-Most current AI desktop products place an assistant on top of an existing operating system. Aeris explores a different model: applications expose explicit, structured capabilities to a system Agent; users control which applications the Agent may access; risky operations require approval; and tool activity remains visible as part of the operating-system interaction.
+Most current AI desktop products place an assistant on top of an existing operating system. AerisOS explores a different model: applications expose explicit, structured capabilities to a system Agent; users control which applications the Agent may access; risky operations require approval; and tool activity remains visible as part of the operating-system interaction.
 
-The project uses a real Linux guest so these ideas can be tested against processes, files, persistence, networking, and system state rather than only against static interface mockups. Its goal is to validate interaction models, permission boundaries, application tools, and Agent orchestration—not to replace macOS, Windows, or Linux distributions today.
+Using a real Linux guest allows these ideas to be tested against processes, files, persistence, networking, and system state rather than only against static interface mockups. The goal is to validate interaction models, permission boundaries, application tools, Agent orchestration, and the practical role of AI in building complex system software—not to replace macOS, Windows, or Linux distributions today.
 
-Aeris remains under active development. Features may be incomplete, data formats can change, and compatibility is not guaranteed. It is not a hardened sandbox and should not be used with irreplaceable data or production secrets.
+AerisOS remains under active development. Features may be incomplete, data formats can change, and compatibility is not guaranteed. It is not a hardened sandbox and should not be used with irreplaceable data or production secrets.
 
 ## Highlights
 
+- Fully AI-coded Aeris-owned codebase, developed from human product direction and testing feedback
 - Real x86 Linux guest running in WebAssembly, not a simulated terminal
 - Installation gate, first-run setup assistant, desktop, Dock, launcher, menus, notifications, widgets, and window management
 - Snapshot-based machine restoration through IndexedDB and separate window-session restoration
@@ -29,7 +30,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the runtime layers and appl
 
 ## Requirements
 
-- Node.js 20.19 or newer
+- Node.js 22.20 or newer
 - pnpm 11 (Corepack is recommended)
 - A modern desktop browser with WebAssembly and IndexedDB
 - About 300MB of free space for the Alpine installation image, plus space for browser snapshots
