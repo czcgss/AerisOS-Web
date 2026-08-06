@@ -4,6 +4,8 @@ Describe the user-visible and architectural changes.
 
 ## Verification
 
+- [ ] This branch was created from an up-to-date `develop`
+- [ ] The pull request targets `develop`, not `main`
 - [ ] `pnpm check`
 - [ ] First boot or snapshot restoration tested when relevant
 - [ ] English and Simplified Chinese UI checked when relevant

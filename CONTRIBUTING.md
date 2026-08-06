@@ -9,8 +9,36 @@ Thanks for helping improve Aeris. The project is an experimental browser-hosted 
 3. Run `pnpm assets` to fetch and verify the Alpine boot image.
 4. Run `pnpm dev` and open the printed local URL.
 
+## Branch and pull request workflow
+
+`main` is the stable release branch. `develop` is the integration branch and the only allowed pull request target for feature, fix, documentation, refactor, and maintenance work.
+
+Always create a working branch from the latest `develop`:
+
+```bash
+git fetch origin
+git switch develop
+git pull --ff-only origin develop
+git switch -c feature/short-description
+```
+
+Use a descriptive prefix such as `feature/`, `fix/`, `docs/`, `refactor/`, or `chore/`. Commit changes on that branch, push it, and open the pull request against `develop`:
+
+```bash
+git push -u origin feature/short-description
+```
+
+Before requesting review, update the branch with the latest `develop` and resolve conflicts on the working branch.
+
+- Do not create feature branches from `main`.
+- Do not open feature or maintenance pull requests against `main`.
+- Do not push changes directly to `main` or `develop`.
+- Moving tested changes from `develop` to `main` is a release operation performed by project maintainers, not part of a feature pull request.
+
 ## Before opening a pull request
 
+- Confirm that the pull request base branch is `develop`.
+- Confirm that the working branch was created from an up-to-date `develop`.
 - Run `pnpm check`.
 - Test first boot and snapshot restoration when changing v86, setup, persistence, or guest services.
 - Test both English and Simplified Chinese when changing visible copy or layout.
