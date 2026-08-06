@@ -1,0 +1,11 @@
+.widget-system {
+  height: 190px;
+}
+
+.widget-system dl {
+  top: 40px;
+}
+
+.widget-system dl div {
+  padding: 6px 0;
+}

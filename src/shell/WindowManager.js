@@ -1,0 +1,79 @@
+import { icon } from '../icons.js';
+
+export class WindowManager {
+  constructor(layer, registry, context) {
+    this.layer = layer; this.registry = registry; this.context = context;
+    this.windows = new Map(); this.z = 20; this.sequence = 0;
+  }
+
+  open(appId, options = {}) {
+    const app = this.registry.get(appId);
+    if (!app) throw new Error(`Unknown application: ${appId}`);
+    if (app.singleInstance) {
+      const current = [...this.windows.values()].find(window => window.app.id === appId);
+      if (current) { current.element.hidden = false; this.focus(current.id); return current; }
+    }
+    const id = `window-${++this.sequence}`;
+    const width = Math.min(options.width || app.width || 820, innerWidth - 32);
+    const height = Math.min(options.height || app.height || 560, innerHeight - 105);
+    const offset = this.windows.size * 22;
+    const left=options.left??Math.max(12,(innerWidth-width)/2+offset),top=options.top??Math.max(48,(innerHeight-height)/2+offset/2);
+    const record = { id, app, cleanup: null, maximized: false, previous: null, restored: !!options.restored, launchOptions: { path: options.path || '' } };
+    const element = document.createElement('article');
+    element.className = 'window focused'; element.dataset.id = id;
+    element.style.cssText = `left:${left}px;top:${top}px;width:${width}px;height:${height}px;z-index:${++this.z}`;
+    element.innerHTML = `<header class="titlebar"><div class="window-controls"><button class="win-close" data-window-action="close" aria-label="Close"></button><button class="win-min" data-window-action="minimize" aria-label="Minimize"></button><button class="win-max" data-window-action="maximize" aria-label="Maximize"></button></div><div class="window-title"><span class="app-icon app-icon-${app.color || 'grey'}">${icon(app.icon,16)}</span><span data-window-title>${this.context.i18n.t(app.title)}</span></div><div></div></header><div class="window-body" data-app-root></div><i class="resize-handle"></i>`;
+    this.layer.appendChild(element); record.element = element; this.windows.set(id, record);
+    this.#bindWindow(record);
+    record.cleanup = app.mount(element.querySelector('[data-app-root]'), { ...this.context, window: record, windowManager: this, launchOptions: record.launchOptions }) || null;
+    this.focus(id); this.context.kernel.bus.emit('window:opened', { id, appId }); this.#persistSession();
+    return record;
+  }
+
+  close(id) { const record = this.windows.get(id); if (!record) return; record.cleanup?.(); record.element.remove(); this.windows.delete(id); this.context.kernel.bus.emit('window:closed',{ id, appId: record.app.id }); this.#persistSession(); }
+  isOpen(appId) { return [...this.windows.values()].some(record => record.app.id === appId); }
+  closeApp(appId) { [...this.windows.values()].filter(record => record.app.id === appId).forEach(record => this.close(record.id)); }
+  minimize(id) { const record = this.windows.get(id); if (record) { record.element.hidden=true;this.#persistSession(); } }
+  focus(id) { const record = this.windows.get(id); if (!record) return; document.querySelectorAll('.window').forEach(el => el.classList.remove('focused')); record.element.classList.add('focused'); record.element.style.zIndex = ++this.z; this.context.kernel.bus.emit('window:focused', record.app.id); }
+  focusNext(){const visible=[...this.windows.values()].filter(record=>!record.element.hidden);if(!visible.length)return;const focused=visible.findIndex(record=>record.element.classList.contains('focused')),next=visible[(focused+1)%visible.length];this.focus(next.id)}
+  snap(id,side){const record=this.windows.get(id);if(!record||record.maximized)return;const element=record.element;if(!record.previous)record.previous=element.style.cssText;element.style.cssText+=side==='left'?`;left:10px;top:46px;width:calc(50vw - 15px);height:calc(100vh - 122px);z-index:${++this.z}`:`;left:calc(50vw + 5px);top:46px;width:calc(50vw - 15px);height:calc(100vh - 122px);z-index:${++this.z}`;element.classList.add('snapped');this.#persistSession()}
+  maximize(id) {
+    const record = this.windows.get(id); if (!record) return;
+    if (!record.maximized) { record.previous = record.element.style.cssText; record.element.style.cssText += ';inset:46px 10px 76px;width:auto;height:auto;z-index:'+ ++this.z; }
+    else record.element.style.cssText = record.previous;
+    record.maximized = !record.maximized; record.element.classList.toggle('maximized', record.maximized);
+    this.#persistSession();
+  }
+
+  restoreSession() {
+    if(!this.context.settings.get('restoreSession'))return;
+    let session=[];try{session=JSON.parse(localStorage.getItem('aeris.window-session')||'[]')}catch{}
+    this.restoring=true;
+    for(const state of session){if(!this.registry.get(state.appId))continue;const record=this.open(state.appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});if(state.maximized)this.maximize(record.id);if(state.minimized)record.element.hidden=true}
+    this.restoring=false;
+  }
+
+  refreshLabels() { for (const record of this.windows.values()) record.element.querySelector('[data-window-title]').textContent = this.context.i18n.t(record.app.title); }
+
+  #bindWindow(record) {
+    const { element, id } = record, bar = element.querySelector('.titlebar'), handle = element.querySelector('.resize-handle');
+    element.addEventListener('pointerdown', () => this.focus(id));
+    element.querySelector('[data-window-action="close"]').onclick = () => this.close(id);
+    element.querySelector('[data-window-action="minimize"]').onclick = () => this.minimize(id);
+    element.querySelector('[data-window-action="maximize"]').onclick = () => this.maximize(id);
+    bar.ondblclick = event => { if (!event.target.closest('button')) this.maximize(id); };
+    let drag;
+    const stopDrag=event=>{const released=drag;drag=null;if(event?.pointerId!=null&&bar.hasPointerCapture(event.pointerId))bar.releasePointerCapture(event.pointerId);if(released&&event){if(event.clientY<=48)return this.maximize(id);if(event.clientX<=8)return this.snap(id,'left');if(event.clientX>=innerWidth-8)return this.snap(id,'right')}this.#persistSession()};
+    bar.onpointerdown = event => { if (event.button!==0||event.target.closest('button')||record.maximized) return; const rect=element.getBoundingClientRect(); drag={pointerId:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top}; bar.setPointerCapture(event.pointerId); };
+    bar.onpointermove = event => { if (!drag) return;if(event.pointerId!==drag.pointerId||!(event.buttons&1))return stopDrag(event);element.style.left=Math.max(-element.offsetWidth+130,drag.left+event.clientX-drag.x)+'px';element.style.top=Math.max(44,drag.top+event.clientY-drag.y)+'px'; };
+    bar.onpointerup=stopDrag;bar.onpointercancel=stopDrag;bar.onlostpointercapture=()=>drag=null;
+    let resize;
+    const stopResize=event=>{resize=null;if(event?.pointerId!=null&&handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);this.#persistSession()};
+    handle.onpointerdown = event => { if(event.button!==0)return;resize={pointerId:event.pointerId,x:event.clientX,y:event.clientY,width:element.offsetWidth,height:element.offsetHeight};handle.setPointerCapture(event.pointerId); };
+    handle.onpointermove = event => { if (!resize) return;if(event.pointerId!==resize.pointerId||!(event.buttons&1))return stopResize(event);element.style.width=Math.max(360,resize.width+event.clientX-resize.x)+'px';element.style.height=Math.max(280,resize.height+event.clientY-resize.y)+'px'; };
+    handle.onpointerup=stopResize;handle.onpointercancel=stopResize;handle.onlostpointercapture=()=>resize=null;
+  }
+
+  persistSession(){this.#persistSession()}
+  #persistSession(){if(this.restoring||!this.context.settings.get('restoreSession'))return;const session=[...this.windows.values()].map(({app,element,maximized,launchOptions})=>({appId:app.id,left:parseFloat(element.style.left)||0,top:parseFloat(element.style.top)||48,width:element.offsetWidth||parseFloat(element.style.width),height:element.offsetHeight||parseFloat(element.style.height),maximized,minimized:element.hidden,launchOptions}));localStorage.setItem('aeris.window-session',JSON.stringify(session))}
+}
