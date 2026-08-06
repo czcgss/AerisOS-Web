@@ -110,4 +110,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. Report secur
 
 ## License
 
-No Aeris project license has been selected yet. A `LICENSE` file must be added before describing or distributing Aeris as open source. Third-party components remain governed by their own licenses.
+AerisOS is released under the [MIT License](LICENSE). Third-party components remain governed by their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
