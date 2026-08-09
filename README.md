@@ -21,6 +21,7 @@ AerisOS remains under active development. Features may be incomplete, data forma
 - Installation gate, first-run setup assistant, desktop, Dock, launcher, menus, notifications, widgets, and window management
 - Snapshot-based machine restoration through IndexedDB and separate window-session restoration
 - Linux-backed Files, Terminal, Text Editor, Preview, Disk Utility, Computer, and System Monitor
+- Native Linux TTY terminal sessions with VT/ANSI rendering, signals, tab completion, full-screen applications, and persistent machine state
 - Calendar, Contacts, Reminders, Notes, Photos, Trash, Weather, Clock, and Calculator
 - English and Simplified Chinese with importable JSON language packs
 - Aeris AI with OpenAI-compatible providers, persistent conversations, per-application tool permissions, structured tool-call rendering, and approval for high-risk actions

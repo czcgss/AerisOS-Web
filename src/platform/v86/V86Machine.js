@@ -1,4 +1,5 @@
 import { SerialBridge } from './SerialBridge.js';
+import { TerminalBridge } from './TerminalBridge.js';
 import { MachineStateStore } from './MachineStateStore.js';
 
 const IMAGE_VERSION = 'alpine-3.24.1-x86-compatible-v11';
@@ -10,6 +11,7 @@ export class V86Machine {
     this.status = 'stopped';
     this.startedAt = 0;
     this.serial = null;
+    this.terminals = new Map();
     this.controlConsole = 1;
     this.stateStore = new MachineStateStore();
     this.guestReady = false;
@@ -40,11 +42,13 @@ export class V86Machine {
       bios: { url: `${base}/seabios.bin` }, vga_bios: { url: `${base}/vgabios.bin` },
       filesystem: {}, autostart: false,
       network_relay_url: 'fetch', net_device: { type: 'virtio' },
+      uart1: true, uart2: true, uart3: true,
     };
     if (!snapshot) machineOptions.cdrom = { url: `${base}/alpine.iso` };
     this.emulator = new V86(machineOptions);
     this.serial = new SerialBridge(this, this.kernel.bus);
     this.serial.attach(this.emulator);
+    this.terminals=new Map([1,2,3].map(port=>{const bridge=new TerminalBridge(this,this.kernel.bus,port);bridge.attach(this.emulator);return[port,bridge]}));
     this.emulator.add_listener('download-progress', progress => this.#downloadProgress(progress));
     this.emulator.add_listener('download-error', error => this.kernel.bus.emit('guest:error', new Error(`Installation media could not be loaded: ${error?.file_name || 'unknown file'}`)));
     this.emulator.add_listener('emulator-ready', async () => {
@@ -62,6 +66,7 @@ export class V86Machine {
           await new Promise(resolve => setTimeout(resolve, 1100));
           this.#bootStage('reconnectingLinuxServices',91,'restore');
           await this.#resumeControlPlane();
+          await this.#installTerminalServices();
           this.#bootStage('validatingRestoredSystem',97,'restore');
           this.#setStatus('running');
           await this.#emitGuestReady(true);
@@ -109,6 +114,7 @@ export class V86Machine {
     await this.sendUserInput(`${commands.join('; ')}\n`, 3);
     await new Promise(resolve => setTimeout(resolve, 1200));
     await this.#connectRootControlPlane();
+    await this.#installTerminalServices();
     await this.#launchControlPlane();
   }
 
@@ -230,6 +236,16 @@ export class V86Machine {
     await this.serial.execute(`mkdir -p /usr/local/bin; printf %s '${fileHelperPayload}' | base64 -d > /usr/local/bin/aeris_list; chmod 755 /usr/local/bin/aeris_list`,5000,true);
   }
 
+  async #installTerminalServices(){
+    this.#activateTerminalLines();
+    const loginHelper=`#!/bin/ash\nexport HOME=/home/aeris USER=aeris LOGNAME=aeris SHELL=/bin/ash TERM=xterm-256color COLORTERM=truecolor\ncd /home/aeris\nexec /bin/su -l aeris`;
+    const profile=`\n# AERIS_TERMINAL_PROFILE\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nalias ls='ls --color=auto'\nalias ll='ls -lah --color=auto'\nPS1='\\[\\033[38;5;75m\\]aeris@aeris \\[\\033[38;5;110m\\]\\w \\[\\033[38;5;78m\\]❯ \\[\\033[0m\\]'\n`;
+    const encode=value=>{const bytes=new TextEncoder().encode(value);return btoa(String.fromCharCode(...bytes))};
+    const helperPayload=encode(loginHelper),profilePayload=encode(profile);
+    const command=`mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/aeris-terminal-login; chmod 755 /usr/local/bin/aeris-terminal-login; grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/aeris/.profile; chown aeris:aeris /home/aeris/.profile; sed -i '/^ttyS[123]::/d' /etc/inittab; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /etc/inittab; done; kill -HUP 1`;
+    await this.serial.execute(command,8000,true);
+  }
+
   async #launchControlPlane() {
     this.#bootStage('startingServices', 86, 'install');
     await this.sendUserInput('chvt 2\n', 5);
@@ -333,11 +349,27 @@ export class V86Machine {
     if (progress !== this.lastDownloadActivityProgress) { this.lastDownloadActivityProgress=progress;this.#bootActivity({key:label,kind:'progress'}); }
   }
   #activateSerialLines() { this.emulator?.serial_set_carrier_detect(0,true);this.emulator?.serial_set_data_set_ready(0,true);this.emulator?.serial_set_clear_to_send(0,true); }
+  #activateTerminalLines(){for(const port of [1,2,3]){this.emulator?.serial_set_carrier_detect(port,true);this.emulator?.serial_set_data_set_ready(port,true);this.emulator?.serial_set_clear_to_send(port,true)}}
+
+  terminalWrite(port,data){this.terminals.get(Number(port))?.write(data)}
+  terminalReplay(port){return this.terminals.get(Number(port))?.replay()||''}
+  terminalPorts(){return[1,2,3]}
+  resizeTerminal(port,columns,rows){
+    const tty=Number(port),cols=Math.max(20,Math.min(400,Number(columns)||80)),lines=Math.max(5,Math.min(200,Number(rows)||24));
+    if(!this.serial||!this.guestReady)return Promise.resolve();
+    return this.serial.execute(`stty -F /dev/ttyS${tty} cols ${cols} rows ${lines} 2>/dev/null || true`,5000,true).catch(()=>{});
+  }
+  resetTerminal(port){
+    const tty=Number(port),bridge=this.terminals.get(tty);
+    bridge?.clear();
+    if(!this.serial||!this.guestReady)return Promise.resolve();
+    return this.serial.execute(`for terminal_pid in $(ps -eo pid,tty 2>/dev/null | awk '$2=="ttyS${tty}" {print $1}'); do kill -HUP "$terminal_pid" 2>/dev/null || true; done`,5000,true).catch(()=>{});
+  }
 
   pause() { this.emulator?.stop(); this.#setStatus('paused'); }
   resume() { this.emulator?.run(); this.#setStatus('running'); }
   async restart() { if(!this.emulator)return this.start();await this.checkpoint();await this.stop(false);await this.start(); }
-  async stop(save = true) { if(!this.emulator)return;if(save)await this.checkpoint();clearInterval(this._checkpointInterval);clearTimeout(this._checkpointTimer);this.#stopBootActivityMonitor();clearInterval(this._promptTimer);this.emulator.stop();await this.emulator.destroy();this.emulator=null;this.serial=null;this.guestReady=false;this.controlReady=false;this.#setStatus('stopped'); }
+  async stop(save = true) { if(!this.emulator)return;if(save)await this.checkpoint();clearInterval(this._checkpointInterval);clearTimeout(this._checkpointTimer);this.#stopBootActivityMonitor();clearInterval(this._promptTimer);this.emulator.stop();await this.emulator.destroy();this.emulator=null;this.serial=null;this.terminals.clear();this.guestReady=false;this.controlReady=false;this.#setStatus('stopped'); }
   uptime() { return this.startedAt ? Date.now()-this.startedAt : 0; }
   instructionCount() { return this.emulator?.get_instruction_counter?.() || 0; }
   screenText() { return this.screenRows().join('\n'); }

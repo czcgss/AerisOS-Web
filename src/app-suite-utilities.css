@@ -10,56 +10,14 @@
 .machine-pro>aside button{height:38px}.machine-pro>aside footer{position:absolute;left:21px;bottom:22px;display:flex;flex-direction:column;gap:3px}.machine-pro>aside footer small{margin-top:10px;color:var(--muted);font-size:7px}.machine-pro>aside footer strong{font-size:8px}.machine-pro .guest-display-slot{border-radius:0}[data-theme="dark"] .calculator-pro,[data-theme="dark"] .textedit-pro,[data-theme="dark"] .preview-pro,[data-theme="dark"] .monitor-pro,[data-theme="dark"] .machine-pro,[data-theme="dark"] .disk-pro,[data-theme="dark"] .clock-pro{background:linear-gradient(145deg,#334a58,#283d49)}[data-theme="dark"] .text-paper textarea,[data-theme="dark"] .preview-workspace>main pre{background:#263945;color:#dce7ec}
 .calculator-pro .calculator-keys button{height:40px}
 .machine-pro>aside>button:nth-of-type(2){display:none}
-.terminal-pro .terminal-output{min-width:max-content;letter-spacing:0;white-space:pre;tab-size:8}
-
 /* Agnoster is Aeris Terminal's built-in default theme. */
 .terminal-pro[data-terminal-theme="agnoster"]{--terminal-bg:#111a22;--terminal-panel:#1c2934;--terminal-fg:#d9e2e8;--terminal-muted:#7f94a3;--terminal-blue:#5aa7e8;--terminal-cyan:#55c2c8;--terminal-green:#67c58b;--terminal-yellow:#e9bc64;--terminal-orange:#e6965c;--terminal-red:#ef7373;--terminal-violet:#b398ed;--terminal-pink:#e58ab2;font-family:"Ubuntu Mono",ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;background:var(--terminal-bg);color:var(--terminal-fg)}
 .terminal-pro[data-terminal-theme="agnoster"]>header{background:#1b2833;border-color:rgba(255,255,255,.055)}
 .terminal-pro[data-terminal-theme="agnoster"] .terminal-tabs button,.terminal-pro[data-terminal-theme="agnoster"] .terminal-session-meta,.terminal-pro[data-terminal-theme="agnoster"]>footer{font-family:inherit}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-console{padding:22px 24px 34px;background:radial-gradient(circle at 88% 0,rgba(63,111,143,.12),transparent 32%),linear-gradient(150deg,#131e27,#0f181f);font-family:inherit;font-size:14px;line-height:1.48;font-variant-ligatures:none}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-output{display:block;min-width:100%;white-space:normal;color:var(--terminal-fg)}
-.terminal-output-line{min-height:1.48em;white-space:pre;tab-size:8}
-.terminal-line-error{color:var(--terminal-red)}
-.terminal-line-warning{color:var(--terminal-yellow)}
-.terminal-live-line,.terminal-history-command{display:flex;align-items:center;min-height:24px;white-space:nowrap}
-.terminal-history-command{margin-top:1px}.terminal-history-command+.terminal-output-line,.terminal-history-command+.terminal-file-grid{margin-top:2px}
-.terminal-prompt{display:inline-flex;align-items:center;flex:none;height:22px;margin-right:8px;white-space:nowrap;font-weight:700;line-height:22px;user-select:text}
-.prompt-segment{position:relative;height:22px;margin-right:-5px;padding:0 15px 0 10px;color:#fff;clip-path:polygon(0 0,calc(100% - 7px) 0,100% 50%,calc(100% - 7px) 100%,0 100%,7px 50%)}
-.prompt-segment:first-child{padding-left:8px;clip-path:polygon(0 0,calc(100% - 7px) 0,100% 50%,calc(100% - 7px) 100%,0 100%)}
-.prompt-user{background:#347fb1}.prompt-host{background:#6759a8}.prompt-path{max-width:245px;overflow:hidden;background:#324b5d;text-overflow:ellipsis}
-.prompt-mark{margin-left:9px;color:var(--terminal-green);font-size:17px;line-height:1}
-.terminal-command-text{white-space:pre;color:#f2f5f7}
-.terminal-live-line input{min-width:20px;height:24px;padding:0;caret-color:var(--terminal-green);font-family:inherit;font-size:14px;line-height:24px}
-.terminal-file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 18px;width:min(100%,760px);padding:2px 0 6px;white-space:normal}
-.terminal-file-grid>div{min-width:0;min-height:21px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.terminal-file{position:relative;padding-left:20px;color:var(--terminal-fg);font-weight:400}.terminal-file::before{position:absolute;left:1px;width:14px;color:currentColor;text-align:center;content:"·"}
-.terminal-file-directory{color:var(--terminal-blue);font-weight:700}.terminal-file-directory::before{content:"▰"}
-.terminal-file-executable{color:var(--terminal-green);font-weight:700}.terminal-file-executable::before{content:"❯"}
-.terminal-file-archive{color:var(--terminal-orange)}.terminal-file-archive::before{content:"▣"}
-.terminal-file-image{color:var(--terminal-pink)}.terminal-file-image::before{content:"▧"}
-.terminal-file-media{color:#dd83d5}.terminal-file-media::before{content:"♪"}
-.terminal-file-code{color:var(--terminal-cyan)}.terminal-file-code::before{content:"‹›";font-size:11px;font-weight:700}
-.terminal-file-config{color:var(--terminal-yellow)}.terminal-file-config::before{content:"⚙"}
-.terminal-file-document{color:#e8d5a3}.terminal-file-document::before{content:"▤"}
-.terminal-file-data{color:var(--terminal-violet)}.terminal-file-data::before{content:"▦"}
 .terminal-pro[data-terminal-theme="agnoster"]>footer{background:#1b2934;color:#8095a3;font-size:8px}
 .terminal-pro[data-terminal-theme="agnoster"] ::selection{background:rgba(83,151,210,.58);color:#fff}
 
-/* Terminal typography is measured in character cells, not responsive UI pixels. */
 .terminal-pro[data-terminal-theme="agnoster"]{font-size:14px;font-synthesis:none;font-variant-ligatures:none}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-console{font-size:14px;line-height:21px}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-output,.terminal-pro[data-terminal-theme="agnoster"] .terminal-output-line,.terminal-pro[data-terminal-theme="agnoster"] .terminal-command-text,.terminal-pro[data-terminal-theme="agnoster"] .terminal-live-line input{font:inherit;letter-spacing:0;word-spacing:0}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-output-line{min-height:21px;line-height:21px}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-live-line,.terminal-pro[data-terminal-theme="agnoster"] .terminal-history-command{min-height:21px;line-height:21px}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-live-line input{height:21px;line-height:21px}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-prompt{height:21px;margin-right:1ch;line-height:21px}
-.terminal-pro[data-terminal-theme="agnoster"] .prompt-segment{height:21px;margin-right:-.5ch;padding:0 1.5ch 0 1ch;color:#fff;line-height:21px}
-.terminal-pro[data-terminal-theme="agnoster"] .prompt-segment:first-child{padding-left:1ch}
-.terminal-pro[data-terminal-theme="agnoster"] .prompt-path{max-width:30ch}
-.terminal-pro[data-terminal-theme="agnoster"] .prompt-mark{width:2ch;margin-left:1ch;text-align:center}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-file-grid{grid-template-columns:repeat(auto-fill,minmax(20ch,1fr));gap:0 2ch;width:100%;padding:0 0 1ch}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-file-grid>div{min-height:21px;line-height:21px}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-file{display:inline-block;max-width:100%;padding-left:2.5ch;overflow:hidden;vertical-align:top;text-overflow:ellipsis;white-space:nowrap}
-.terminal-pro[data-terminal-theme="agnoster"] .terminal-file::before{left:0;width:2ch;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
 .terminal-pro[data-terminal-theme="agnoster"] .terminal-tabs button{font-size:11px}.terminal-pro[data-terminal-theme="agnoster"] .terminal-session-meta{font-size:10px}.terminal-pro[data-terminal-theme="agnoster"]>footer{font-size:9px}
-.terminal-completion{width:min(620px,calc(100% - 24px));margin:7px 0 5px;border:1px solid rgba(126,166,185,.16);border-left:2px solid var(--terminal-green);border-radius:6px;background:rgba(20,31,40,.96);box-shadow:0 10px 30px rgba(0,0,0,.24);overflow:hidden;user-select:none}.terminal-completion[hidden]{display:none}.terminal-completion>header{display:flex;align-items:center;justify-content:space-between;gap:16px;height:27px;padding:0 10px;border-bottom:1px solid rgba(255,255,255,.055);background:rgba(255,255,255,.025)}.terminal-completion>header strong{color:var(--terminal-fg);font-size:11px}.terminal-completion>header small{color:var(--terminal-muted);font-size:9px}.terminal-completion>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;padding:5px}.terminal-completion button{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:6px;min-width:0;height:28px;padding:0 7px;border:0;border-radius:4px;background:transparent;color:var(--terminal-fg);font:inherit;text-align:left}.terminal-completion button:hover,.terminal-completion button.selected{background:rgba(91,166,142,.16)}.terminal-completion button.selected{box-shadow:inset 2px 0 var(--terminal-green)}.terminal-completion button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.terminal-completion button em{color:var(--terminal-muted);font-size:9px;font-style:normal}.terminal-completion-icon{display:inline-block;width:20px;height:20px;padding:0}.terminal-completion-icon::before{position:static;display:block;width:20px;line-height:20px}.terminal-completion p{grid-column:1/-1;margin:0;padding:9px;color:var(--terminal-muted);font-size:11px}@media(max-width:700px){.terminal-completion>div{grid-template-columns:1fr}.terminal-completion>header small{display:none}}
+
+.terminal-native{position:relative;overflow:hidden}.terminal-native-host{position:relative;flex:1;min-height:0;background:radial-gradient(circle at 88% 0,rgba(63,111,143,.12),transparent 32%),linear-gradient(150deg,#131e27,#0f181f)}.terminal-native-pane{position:absolute;inset:0;padding:18px 20px 14px;overflow:hidden}.terminal-native-pane[hidden]{display:none}.terminal-native-pane .xterm{height:100%;padding:0}.terminal-native-pane .xterm-screen{width:100%!important}.terminal-native-pane .xterm-viewport{scrollbar-color:#405762 transparent;scrollbar-width:thin}.terminal-native-pane .xterm-helper-textarea{opacity:0}.terminal-native .terminal-session-meta i.offline,.terminal-native .terminal-connection i.offline{background:#71828c;box-shadow:0 0 0 3px rgba(113,130,140,.1)}.terminal-native .terminal-connection b{font-weight:400}.terminal-context-menu{position:absolute;z-index:8;width:122px;margin:0;padding:5px;border:1px solid rgba(139,169,184,.18);border-radius:9px;background:rgba(27,40,51,.97);box-shadow:0 12px 30px rgba(0,0,0,.3);color:var(--terminal-fg)}.terminal-context-menu[hidden]{display:none}.terminal-context-menu button{width:100%;height:29px;padding:0 10px;border-radius:6px;color:inherit;font:11px "Ubuntu Mono",ui-monospace,monospace;text-align:left}.terminal-context-menu button:hover{background:rgba(90,167,232,.17)}.terminal-context-menu button:disabled{opacity:.38}
