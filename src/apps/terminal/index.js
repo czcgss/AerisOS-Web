@@ -51,6 +51,10 @@ export default{
     const paste=()=>{const text=clipboard.value||'';if(text)system.writeTerminal(text,active()?.port);menu.hidden=true;active()?.terminal.focus()};
     const shortcut=(session,event)=>{
       const key=event.key.toLowerCase(),copyKey=(event.metaKey||event.ctrlKey&&event.shiftKey)&&key==='c',pasteKey=(event.metaKey||event.ctrlKey&&event.shiftKey)&&key==='v';
+      if(event.ctrlKey&&!event.metaKey&&!event.shiftKey&&key==='c'){
+        if(event.type==='keydown')system.writeTerminal('\u0003',session.port);
+        return false
+      }
       if(copyKey&&session.terminal.hasSelection()){if(event.type==='keydown')copy();return false}
       if(pasteKey){if(event.type==='keydown')paste();return false}
       return true

@@ -238,12 +238,12 @@ export class V86Machine {
 
   async #installTerminalServices(){
     this.#activateTerminalLines();
-    const loginHelper=`#!/bin/ash\nexport HOME=/home/aeris USER=aeris LOGNAME=aeris SHELL=/bin/ash TERM=xterm-256color COLORTERM=truecolor\ncd /home/aeris\nexec /bin/su -l aeris`;
+    const loginHelper=`#!/bin/ash\nexport TERM=xterm-256color COLORTERM=truecolor\nexec /bin/login -f aeris`;
     const profile=`\n# AERIS_TERMINAL_PROFILE\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nalias ls='ls --color=auto'\nalias ll='ls -lah --color=auto'\nPS1='\\[\\033[38;5;75m\\]aeris@aeris \\[\\033[38;5;110m\\]\\w \\[\\033[38;5;78m\\]❯ \\[\\033[0m\\]'\n`;
     const encode=value=>{const bytes=new TextEncoder().encode(value);return btoa(String.fromCharCode(...bytes))};
     const helperPayload=encode(loginHelper),profilePayload=encode(profile);
     const command=`mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/aeris-terminal-login; chmod 755 /usr/local/bin/aeris-terminal-login; grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/aeris/.profile; chown aeris:aeris /home/aeris/.profile; sed -i '/^ttyS[123]::/d' /etc/inittab; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /etc/inittab; done; kill -HUP 1`;
-    await this.serial.execute(command,8000,true);
+    await this.serial.execute(`${command}; for terminal_pid in $(ps -eo pid,tty 2>/dev/null | awk '$2 ~ /^ttyS[123]$/ {print $1}'); do kill -HUP "$terminal_pid" 2>/dev/null || true; done`,8000,true);
   }
 
   async #launchControlPlane() {
