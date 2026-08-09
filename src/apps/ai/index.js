@@ -1,14 +1,13 @@
 import { icon } from '../../icons.js';
 import { AI_STATE_PATH } from '../../services/AiAgentService.js';
 import { collectToolActivities, workspaceMarkup, workspaceSignature } from './AgentWorkspace.js';
+import { renderMarkdown } from './MarkdownRenderer.js';
 
 const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const messageText = message => typeof message?.content === 'string'
   ? message.content
   : (message?.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
-const renderText = text => String(text || '').split(/```/).map((part, index) => index % 2
-  ? `<pre><code>${esc(part.replace(/^\w+\n/, ''))}</code></pre>`
-  : `<div>${esc(part).replace(/\n/g, '<br>')}</div>`).join('');
+const renderText = renderMarkdown;
 
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
