@@ -18,7 +18,7 @@ const tokenStart=(value,caret)=>{
   return start;
 };
 
-const normalizePath=value=>{
+export const normalizeCompletionPath=value=>{
   const absolute=value.startsWith('/'),parts=[];
   for(const part of value.split('/')){
     if(!part||part==='.')continue;
@@ -36,9 +36,9 @@ export function completionTarget(value,caret,cwd,home){
   let directory;
   if(!directoryToken)directory=cwd;
   else if(directoryToken==='~/')directory=home;
-  else if(directoryToken.startsWith('~/'))directory=normalizePath(`${home}/${directoryToken.slice(2)}`);
-  else if(directoryToken.startsWith('/'))directory=normalizePath(directoryToken);
-  else directory=normalizePath(`${cwd}/${directoryToken}`);
+  else if(directoryToken.startsWith('~/'))directory=normalizeCompletionPath(`${home}/${directoryToken.slice(2)}`);
+  else if(directoryToken.startsWith('/'))directory=normalizeCompletionPath(directoryToken);
+  else directory=normalizeCompletionPath(`${cwd}/${directoryToken}`);
   return{kind:'path',start,end:caret,token,prefix:namePrefix,directoryToken,directory,command,directoriesOnly:command==='cd'};
 }
 
