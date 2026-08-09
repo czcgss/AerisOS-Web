@@ -4,8 +4,8 @@ const pad=value=>String(value).padStart(2,'0');
 const today=()=>{const date=new Date();return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`};
 export default{
   id:'reminders',title:'reminders',icon:'reminder',color:'violet',width:860,height:570,singleInstance:true,
-  mount(root,{userdata,dialog,i18n,agentContext,agentEntry}){
-    let items=[],filter='today',query='';const save=()=>userdata.save('reminders',items);
+  mount(root,{userdata,dialog,i18n,kernel,agentContext,agentEntry}){
+    let items=[],filter='today',query='';const save=()=>userdata.save('reminders',items,{source:'reminders-app'});
     let agentMenu=null;
     const reportContext=item=>agentContext.set({appId:'reminders',label:i18n.t('reminders'),resource:item?{kind:'reminder',id:item.id,uri:`aeris://reminders/${item.id}`,name:item.title,date:item.due||'',metadata:{due:item.due||'',dueTime:item.dueTime||'',done:!!item.done,priority:!!item.priority}}:{kind:'reminder-list',id:filter,uri:`aeris://reminders/list/${filter}`,name:i18n.t(filter),metadata:{filter}}});
     const closeAgentMenu=()=>{agentMenu?.remove();agentMenu=null};
@@ -18,6 +18,7 @@ export default{
     const contextmenu=event=>{const button=event.target.closest('[data-reminder-edit]');if(button){const item=items.find(entry=>entry.id===button.dataset.reminderEdit);if(item)showAgentMenu(event,item)}};
     const contextClick=event=>{const button=event.target.closest('[data-reminder-edit]');if(button){const item=items.find(entry=>entry.id===button.dataset.reminderEdit);if(item)reportContext(item)}if(!event.target.closest('.native-agent-context-menu'))closeAgentMenu()};
     root.addEventListener('contextmenu',contextmenu);root.addEventListener('click',contextClick);
-    userdata.load('reminders',[]).then(value=>{items=value.map(item=>({...item,due:item.due||'',dueTime:item.dueTime||'',notify:item.notify!==false&&!!item.due,priority:!!item.priority}));render();reportContext()});render();return()=>{closeAgentMenu();root.removeEventListener('contextmenu',contextmenu);root.removeEventListener('click',contextClick)};
+    const offData=kernel.bus.on('userdata:change',async detail=>{if(detail?.name!=='reminders'||detail.source==='reminders-app')return;const previousIds=new Set(items.map(item=>item.id));items=(await userdata.load('reminders',[])).map(item=>({...item,due:item.due||'',dueTime:item.dueTime||'',notify:item.notify!==false&&!!item.due,priority:!!item.priority}));const added=items.find(item=>!previousIds.has(item.id));if(added&&!filtered().some(item=>item.id===added.id)){filter=added.due?'scheduled':'all';query=''}render();reportContext(added)});
+    userdata.load('reminders',[]).then(value=>{items=value.map(item=>({...item,due:item.due||'',dueTime:item.dueTime||'',notify:item.notify!==false&&!!item.due,priority:!!item.priority}));render();reportContext()});render();return()=>{offData();closeAgentMenu();root.removeEventListener('contextmenu',contextmenu);root.removeEventListener('click',contextClick)};
   }
 };
