@@ -41,7 +41,7 @@ export default {
   preview: '预览', selectFileToPreview: '从“文件”中打开图片、PDF 或文本文件。', opening: '正在打开…',
   openCalendar: '打开日历', controlCenter: '控制中心', online: '在线', offline: '离线', connecting: '正在连接…', connected: '已连接', on: '开启', off: '关闭', allSettings: '所有设置',
   languagePackPathHint: '从 Aeris 文件系统选择 JSON 语言包，例如 /mnt/aeris/language.json。', languagePackInvalid: '所选文件不是有效的 Aeris 语言包。',
-  notifications: '通知', noNotifications: '没有新通知', clearAll: '全部清除',
+  notifications: '通知', systemNotifications: '系统通知', notificationCenterCopy: '日历和提醒事项通知', noNotifications: '没有新通知', notificationEmptyCopy: '日程和提醒事项的通知会显示在这里。', clearAll: '全部清除', dismiss: '关闭', calendarEvent: '日历日程', notificationEnabled: '已开启通知', notificationDisabled: '已关闭通知', reminderTime: '提醒时间', reminderTimeHint: 'Aeris 会在此本地时间发出通知。', invalidTime: '请使用 24 小时制时间，例如 09:30。',
   wallpaper: '墙纸', aurora: '极光', mist: '薄雾', sunset: '日落', restoreWindows: '登录后恢复窗口', restoreWindowsCopy: '刷新后重新打开应用并恢复窗口位置。',
   aboutAeris: '关于 Aeris', trash: '废纸篓', rename: '重新命名', duplicate: '制作副本', moveTo: '移动到…', moveToTrash: '移到废纸篓', deletePermanently: '永久删除', fileName: '文件名称', invalidPath: '请输入绝对文件夹路径。', movePathHint: '请输入 Aeris 文件系统内的目标文件夹。', trashConfirm: '确定要移除“{name}”吗？', connectingRepository: '正在连接 Alpine 软件源…', guestNetworkConnected: 'Linux 客体已连接', guestNetworkUnavailable: 'Linux 客体网络不可用', ipAddress: 'IP 地址', gateway: '网关', dnsServer: 'DNS 服务器', reconnect: '重新连接', eraseReinstall: '抹掉并重新安装', eraseReinstallWarning: '这会从此浏览器移除已保存的 Linux 系统、应用和文件，且无法撤销。',
   dock: '程序坞', dockCopy: '选择始终显示在程序坞中的应用。', keepInDock: '在程序坞中保留', removeFromDock: '从程序坞移除', systemInformation: '系统信息', version: '版本', savedSystem: '已保存的系统', moreInfo: '更多信息…', notSaved: '尚未保存',
