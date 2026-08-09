@@ -17,6 +17,7 @@
 .ai-turn-response>.ai-message-content{align-self:stretch}
 .ai-turn-response .ai-tool-call{box-sizing:border-box;width:min(410px,100%);margin:3px 0;border-radius:12px}
 .ai-turn-response .ai-tool-call>header{gap:9px;padding:8px 10px}
+.ai-turn-response .ai-tool-call>header{cursor:pointer}
 .ai-turn-response .ai-tool-app-icon{width:26px!important;height:26px!important;border-radius:8px!important}
 .ai-turn-response .ai-tool-call>header strong{font-size:10px}
 .ai-turn-response .ai-tool-call>header small,.ai-turn-response .ai-tool-call>header em{font-size:8px}

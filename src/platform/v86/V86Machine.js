@@ -51,17 +51,18 @@ export class V86Machine {
       this.startedAt = Date.now();
       try {
         if (snapshot) {
-          this.#bootStage('restoringSystem', 72, 'restore');
+          this.#bootStage('restoringVirtualHardware', 72, 'restore');
           let restoreProgress=72;
-          const restorePulse=setInterval(()=>this.#bootStage('restoringSystem',Math.min(90,++restoreProgress),'restore'),900);
-          try{await this.emulator.restore_state(snapshot)}finally{clearInterval(restorePulse)}
+          const restorePulse=setInterval(()=>this.#bootStage('restoringVirtualHardware',Math.min(89,++restoreProgress),'restore'),900);
+          try{await this.#restoreSnapshot(snapshot)}finally{clearInterval(restorePulse)}
           this.emulator.run();
           // Restoring CPU state completes before every emulated device and
           // guest tty has necessarily resumed. Give the UART and init process
           // time to settle before probing the control plane.
           await new Promise(resolve => setTimeout(resolve, 1100));
-          this.#bootStage('startingServices',91,'restore');
+          this.#bootStage('reconnectingLinuxServices',91,'restore');
           await this.#resumeControlPlane();
+          this.#bootStage('validatingRestoredSystem',97,'restore');
           this.#setStatus('running');
           await this.#emitGuestReady(true);
         } else {
@@ -125,16 +126,28 @@ export class V86Machine {
     }
   }
 
+  async #restoreSnapshot(snapshot, timeout = 90000) {
+    let timer;
+    try {
+      await Promise.race([
+        this.emulator.restore_state(snapshot),
+        new Promise((_, reject) => { timer=setTimeout(() => reject(new Error('The saved computer did not finish restoring within 90 seconds. Try again, or reinstall only if the saved state can no longer be recovered.')), timeout); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  }
+
   async #resumeControlPlane(){
     // A normal refresh restores the already-running serial shell. Probe it
     // first so recovery never waits on inactive VGA consoles.
     for(const timeout of [1200,1800,2600]){
+      this.#bootActivity({key:'reconnectingLinuxServices',kind:'service'});
       if(await this.#connectSerialControlPlane(timeout)){await this.#installControlHelpers();this.controlReady=true;return}
       await new Promise(resolve=>setTimeout(resolve,320));
     }
 
     // Older snapshots do not contain the serial service. Recover one root VGA
     // console with a single bounded attempt, then install the fast path.
+    this.#bootActivity({key:'recoveringLinuxConsole',kind:'service'});
     let rootConsole=await this.#connectVgaConsole(1,{login:true,timeout:5200});
     if(!rootConsole)rootConsole=await this.#connectVgaConsole(3,{login:true,timeout:5200});
     if(!rootConsole)rootConsole=await this.#connectVgaConsole(4,{login:true,timeout:5200});

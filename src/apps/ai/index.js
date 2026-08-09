@@ -1,5 +1,6 @@
 import { icon } from '../../icons.js';
 import { AI_STATE_PATH } from '../../services/AiAgentService.js';
+import { collectToolActivities, workspaceMarkup } from './AgentWorkspace.js';
 
 const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const messageText = message => typeof message?.content === 'string'
@@ -10,10 +11,11 @@ const renderText = text => String(text || '').split(/```/).map((part, index) => 
   : `<div>${esc(part).replace(/\n/g, '<br>')}</div>`).join('');
 
 export default {
-  id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1080, height: 720,
+  id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
   mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools }) {
     let activeId = null, query = '', settingsOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
+    let workspaceSelectedId = null, workspaceDismissedId = null, lastObservedToolId = null, liveExecution = null, displayedActivities = [];
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
     const current = () => activeId ? aiAgent.sessionState(activeId) : null;
@@ -59,7 +61,13 @@ export default {
       const state = aiAgent.snapshot(), session = current(), configured = Boolean(aiAgent.config().apiKey);
       const turns=session?.turns||[];displayedTurns=turns;
       const sessions = visibleSessions();
-      root.innerHTML = `<div class="system-app ai-system-app">
+      const activities=collectToolActivities(session,tools,session?.streaming?liveExecution:null),latestActivity=activities.at(-1)||null,foregroundActivity=[...activities].reverse().find(activity=>activity.phase==='running'||activity.phase==='approval')||latestActivity;
+      if(foregroundActivity&&foregroundActivity.id!==lastObservedToolId){lastObservedToolId=foregroundActivity.id;workspaceSelectedId=foregroundActivity.id;workspaceDismissedId=null}
+      let workspaceActivity=activities.find(activity=>activity.id===workspaceSelectedId)||foregroundActivity;
+      if(workspaceActivity)workspaceSelectedId=workspaceActivity.id;
+      displayedActivities=activities;
+      const workspaceVisible=Boolean(workspaceActivity&&workspaceDismissedId!==workspaceActivity.id);
+      root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}">
         <aside class="ai-sidebar">
           <header><span class="ai-brand-icon">${icon('aerisAi', 21)}</span><strong>${i18n.t('aerisAI')}</strong><button data-ai-new title="${i18n.t('newChat')}">${icon('plus', 17)}</button></header>
           <label class="ai-search">${icon('search', 14)}<input data-ai-search value="${esc(query)}" placeholder="${i18n.t('searchChats')}"></label>
@@ -82,6 +90,7 @@ export default {
           </footer>
           ${settingsOpen ? settingsMarkup() : ''}
         </section>
+        ${workspaceVisible?workspaceMarkup(workspaceActivity,activities,tools,i18n):''}
       </div>`;
       bind();
       requestAnimationFrame(() => {
@@ -136,8 +145,8 @@ export default {
     };
 
     const bind = () => {
-      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = async () => { activeId = await aiAgent.createSession(); localError = ''; render(); });
-      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = ''; render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
+      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = async () => { activeId = await aiAgent.createSession(); localError = '';liveExecution=null;workspaceSelectedId=null;workspaceDismissedId=null;lastObservedToolId=null; render(); });
+      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;workspaceSelectedId=null;workspaceDismissedId=null;lastObservedToolId=null; render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
       root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
       root.querySelectorAll('[data-ai-copy-turn]').forEach(button => button.onclick = async () => { const turn=displayedTurns.find(item=>item.id===button.dataset.aiCopyTurn),text=button.dataset.aiCopyRole==='user'?messageText(turn?.user):assistantText(turn||{responses:[]});if(text&&await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard')); });
       root.querySelectorAll('[data-ai-copy-error]').forEach(button=>button.onclick=async event=>{event.stopPropagation();const text=button.closest('.ai-copyable-error')?.querySelector('.ai-error-text')?.textContent||'';if(await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard'));});
@@ -155,6 +164,10 @@ export default {
       root.querySelector('[data-ai-reveal]')?.addEventListener('click', event => event.currentTarget.closest('.ai-secret-field').classList.toggle('revealed'));
       root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
       root.querySelectorAll('[data-ai-suggestion]').forEach(button => button.onclick = () => { const input = root.querySelector('[data-ai-composer]'); input.value = button.dataset.aiSuggestion; input.focus(); });
+      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceDismissedId=null;render({preserveComposer:true});}));
+      root.querySelectorAll('[data-ai-workspace-tool]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceTool;workspaceDismissedId=null;render({preserveComposer:true});});
+      root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
+      root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>{workspaceDismissedId=workspaceSelectedId;render({preserveComposer:true});});
       const composer = root.querySelector('[data-ai-composer]');
       if (composer) { composer.oninput = () => { composer.style.height = 'auto'; composer.style.height = `${Math.min(150, composer.scrollHeight)}px`; }; composer.onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(); } }; }
       root.querySelector('[data-ai-send]')?.addEventListener('click', () => current()?.streaming ? aiAgent.abort(activeId) : send());
@@ -163,7 +176,7 @@ export default {
     const offReady = kernel.bus.on('ai:ready', async () => { await ensureSession(); activeId ||= aiAgent.snapshot().sessions[0]?.id || null; render(); });
     const offChanged = kernel.bus.on('ai:changed', () => { if (activeId && !aiAgent.snapshot().sessions.some(item => item.id === activeId)) activeId = aiAgent.snapshot().sessions[0]?.id || null; render({ preserveComposer: true }); });
     const offAgent = kernel.bus.on('ai:agent-event', detail => { if(detail.sessionId!==activeId||settingsOpen)return;if(detail.event?.type==='message_update')updateStreamingMessage();else render({preserveComposer:true}); });
-    const offCapability = kernel.bus.on('capability:execution', () => { if (!settingsOpen) render({ preserveComposer: true }); });
+    const offCapability = kernel.bus.on('capability:execution', detail => { if(current()?.streaming)liveExecution=detail;if (!settingsOpen) render({ preserveComposer: true }); });
     const offLocale = kernel.bus.on('settings:change', ({ key }) => { if (key === 'locale') render({ preserveComposer: true }); });
     ensureSession().then(() => { activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
     render();
