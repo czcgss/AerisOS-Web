@@ -13,8 +13,8 @@ const renderText = text => String(text || '').split(/```/).map((part, index) => 
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
-  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools }) {
-    let activeId = null, query = '', settingsOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
+  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications }) {
+    let activeId = null, query = '', settingsOpen = false, notificationOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
     let workspaceSelectedId = null, workspaceDismissedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [];
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
@@ -24,6 +24,7 @@ export default {
       if (!aiAgent.ready || activeId) return;
       activeId = aiAgent.snapshot().sessions[0]?.id || null;
     };
+    const notificationMarkup=()=>{const {items}=notifications.snapshot();return`<div class="ai-notification-backdrop" data-ai-close-notifications></div><section class="ai-notification-menu"><header><div><strong>${i18n.t('systemNotifications')}</strong><small>${i18n.t('notificationCenterCopy')}</small></div>${items.length?`<button data-ai-clear-notifications>${i18n.t('clearAll')}</button>`:''}</header><div>${items.length?items.map(item=>{const app=tools.registry.get(item.appId);return`<article class="${item.read?'':'unread'}"><button data-ai-open-notification="${item.id}"><span class="app-icon app-icon-${app?.color||'blue'}">${icon(app?.icon||'bell',18)}</span><div><small>${esc(app?i18n.t(app.title):'Aeris')}</small><strong>${esc(item.title)}</strong><p>${esc(item.message)}</p><time>${new Intl.DateTimeFormat(i18n.t('dateFormat'),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(item.createdAt))}</time></div></button><button data-ai-dismiss-notification="${item.id}" aria-label="${i18n.t('dismiss')}">${icon('close',11)}</button></article>`}).join(''):`<div class="ai-notification-empty">${icon('bell',27)}<strong>${i18n.t('noNotifications')}</strong><small>${i18n.t('notificationEmptyCopy')}</small></div>`}</div></section>`};
 
     const toolIcon = appId => { const app=tools.registry.get(appId);return app?`<span class="ai-tool-app-icon app-icon app-icon-${app.color}">${icon(app.icon,17)}<i>${icon('wrench',8)}</i></span>`:`<span class="ai-tool-app-icon">${icon('wrench',16)}</span>`; };
     const errorMarkup=(message,className='ai-inline-error')=>`<div class="${className} ai-copyable-error" data-copyable><span class="ai-error-icon">${icon('warning',15)}</span><span class="ai-error-text">${esc(message)}</span><button data-ai-copy-error title="${i18n.t('copyError')}">${icon('copy',13)}</button></div>`;
@@ -56,7 +57,7 @@ export default {
       </section>`;
     };
 
-    const render = ({ preserveComposer = false, focusSearch = false } = {}) => {
+    const render = ({ preserveComposer = false, focusSearch = false, focusComposer = preserveComposer } = {}) => {
       const draft = preserveComposer ? root.querySelector('[data-ai-composer]')?.value || '' : '';
       const previousWorkspace=root.querySelector('[data-ai-app-workspace]');
       const state = aiAgent.snapshot(), session = current(), configured = Boolean(aiAgent.config().apiKey);
@@ -80,7 +81,7 @@ export default {
           <footer><button data-ai-settings>${icon('settings', 16)}<span><strong>${i18n.t('aiSettings')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('setupRequired')}</small></span></button></footer>
         </aside>
         <section class="ai-workspace">
-          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button data-ai-settings title="${i18n.t('aiSettings')}">${icon('settings', 17)}</button></header>
+          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-notification-button ${notificationOpen?'selected':''}" data-ai-notifications title="${i18n.t('notifications')}">${icon('bell', 17)}<i class="${notifications.snapshot().unread?'visible':''}" data-ai-notification-dot></i></button><button data-ai-settings title="${i18n.t('aiSettings')}">${icon('settings', 17)}</button></header>
           <main class="ai-conversation" data-ai-conversation>
             ${!state.ready ? `<div class="ai-center-state"><span class="ai-orb waiting">${icon('aerisAi', 30)}</span><h2>${i18n.t('preparingAI')}</h2>${state.error?errorMarkup(state.error,'ai-center-error'):`<p>${i18n.t('waitingForLinuxAI')}</p>`}</div>`
               : !configured ? `<div class="ai-center-state"><span class="ai-orb">${icon('aerisAi', 30)}</span><h2>${i18n.t('meetAerisAI')}</h2><p>${i18n.t('configureAICopy')}</p><button data-ai-settings class="ai-primary">${i18n.t('configureAI')}</button></div>`
@@ -93,6 +94,7 @@ export default {
             <small>${i18n.t('aiMayMakeMistakes')}</small>
           </footer>
           ${settingsOpen ? settingsMarkup() : ''}
+          ${notificationOpen ? notificationMarkup() : ''}
         </section>
         ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace}):''}
       </div>`;
@@ -102,7 +104,7 @@ export default {
         const conversation = root.querySelector('[data-ai-conversation]');
         if (conversation) conversation.scrollTop = conversation.scrollHeight;
         if (focusSearch) { const search = root.querySelector('[data-ai-search]'); search?.focus(); search?.setSelectionRange(search.value.length, search.value.length); }
-        else if (preserveComposer) { const input = root.querySelector('[data-ai-composer]'); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }
+        else if (focusComposer) { const input = root.querySelector('[data-ai-composer]'); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }
       });
     };
 
@@ -162,7 +164,12 @@ export default {
       if (inlineEditor) { inlineEditor.oninput = () => { editDraft = inlineEditor.value; inlineEditor.style.height = 'auto'; inlineEditor.style.height = `${inlineEditor.scrollHeight}px`; }; inlineEditor.onkeydown = event => { if (event.key === 'Escape') { event.preventDefault(); editingTurnId = null; editDraft = ''; render(); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submitInlineEdit(); } }; }
       const search = root.querySelector('[data-ai-search]');
       if (search) search.oninput = event => { query = event.target.value; render({ preserveComposer: true, focusSearch: true }); };
-      root.querySelectorAll('[data-ai-settings]').forEach(button => button.onclick = () => { settingsOpen = true; render({ preserveComposer: true }); });
+      root.querySelectorAll('[data-ai-settings]').forEach(button => button.onclick = () => { settingsOpen = true;notificationOpen=false;render({ preserveComposer: true,focusComposer:false }); });
+      root.querySelector('[data-ai-notifications]')?.addEventListener('click',async()=>{notificationOpen=!notificationOpen;settingsOpen=false;render({preserveComposer:true,focusComposer:false});if(notificationOpen)await notifications.markAllRead()});
+      root.querySelector('[data-ai-close-notifications]')?.addEventListener('click',()=>{notificationOpen=false;render({preserveComposer:true})});
+      root.querySelector('[data-ai-clear-notifications]')?.addEventListener('click',()=>notifications.clear());
+      root.querySelectorAll('[data-ai-dismiss-notification]').forEach(button=>button.onclick=event=>{event.stopPropagation();notifications.dismiss(button.dataset.aiDismissNotification)});
+      root.querySelectorAll('[data-ai-open-notification]').forEach(button=>button.onclick=()=>{const item=notifications.snapshot().items.find(entry=>entry.id===button.dataset.aiOpenNotification);notificationOpen=false;if(item)shell.open(item.appId)});
       root.querySelectorAll('[data-ai-settings-section]').forEach(button=>button.onclick=()=>{settingsSection=button.dataset.aiSettingsSection;render({preserveComposer:true});});
       root.querySelectorAll('[data-ai-tool-toggle]').forEach(button=>button.onclick=async()=>{try{const update=aiAgent.setToolAppEnabled(button.dataset.aiToolToggle,button.getAttribute('aria-pressed')!=='true');render({preserveComposer:true});await update;}catch(error){localError=friendlyError(error);render({preserveComposer:true});}});
       root.querySelectorAll('[data-ai-close-settings]').forEach(button => button.onclick = () => { settingsOpen = false; render({ preserveComposer: true }); });
@@ -182,9 +189,10 @@ export default {
     const offChanged = kernel.bus.on('ai:changed', () => { if (activeId && !aiAgent.snapshot().sessions.some(item => item.id === activeId)) activeId = aiAgent.snapshot().sessions[0]?.id || null; render({ preserveComposer: true }); });
     const offAgent = kernel.bus.on('ai:agent-event', detail => { if(detail.sessionId!==activeId||settingsOpen)return;if(detail.event?.type==='message_update')updateStreamingMessage();else render({preserveComposer:true}); });
     const offCapability = kernel.bus.on('capability:execution', detail => { const session=current();if(session?.streaming){liveExecution=detail;liveExecutionTurnId=session.activeTurnId}if (!settingsOpen) render({ preserveComposer: true }); });
+    const offNotifications = kernel.bus.on('notification:changed', state => {if(notificationOpen)render({preserveComposer:true,focusComposer:false});else root.querySelector('[data-ai-notification-dot]')?.classList.toggle('visible',state.unread>0)});
     const offLocale = kernel.bus.on('settings:change', ({ key }) => { if (key === 'locale') render({ preserveComposer: true }); });
     ensureSession().then(() => { activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
     render();
-    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);offReady(); offChanged(); offAgent(); offCapability(); offLocale(); };
+    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offLocale(); };
   },
 };
