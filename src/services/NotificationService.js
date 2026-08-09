@@ -75,7 +75,7 @@ export class NotificationService {
         const sourceKey = `calendar:${event.occurrenceKey}:${event.alert}`;
         if (alertAt <= now.getTime() && alertAt >= now.getTime() - LATE_WINDOW && !this.state.delivered[sourceKey]) {
           const start = this.#formatDateTime(event.occurrenceStart, event.allDay);
-          pending.push({ appId: 'calendar', sourceKey, title: event.title || this.i18n.t('calendarEvent'), message: event.location ? `${start} · ${event.location}` : start, occurredAt: alertAt });
+          pending.push({ appId: 'calendar', sourceKey, title: event.title || this.i18n.t('calendarEvent'), message: event.location ? `${start} · ${event.location}` : start, occurredAt: alertAt, context:{appId:'calendar',label:event.title,resource:{kind:'event',id:event.id,uri:`aeris://calendar/events/${event.id}`,name:event.title,date:event.start,metadata:{start:event.start,end:event.end,location:event.location,calendarId:event.calendarId}}} });
         }
       }
 
@@ -85,7 +85,7 @@ export class NotificationService {
         const dueAt = new Date(`${reminder.due}T${reminder.dueTime || '09:00'}:00`).getTime();
         const sourceKey = `reminders:${reminder.id}:${reminder.due}:${reminder.dueTime || '09:00'}`;
         if (Number.isFinite(dueAt) && dueAt <= now.getTime() && dueAt >= now.getTime() - LATE_WINDOW && !this.state.delivered[sourceKey]) {
-          pending.push({ appId: 'reminders', sourceKey, title: reminder.title || this.i18n.t('reminder'), message: this.#formatDateTime(new Date(dueAt), false), occurredAt: dueAt });
+          pending.push({ appId: 'reminders', sourceKey, title: reminder.title || this.i18n.t('reminder'), message: this.#formatDateTime(new Date(dueAt), false), occurredAt: dueAt, context:{appId:'reminders',label:reminder.title,resource:{kind:'reminder',id:reminder.id,uri:`aeris://reminders/items/${reminder.id}`,name:reminder.title,date:reminder.due,metadata:{dueTime:reminder.dueTime||'09:00',priority:!!reminder.priority}}} });
         }
       }
 

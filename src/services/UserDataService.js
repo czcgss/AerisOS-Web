@@ -10,8 +10,8 @@ export class UserDataService {
     if(!found&&this.system.ready)try{value=JSON.parse(await this.system.read(`${BASE}/${name}.json`));this.storage.setItem(this.#key(name),JSON.stringify(value))}catch{}
     this.cache.set(name,structuredClone(value));return structuredClone(value)
   }
-  async save(name,value){
+  async save(name,value,{source='system'}={}){
     const copy=structuredClone(value);this.cache.set(name,copy);this.storage.setItem(this.#key(name),JSON.stringify(copy));
-    this.kernel.bus.emit('userdata:change',{name});return structuredClone(copy)
+    this.kernel.bus.emit('userdata:change',{name,source});return structuredClone(copy)
   }
 }
