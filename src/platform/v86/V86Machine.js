@@ -340,8 +340,19 @@ export class V86Machine {
   async stop(save = true) { if(!this.emulator)return;if(save)await this.checkpoint();clearInterval(this._checkpointInterval);clearTimeout(this._checkpointTimer);this.#stopBootActivityMonitor();clearInterval(this._promptTimer);this.emulator.stop();await this.emulator.destroy();this.emulator=null;this.serial=null;this.guestReady=false;this.controlReady=false;this.#setStatus('stopped'); }
   uptime() { return this.startedAt ? Date.now()-this.startedAt : 0; }
   instructionCount() { return this.emulator?.get_instruction_counter?.() || 0; }
-  screenText() { return document.querySelector('#guest-screen-persistent>div')?.innerText || ''; }
-  screenRows() { const text=this.screenText(),rows=[];for(let offset=0;offset<text.length;offset+=80)rows.push(text.slice(offset,offset+80).trimEnd());return rows; }
+  screenText() { return this.screenRows().join('\n'); }
+  screenRows() {
+    const strip=row=>String(row||'').replace(/\x1b\[[0-9;]*m/g,'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,'').trimEnd();
+    try {
+      const rows=this.emulator?.screen_adapter?.get_text_screen?.();
+      if(Array.isArray(rows)&&rows.length)return rows.map(strip);
+    } catch {}
+    const text=document.querySelector('#guest-screen-persistent>div')?.innerText||'';
+    if(!text)return[];
+    const lines=text.replace(/\r/g,'').split('\n'),rows=[];
+    for(const line of lines){if(!line.length){rows.push('');continue}for(let offset=0;offset<line.length;offset+=80)rows.push(strip(line.slice(offset,offset+80)))}
+    return rows;
+  }
   async sendUserInput(text, delay = 3) {
     if (!this.emulator) return;
     const chunks=String(text).replace(/\r\n/g,'\n').split('\n');
