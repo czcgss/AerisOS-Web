@@ -12,17 +12,10 @@ export default{
   id:'terminal',title:'terminal',icon:'terminal',color:'slate',width:920,height:610,singleInstance:true,
   mount(root,{kernel,system,i18n,clipboard,shell}){
     let nextId=1,activeId=null,fitFrame=0,resizeTimer=0,sessions=[];
-    root.innerHTML=`<div class="system-app terminal-pro terminal-native" data-terminal-theme="agnoster"><header><div class="terminal-tabs" data-terminal-tabs></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><main class="terminal-native-host" data-terminal-host></main><footer><span class="terminal-connection"><i></i><b data-terminal-connection></b></span><span>TTY · xterm-256color</span><span data-terminal-device>ttyS1</span></footer><menu class="terminal-context-menu" data-terminal-menu hidden><button data-terminal-copy>${i18n.t('copy')}</button><button data-terminal-paste>${i18n.t('paste')}</button></menu></div>`;
+    root.innerHTML=`<div class="system-app terminal-pro terminal-native" data-terminal-theme="agnoster"><header><div class="terminal-tabs" data-terminal-tabs></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><main class="terminal-native-host" data-terminal-host></main><footer><span class="terminal-connection"><i></i><b data-terminal-connection></b></span><span>UTF-8</span><span>ash</span></footer><menu class="terminal-context-menu" data-terminal-menu hidden><button data-terminal-copy>${i18n.t('copy')}</button><button data-terminal-paste>${i18n.t('paste')}</button></menu></div>`;
     const host=root.querySelector('[data-terminal-host]'),tabs=root.querySelector('[data-terminal-tabs]'),menu=root.querySelector('[data-terminal-menu]');
     const dispose=resource=>typeof resource==='function'?resource():resource?.dispose?.();
     const active=()=>sessions.find(session=>session.id===activeId);
-    const connect=async session=>{
-      const attempt=(session.connectionAttempt||0)+1;session.connectionAttempt=attempt;
-      session.status.hidden=false;session.status.dataset.state='connecting';session.status.textContent=i18n.t('terminalConnecting');
-      if(!system.ready)return;
-      try{await system.ensureTerminal(session.port);setTimeout(()=>{if(session.connectionAttempt===attempt&&!session.status.hidden){session.status.dataset.state='error';session.status.textContent=i18n.t('terminalNoResponse')}},2200)}
-      catch(error){session.status.dataset.state='error';session.status.textContent=`${i18n.t('terminalUnavailable')} ${error.message}`}
-    };
     const setStatus=()=>{
       const ready=system.ready,state=root.querySelector('[data-terminal-state]'),dot=root.querySelector('[data-terminal-state-dot]'),connection=root.querySelector('[data-terminal-connection]');
       state.textContent=i18n.t(ready?'terminalReady':'terminalWaiting');
@@ -31,7 +24,7 @@ export default{
       root.querySelector('.terminal-connection i').classList.toggle('offline',!ready)
     };
     const drawTabs=()=>{
-      tabs.innerHTML=`${sessions.map(session=>`<button data-terminal-tab="${session.id}" class="${session.id===activeId?'selected':''}"><i></i><span>ttyS${session.port}</span>${sessions.length>1?`<b data-terminal-close="${session.id}">×</b>`:''}</button>`).join('')}<button data-terminal-new aria-label="${i18n.t('newTab')}">+</button>`;
+      tabs.innerHTML=`${sessions.map((session,index)=>`<button data-terminal-tab="${session.id}" class="${session.id===activeId?'selected':''}"><i></i><span>${i18n.t('terminal')}${sessions.length>1?` ${index+1}`:''}</span>${sessions.length>1?`<b data-terminal-close="${session.id}">×</b>`:''}</button>`).join('')}<button data-terminal-new aria-label="${i18n.t('newTab')}">+</button>`;
       tabs.querySelectorAll('[data-terminal-tab]').forEach(button=>button.onclick=event=>{if(event.target.closest('[data-terminal-close]'))return;show(Number(button.dataset.terminalTab))});
       tabs.querySelectorAll('[data-terminal-close]').forEach(button=>button.onclick=event=>{event.stopPropagation();closeSession(Number(button.dataset.terminalClose))});
       tabs.querySelector('[data-terminal-new]').onclick=createSession
@@ -51,7 +44,6 @@ export default{
       sessions.forEach(session=>session.pane.hidden=session.id!==id);
       drawTabs();
       const session=active();
-      root.querySelector('[data-terminal-device]').textContent=`ttyS${session?.port||1}`;
       resize();
       setTimeout(()=>session?.terminal.focus())
     };
@@ -70,16 +62,15 @@ export default{
       pane.className='terminal-native-pane';pane.dataset.terminalPane=id;host.appendChild(pane);
       const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:'"Ubuntu Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:80,theme});
       const fit=new FitAddon();terminal.loadAddon(fit);terminal.open(pane);
-      const status=document.createElement('div');status.className='terminal-native-status';pane.appendChild(status);
-      const session={id,port,pane,terminal,fit,status,disposables:[]};sessions.push(session);
+      const session={id,port,pane,terminal,fit,disposables:[]};sessions.push(session);
       session.disposables.push(terminal.onData(data=>system.writeTerminal(data,port)));
       session.disposables.push(terminal.onTitleChange(title=>{session.title=title;drawTabs()}));
-      session.disposables.push(kernel.bus.on('terminal:data',detail=>{if(detail.port===port){session.connectionAttempt++;status.hidden=true;terminal.write(detail.data)}}));
+      session.disposables.push(kernel.bus.on('terminal:data',detail=>{if(detail.port===port)terminal.write(detail.data)}));
       terminal.attachCustomKeyEventHandler(event=>shortcut(session,event));
       pane.oncontextmenu=event=>{event.preventDefault();show(id);const bounds=root.getBoundingClientRect();menu.style.left=`${Math.max(8,Math.min(event.clientX-bounds.left,bounds.width-130))}px`;menu.style.top=`${Math.max(48,Math.min(event.clientY-bounds.top,bounds.height-82))}px`;menu.querySelector('[data-terminal-copy]').disabled=!terminal.hasSelection();menu.querySelector('[data-terminal-paste]').disabled=!clipboard.value;menu.hidden=false};
-      const replay=system.terminalReplay(port);if(replay){status.hidden=true;terminal.write(replay)}
+      const replay=system.terminalReplay(port);if(replay)terminal.write(replay);
       show(id);
-      resize();connect(session)
+      if(system.ready)setTimeout(()=>{resize();system.writeTerminal('\r',port)},80)
     }
     function closeSession(id){
       const session=sessions.find(item=>item.id===id);if(!session)return;
@@ -93,7 +84,7 @@ export default{
     menu.querySelector('[data-terminal-paste]').onclick=paste;
     root.addEventListener('pointerdown',event=>{if(!event.target.closest('[data-terminal-menu]'))menu.hidden=true});
     const observer=new ResizeObserver(resize);observer.observe(host);
-    const offDataReady=kernel.bus.on('guest:ready',()=>{setStatus();sessions.forEach(session=>{session.terminal.reset();connect(session)});resize()});
+    const offDataReady=kernel.bus.on('guest:ready',()=>{setStatus();sessions.forEach(session=>{session.terminal.reset();const replay=system.terminalReplay(session.port);if(replay)session.terminal.write(replay);system.writeTerminal('\r',session.port)});resize()});
     const offStatus=kernel.bus.on('machine:status',setStatus);
     createSession();setStatus();
     return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();sessions.forEach(session=>{session.disposables.forEach(dispose);session.terminal.dispose();system.resetTerminal(session.port)})}

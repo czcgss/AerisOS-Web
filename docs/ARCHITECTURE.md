@@ -63,8 +63,6 @@ The Alpine runtime separates system control from user terminals. `ttyS0` is a de
 
 `ttyS1`, `ttyS2` and `ttyS3` are independent interactive Linux TTYs. BusyBox `getty` gives each device its own login shell and controlling terminal. The browser connects these UART byte streams to xterm.js, which implements VT/ANSI rendering, keyboard escape sequences, cursor movement, scrollback and selection. Terminal resize events update the guest TTY dimensions through `stty`, allowing full-screen applications to receive the correct geometry.
 
-The vendored v86 restore path treats UART state omitted by older Aeris snapshots as a newly initialized device. After restoration, Aeris also registers the standard COM port addresses with Linux before starting `getty`. This lets an existing saved computer gain the terminal UARTs without erasing or reinstalling its Linux filesystem.
-
 Terminal tabs map directly to these three emulated serial devices. Commands, shell history, completion, signals and full-screen behavior are handled by Linux rather than reimplemented in the Aeris UI. Closing a terminal session sends a hangup to its TTY process group so `init` can start a clean shell for the next session.
 
 ## Filesystem

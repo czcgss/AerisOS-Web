@@ -16,7 +16,6 @@ export class GuestSystemService {
   async execChecked(command, timeout) { const result=await this.exec(command,timeout);if(result.code!==0)throw new Error(result.output||`Linux command failed (${result.code})`);return result; }
   terminalPorts(){return this.machine.terminalPorts()}
   terminalReplay(port){return this.machine.terminalReplay(port)}
-  ensureTerminal(port){return this.machine.ensureTerminal(port)}
   writeTerminal(data,port=1){this.machine.terminalWrite(port,data)}
   resizeTerminal(port,columns,rows){return this.machine.resizeTerminal(port,columns,rows)}
   resetTerminal(port){return this.machine.resetTerminal(port)}

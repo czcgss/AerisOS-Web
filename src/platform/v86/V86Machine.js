@@ -2,7 +2,7 @@ import { SerialBridge } from './SerialBridge.js';
 import { TerminalBridge } from './TerminalBridge.js';
 import { MachineStateStore } from './MachineStateStore.js';
 
-const IMAGE_VERSION = 'alpine-3.24.1-x86-compatible-v11';
+const IMAGE_VERSION = 'alpine-3.24.1-x86-native-terminal-v12';
 
 export class V86Machine {
   constructor(settings) {
@@ -242,7 +242,7 @@ export class V86Machine {
     const profile=`\n# AERIS_TERMINAL_PROFILE\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nalias ls='ls --color=auto'\nalias ll='ls -lah --color=auto'\nPS1='\\[\\033[38;5;75m\\]aeris@aeris \\[\\033[38;5;110m\\]\\w \\[\\033[38;5;78m\\]❯ \\[\\033[0m\\]'\n`;
     const encode=value=>{const bytes=new TextEncoder().encode(value);return btoa(String.fromCharCode(...bytes))};
     const helperPayload=encode(loginHelper),profilePayload=encode(profile);
-    const command=`mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/aeris-terminal-login; chmod 755 /usr/local/bin/aeris-terminal-login; grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/aeris/.profile; chown aeris:aeris /home/aeris/.profile; /bin/busybox setserial /dev/ttyS1 port 0x2f8 irq 3 uart 16550A 2>/dev/null || true; /bin/busybox setserial /dev/ttyS2 port 0x3e8 irq 4 uart 16550A 2>/dev/null || true; /bin/busybox setserial /dev/ttyS3 port 0x2e8 irq 3 uart 16550A 2>/dev/null || true; sed -i '/^ttyS[123]::/d' /etc/inittab; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /etc/inittab; done; kill -HUP 1`;
+    const command=`mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/aeris-terminal-login; chmod 755 /usr/local/bin/aeris-terminal-login; grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/aeris/.profile; chown aeris:aeris /home/aeris/.profile; sed -i '/^ttyS[123]::/d' /etc/inittab; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /etc/inittab; done; kill -HUP 1`;
     await this.serial.execute(command,8000,true);
   }
 
@@ -354,17 +354,6 @@ export class V86Machine {
   terminalWrite(port,data){this.terminals.get(Number(port))?.write(data)}
   terminalReplay(port){return this.terminals.get(Number(port))?.replay()||''}
   terminalPorts(){return[1,2,3]}
-  async ensureTerminal(port){
-    const tty=Number(port),ports={1:['0x2f8',3],2:['0x3e8',4],3:['0x2e8',3]},spec=ports[tty];
-    if(!spec||!this.serial||!this.guestReady)throw new Error('Linux terminal service is not ready');
-    this.#activateTerminalLines();
-    const result=await this.serial.execute(`[ -c /dev/ttyS${tty} ] || exit 45; /bin/busybox setserial /dev/ttyS${tty} port ${spec[0]} irq ${spec[1]} uart 16550A 2>/dev/null || true; kill -HUP 1; stty -F /dev/ttyS${tty} 115200 sane 2>/dev/null || true`,6000,true);
-    if(result.code!==0)throw new Error(`ttyS${tty} is unavailable in the restored Linux machine`);
-    await new Promise(resolve=>setTimeout(resolve,350));
-    await this.serial.execute(`ps -eo tty 2>/dev/null | awk '$1=="ttyS${tty}" {found=1} END {exit !found}' || (/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS${tty} xterm-256color >/dev/null 2>&1 &)`,5000,true);
-    await new Promise(resolve=>setTimeout(resolve,250));
-    this.terminals.get(tty)?.write('\r');
-  }
   resizeTerminal(port,columns,rows){
     const tty=Number(port),cols=Math.max(20,Math.min(400,Number(columns)||80)),lines=Math.max(5,Math.min(200,Number(rows)||24));
     if(!this.serial||!this.guestReady)return Promise.resolve();
