@@ -82,7 +82,8 @@
 .ai-app-workspace-completed>header small i { background: #45a36f; }
 .ai-app-workspace-approval>header small i { background: #dd9428; }
 .ai-app-workspace-failed>header small i,
-.ai-app-workspace-denied>header small i { background: #c85c6d; }
+.ai-app-workspace-denied>header small i,
+.ai-app-workspace-cancelled>header small i { background: #c85c6d; }
 
 .ai-app-workspace>header>button {
   display: grid;
@@ -150,7 +151,8 @@
 .ai-app-workspace>nav button>i.phase-completed { background: #45a36f; }
 .ai-app-workspace>nav button>i.phase-approval { background: #dd9428; }
 .ai-app-workspace>nav button>i.phase-failed,
-.ai-app-workspace>nav button>i.phase-denied { background: #c85c6d; }
+.ai-app-workspace>nav button>i.phase-denied,
+.ai-app-workspace>nav button>i.phase-cancelled { background: #c85c6d; }
 
 .ai-app-workspace>main {
   display: flex;
@@ -407,3 +409,6 @@
 [data-reduce-motion="true"] .agent-app-window,
 [data-reduce-motion="true"] .agent-work-overlay,
 [data-reduce-motion="true"] .ai-app-workspace small i { animation: none; }
+
+.ai-app-workspace-stable,
+.ai-app-workspace-stable .agent-app-window { animation: none; }

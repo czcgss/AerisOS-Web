@@ -53,22 +53,24 @@ export class SystemToolService {
         if(!definition)throw new Error(`Unsupported ${app.id} operation: ${type}`);
         const params=validateToolArguments({name:definition.name,parameters:definition.parameters},{id:toolCallId,name:definition.name,arguments:rawParams});
         const state = { toolCallId, name, definitionName:definition.name, label:definition.label, appId: definition.appId, operation: definition.operation, risk: definition.risk, params: structuredClone(params), phase: 'running', startedAt: Date.now() };
+        const onAbort=()=>{if(state.phase==='running'||state.phase==='approval'){state.phase='cancelled';state.finishedAt=Date.now();this.#setExecution(state)}};
+        signal?.addEventListener('abort',onAbort,{once:true});
         this.#setExecution(state); onUpdate?.(toolResult(`Preparing ${definition.label}…`, state));
         if (definition.risk === 'high') {
           state.phase = 'approval'; this.#setExecution(state); onUpdate?.(toolResult('Waiting for user approval.', state));
           const approved = await this.dialog.confirm({ title: this.i18n.t('approveAgentAction'), message: definition.approval(params), confirmLabel: this.i18n.t('approve'), danger: true });
-          if (!approved) { state.phase = 'denied'; state.finishedAt = Date.now(); this.#setExecution(state); return toolResult('The user denied this system action.', state); }
+          if (!approved) { signal?.removeEventListener('abort',onAbort);state.phase = 'denied'; state.finishedAt = Date.now(); this.#setExecution(state); return toolResult('The user denied this system action.', state); }
         }
-        if (signal?.aborted) throw new Error('System action cancelled.');
+        if (signal?.aborted) {signal.removeEventListener('abort',onAbort);onAbort();throw new Error('System action cancelled.');}
         try {
           state.phase = 'running'; this.#setExecution(state);
           const result = await definition.execute(params, signal);
           state.phase = 'completed'; state.finishedAt = Date.now(); state.result = result; this.#setExecution(state);
           return toolResult(definition.success(result, params), state);
         } catch (error) {
-          state.phase = 'failed'; state.finishedAt = Date.now(); state.error = error.message || String(error); this.#setExecution(state);
+          state.phase = signal?.aborted?'cancelled':'failed'; state.finishedAt = Date.now(); state.error = error.message || String(error); this.#setExecution(state);
           throw error;
-        }
+        } finally { signal?.removeEventListener('abort',onAbort); }
       },
     }});
   }
@@ -113,9 +115,9 @@ export class SystemToolService {
     this.#register({ name:'preview_read_text',appId:'preview',operation:'read_text',label:'Read text file',description:'Read a text file from the Aeris Linux filesystem for inspection.',parameters:object({path:Type.String()}),execute:async({path})=>{if(!path.startsWith('/'))throw new Error('An absolute path is required.');const content=await this.system.read(path);return{path,content:String(content).slice(0,12000),truncated:String(content).length>12000}},success:result=>`${result.content}${result.truncated?'\n\n[Output truncated]':''}` });
     this.#register({ name:'photos_list',appId:'photos',operation:'list',label:'List photos',description:'List images in the Aeris Pictures folder.',parameters:object({}),execute:async()=>this.system.list('/home/aeris/Pictures',{fresh:true}),success:items=>items.length?JSON.stringify(items):'The photo library is empty.' });
 
-    this.#register({ name:'weather_current',appId:'weather',operation:'current',label:'Read current weather',description:'Read the current Aeris Weather data and configured location.',parameters:object({refresh:Type.Optional(Type.Boolean())}),execute:async({refresh})=>{if(refresh)await this.weather.refresh(true);return this.weather.snapshot()},success:result=>JSON.stringify(result) });
+    this.#register({ name:'weather_current',appId:'weather',operation:'current',label:'Read weather',description:'Read weather for any requested city or place. Omit location to use the location configured in Aeris Weather.',parameters:object({location:optionalString('City or place name, such as Shanghai, London, or San Francisco'),refresh:Type.Optional(Type.Boolean())}),execute:async({location,refresh},signal)=>{if(location)return this.weather.lookup(location,signal);if(refresh)await this.weather.refresh(true);return this.weather.snapshot()},success:result=>JSON.stringify(result) });
     this.#register({ name:'clock_current_time',appId:'clock',operation:'current_time',label:'Read current time',description:'Read the current local date, time, and timezone.',parameters:object({}),execute:async()=>({iso:new Date().toISOString(),local:new Date().toString(),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone}),success:result=>JSON.stringify(result) });
-    this.#register({ name:'monitor_read_metrics',appId:'monitor',operation:'read_metrics',label:'Read system metrics',description:'Read current Linux memory, load, and uptime metrics.',parameters:object({refresh:Type.Optional(Type.Boolean())}),execute:async({refresh})=>refresh?this.metrics.refresh():this.metrics.snapshot(),success:result=>JSON.stringify(result) });
+    this.#register({ name:'monitor_read_metrics',appId:'monitor',operation:'read_metrics',label:'Read system metrics',description:'Read the latest Linux memory, load, and uptime sample without blocking the conversation.',parameters:object({refresh:Type.Optional(Type.Boolean())}),execute:async({refresh})=>{const sample=this.metrics.snapshot();if(refresh||!sample.ready)this.metrics.refresh().catch(()=>{});return sample},success:result=>JSON.stringify(result) });
     this.#register({ name:'disk_list_volumes',appId:'diskutility',operation:'list_volumes',label:'List mounted volumes',description:'List mounted Aeris Linux filesystems.',parameters:object({}),execute:async()=>({output:(await this.system.exec('df -kP',12000)).output}),success:result=>result.output });
 
     this.#register({ name:'settings_update',appId:'settings',operation:'update',label:'Change system setting',description:'Change an allowed Aeris setting: theme, accent, wallpaper, or locale.',parameters:object({key:Type.Union([Type.Literal('theme'),Type.Literal('accent'),Type.Literal('wallpaper'),Type.Literal('locale')]),value:Type.String()}),execute:async({key,value})=>{const allowed={theme:['light','dark'],wallpaper:['aurora','mist','sunset'],locale:['en','zh']};if(allowed[key]&&!allowed[key].includes(value))throw new Error(`Unsupported ${key} value.`);this.settings.set(key,value);return{key,value}},success:result=>`Changed ${result.key} to ${result.value}.` });

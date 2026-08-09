@@ -78,12 +78,20 @@ export function collectToolActivities(session, tools, liveExecution = null) {
   return order.map(id => activities.get(id)).filter(activity => activity.appId);
 }
 
+export const workspaceSignature = activity => {
+  const value=JSON.stringify({phase:activity?.phase,params:activity?.params,result:activity?.result,output:activity?.output});
+  let hash=2166136261;
+  for(let index=0;index<value.length;index++){hash^=value.charCodeAt(index);hash=Math.imul(hash,16777619)}
+  return`${activity?.id||''}:${(hash>>>0).toString(36)}`;
+};
+
 const phaseCopy = (activity, i18n) => ({
   running: i18n.t('agentWorking'),
   approval: i18n.t('agentWaitingApproval'),
   completed: i18n.t('agentFinished'),
   failed: i18n.t('agentToolFailed'),
   denied: i18n.t('agentToolDenied'),
+  cancelled: i18n.t('toolStatus_cancelled'),
 }[activity.phase] || i18n.t(`toolStatus_${activity.phase}`));
 
 const rows = (values, limit = 6) => Object.entries(values || {}).slice(0, limit).map(([key, value]) => `
@@ -158,12 +166,13 @@ const surfaceFor = (activity, i18n) => ({
   settings: settingsSurface,
 }[activity.appId]?.(activity, i18n) || genericSurface(activity, i18n));
 
-export function workspaceMarkup(activity, activities, tools, i18n) {
+export function workspaceMarkup(activity, activities, tools, i18n, { animate = true } = {}) {
   if (!activity) return '';
   const app = tools.registry.get(activity.appId);
   if (!app) return '';
   const recent = activities.filter(item => item.turnId === activity.turnId).slice(-4);
-  return `<aside class="ai-app-workspace ai-app-workspace-${esc(activity.phase)}" data-ai-app-workspace>
+  const signature=workspaceSignature(activity);
+  return `<aside class="ai-app-workspace ai-app-workspace-${esc(activity.phase)} ${animate?'':'ai-app-workspace-stable'}" data-ai-app-workspace data-workspace-tool-id="${esc(activity.id)}" data-workspace-signature="${esc(signature)}">
     <header>
       <span class="app-icon app-icon-${esc(app.color)}">${icon(app.icon, 21)}</span>
       <div><strong>${esc(i18n.t(app.title))}</strong><small><i></i>${esc(phaseCopy(activity, i18n))}</small></div>
