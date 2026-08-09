@@ -388,7 +388,7 @@ export class AiAgentService {
 
   #systemPrompt(configuredPrompt) {
     const now = new Date(), timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return `${configuredPrompt}\n\nYou are integrated into the Aeris operating system. Use the provided system tools when the user asks to inspect or change apps, files, settings, or Linux state. Never claim an operation succeeded unless its tool completed. Ask for missing required details. High-risk tools pause for Aeris user approval automatically. Current local date and time: ${now.toString()}. Timezone: ${timezone}.`;
+    return `${configuredPrompt}\n\nYou are integrated into the Aeris operating system. Use the provided system tools when the user asks to inspect or change apps, files, settings, or Linux state. Never claim an operation succeeded unless its tool completed. Ask for missing required details. High-risk tools pause for Aeris user approval automatically. When calling the weather tool, always translate location names to English for the location parameter, even when the conversation uses another language. Current local date and time: ${now.toString()}. Timezone: ${timezone}.`;
   }
 
   #activeTools() {
