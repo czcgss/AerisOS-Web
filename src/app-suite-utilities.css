@@ -20,6 +20,7 @@
 .terminal-pro[data-terminal-theme="agnoster"] .terminal-output{display:block;min-width:100%;white-space:normal;color:var(--terminal-fg)}
 .terminal-output-line{min-height:1.48em;white-space:pre;tab-size:8}
 .terminal-line-error{color:var(--terminal-red)}
+.terminal-line-warning{color:var(--terminal-yellow)}
 .terminal-live-line,.terminal-history-command{display:flex;align-items:center;min-height:24px;white-space:nowrap}
 .terminal-history-command{margin-top:1px}.terminal-history-command+.terminal-output-line,.terminal-history-command+.terminal-file-grid{margin-top:2px}
 .terminal-prompt{display:inline-flex;align-items:center;flex:none;height:22px;margin-right:8px;white-space:nowrap;font-weight:700;line-height:22px;user-select:text}

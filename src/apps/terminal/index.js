@@ -1,4 +1,5 @@
 import { commandCandidates, commonPrefix, completionTarget, decodeCompletionToken, escapeCompletionToken, normalizeCompletionPath, pathCandidates, replaceCompletion } from './completion.js';
+import { commandProfile } from './commandProfile.js';
 
 const shellQuote=value=>`'${String(value).replace(/'/g,`'"'"'`)}'`,home='/home/aeris';
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -25,8 +26,56 @@ export default{
     const append=(session,text,tone='')=>{if(text!==undefined&&text!==null&&String(text).length)session.lines.push(...String(text).replace(/\r/g,'').split('\n').map(value=>({type:'output',text:value,tone})));draw()};
     const changeDirectory=async(session,target)=>{const requested=target==='-'?(session.previousCwd||home):resolvePath(session.cwd,target),previous=session.cwd,cached=system.cachedList(requested);try{if(cached===null)await system.list(requested,{priority:true,timeout:8000});else system.list(requested,{priority:true,timeout:8000}).catch(()=>{});session.previousCwd=previous;session.cwd=requested}catch{append(session,`cd: ${target||'~'}: ${i18n.t('directoryUnavailable')}`,'error')}};
     const listRequest=(session,command)=>{const tokens=command.trim().split(/\s+/);if(tokens[0]!=='ls')return null;const args=tokens.slice(1),supported=new Set(['-1','--color','--color=auto','--color=always']);if(args.some(arg=>arg.startsWith('-')&&!supported.has(arg)))return null;const targets=args.filter(arg=>!arg.startsWith('-'));return targets.length<=1?resolvePath(session.cwd,targets[0]):null};
-    const executable=command=>{const trimmed=command.trim();if(!/^ping(?:\s|$)/.test(trimmed))return {command,timeout:30000};const rest=trimmed.replace(/^ping\s*/,''),count=/(?:^|\s)-c(?:\s|\d)/.test(rest),deadline=/(?:^|\s)-w(?:\s|\d)/.test(rest);return {command:`ping ${count?'':'-c 4 '}${deadline?'':'-w 12 '}${rest}`.trim(),timeout:20000}};
-    const run=async command=>{const session=active();if(!command.trim()||session.busy||!system.ready)return;session.history.push(command);session.historyIndex=session.history.length;session.lines.push({type:'command',path:shortPath(session),text:command});root.querySelector('[data-terminal-input]').value='';if(command.trim()==='clear'){session.lines=[];return draw()}if(command.trim()==='exit'){if(sessions.length===1)return windowManager.close(window.id);sessions=sessions.filter(item=>item.id!==session.id);activeId=sessions.at(-1).id;return render()}session.busy=true;draw();try{const cd=command.trim().match(/^cd(?:\s+(.+))?$/),listing=listRequest(session,command);if(cd)await changeDirectory(session,cd[1]?.trim());else if(listing){const entries=await system.list(listing,{priority:true});session.lines.push({type:'files',entries});draw()}else{const execution=executable(command),result=await system.execInteractive(`cd ${shellQuote(session.cwd)} && ${execution.command}`,execution.timeout);if(result.output)append(session,result.output);if(result.code!==0&&result.code!==130)append(session,`${i18n.t('commandExited')} ${result.code}`,'error')}}catch(error){append(session,/timed out/i.test(error.message)?i18n.t('terminalCommandTimedOut'):`${i18n.t('terminalError')}: ${error.message}`,'error')}finally{session.busy=false;if(activeId===session.id){render();setTimeout(()=>root.querySelector('[data-terminal-input]')?.focus())}}};
+    const executable=command=>{const trimmed=command.trim(),profile=commandProfile(trimmed);if(!/^ping(?:\s|$)/.test(trimmed))return {command,...profile};const rest=trimmed.replace(/^ping\s*/,''),count=/(?:^|\s)-c(?:\s|\d)/.test(rest),deadline=/(?:^|\s)-w(?:\s|\d)/.test(rest);return {command:`ping ${count?'':'-c 4 '}${deadline?'':'-w 12 '}${rest}`.trim(),...profile,timeout:20000}};
+    const run=async command=>{
+      const session=active();
+      if(!command.trim()||session.busy||!system.ready)return;
+      session.history.push(command);
+      session.historyIndex=session.history.length;
+      session.lines.push({type:'command',path:shortPath(session),text:command});
+      root.querySelector('[data-terminal-input]').value='';
+      if(command.trim()==='clear'){session.lines=[];return draw()}
+      if(command.trim()==='exit'){
+        if(sessions.length===1)return windowManager.close(window.id);
+        sessions=sessions.filter(item=>item.id!==session.id);
+        activeId=sessions.at(-1).id;
+        return render()
+      }
+      session.busy=true;
+      draw();
+      try{
+        const cd=command.trim().match(/^cd(?:\s+(.+))?$/),listing=listRequest(session,command);
+        if(cd)await changeDirectory(session,cd[1]?.trim());
+        else if(listing){
+          const entries=await system.list(listing,{priority:true,fresh:!!session.filesystemDirty});
+          session.filesystemDirty=false;
+          session.lines.push({type:'files',entries});
+          draw()
+        }else{
+          const execution=executable(command);
+          if(execution.interactive){
+            append(session,i18n.t('terminalInteractiveUnsupported').replace('{command}',execution.name),'warning')
+          }else{
+            let result;
+            try{
+              result=await system.execInteractive(`cd ${shellQuote(session.cwd)} && ${execution.command}`,execution.timeout)
+            }finally{
+              if(execution.mutatesFilesystem){
+                sessions.filter(item=>item.cwd===session.cwd).forEach(item=>item.filesystemDirty=true);
+                kernel.bus.emit('filesystem:changed',{path:session.cwd})
+              }
+            }
+            if(result.output)append(session,result.output);
+            if(result.code!==0&&result.code!==130)append(session,`${i18n.t('commandExited')} ${result.code}`,'error')
+          }
+        }
+      }catch(error){
+        append(session,/timed out/i.test(error.message)?i18n.t('terminalCommandTimedOut'):`${i18n.t('terminalError')}: ${error.message}`,'error')
+      }finally{
+        session.busy=false;
+        if(activeId===session.id){render();setTimeout(()=>root.querySelector('[data-terminal-input]')?.focus())}
+      }
+    };
     const caretAt=(container,x,y)=>{const position=document.caretPositionFromPoint?.(x,y),legacy=!position&&document.caretRangeFromPoint?.(x,y),node=position?.offsetNode||legacy?.startContainer,offset=position?.offset??legacy?.startOffset;if(!node||!container.contains(node.nodeType===Node.ELEMENT_NODE?node:node.parentElement))return null;return {node,offset}};
     const selectBetween=(start,end)=>{const range=document.createRange();range.setStart(start.node,start.offset);range.setEnd(end.node,end.offset);if(range.collapsed&&(start.node!==end.node||start.offset!==end.offset)){range.setStart(end.node,end.offset);range.setEnd(start.node,start.offset)}const selection=getSelection();selection.removeAllRanges();selection.addRange(range)};
     const bind=()=>{root.querySelectorAll('[data-terminal-tab]').forEach(button=>button.onclick=event=>{if(event.target.closest('[data-terminal-close]'))return;activeId=Number(button.dataset.terminalTab);render()});root.querySelectorAll('[data-terminal-close]').forEach(button=>button.onclick=event=>{event.stopPropagation();sessions=sessions.filter(item=>item.id!==Number(button.dataset.terminalClose));if(!sessions.some(item=>item.id===activeId))activeId=sessions[0].id;render()});root.querySelector('[data-terminal-new]').onclick=()=>{const session={id:nextId++,cwd:home,history:[],historyIndex:0,lines:[],busy:false};sessions.push(session);activeId=session.id;render()};const form=root.querySelector('[data-terminal-form]'),input=root.querySelector('[data-terminal-input]'),consoleNode=root.querySelector('[data-terminal-console]'),output=root.querySelector('[data-terminal-output]');let selectionDrag=null;form.onsubmit=event=>{event.preventDefault();run(input.value)};input.onkeydown=event=>{const session=active();if(event.key==='Enter'){event.preventDefault();run(input.value);return}if(event.key==='c'&&event.ctrlKey&&input.selectionStart===input.selectionEnd){event.preventDefault();input.value='';return}if(event.key==='l'&&event.ctrlKey){event.preventDefault();session.lines=[];draw();return}if(event.key==='ArrowUp'){event.preventDefault();if(session.history.length){session.historyIndex=Math.max(0,session.historyIndex-1);input.value=session.history[session.historyIndex]||''}}if(event.key==='ArrowDown'){event.preventDefault();session.historyIndex=Math.min(session.history.length,session.historyIndex+1);input.value=session.history[session.historyIndex]||''}};output.onpointerdown=event=>{if(event.button!==0)return;const start=caretAt(output,event.clientX,event.clientY);if(start)selectionDrag={start,x:event.clientX,y:event.clientY,moved:false}};consoleNode.onpointermove=event=>{if(!selectionDrag||!(event.buttons&1))return;const end=caretAt(output,event.clientX,event.clientY);if(!end)return;if(Math.hypot(event.clientX-selectionDrag.x,event.clientY-selectionDrag.y)>3)selectionDrag.moved=true;if(selectionDrag.moved)selectBetween(selectionDrag.start,end)};consoleNode.onpointerup=event=>{const moved=selectionDrag?.moved;selectionDrag=null;if(event.button===0&&!moved&&!event.target.closest('input')&&getSelection()?.isCollapsed)input.focus()};consoleNode.onpointercancel=()=>selectionDrag=null};
