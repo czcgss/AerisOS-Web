@@ -7,9 +7,9 @@ export class WeatherService{
   start(){if(!this.data||Date.now()-(this.data.fetchedAt||0)>30*60*1000)this.refresh().catch(()=>{});}
   #read(key,fallback){try{return JSON.parse(this.storage.getItem(key))||fallback}catch{return fallback}}
   snapshot(){return{location:{...this.location},data:this.data?structuredClone(this.data):null,loading:this.loading,error:this.error}}
-  async search(query){
-    const language=this.settings.get('locale')==='zh'?'zh':'en';
-    const response=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=${language}&format=json`);
+  async search(query,{signal,language}={}){
+    language=language||(this.settings.get('locale')==='zh'?'zh':'en');
+    const response=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=${language}&format=json`,{signal});
     if(!response.ok)throw new Error(`Location search failed (${response.status})`);
     return (await response.json()).results||[];
   }
@@ -18,16 +18,37 @@ export class WeatherService{
     this.storage.setItem(LOCATION_KEY,JSON.stringify(this.location));
     return this.refresh(true);
   }
-  async refresh(force=false){
+  async lookup(query,signal,timeout=15000){
+    const request=this.#request(signal,timeout);
+    try{
+      const match=(await this.search(query,{signal:request.signal,language:'en'}))[0];
+      if(!match)throw new Error(`No weather location matched “${query}”.`);
+      const location={name:match.name,admin1:match.admin1||'',country:match.country||'',latitude:match.latitude,longitude:match.longitude,timezone:match.timezone||'auto'};
+      return{location,data:await this.#forecast(location,request.signal)};
+    }catch(error){if(request.timedOut())throw new Error(`Weather lookup timed out after ${Math.round(timeout/1000)} seconds.`);throw error}
+    finally{request.close()}
+  }
+  async refresh(force=false,{signal,timeout=0}={}){
     if(this.loading)return this.data;
     if(!force&&this.data&&Date.now()-(this.data.fetchedAt||0)<10*60*1000)return this.data;
     this.loading=true;this.error='';this.#emit();
-    const params=new URLSearchParams({latitude:this.location.latitude,longitude:this.location.longitude,timezone:'auto',forecast_days:'10',current:'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,precipitation',hourly:'temperature_2m,weather_code,precipitation_probability',daily:'weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,sunrise,sunset,precipitation_probability_max'});
+    const request=this.#request(signal,timeout);
     try{
-      const response=await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
-      if(!response.ok)throw new Error(`Weather service failed (${response.status})`);
-      this.data={...(await response.json()),fetchedAt:Date.now()};this.storage.setItem(CACHE_KEY,JSON.stringify(this.data));return this.data;
-    }catch(error){this.error=error.message;throw error}finally{this.loading=false;this.#emit()}
+      this.data=await this.#forecast(this.location,request.signal);this.storage.setItem(CACHE_KEY,JSON.stringify(this.data));return this.data;
+    }catch(error){this.error=request.timedOut()?'Weather lookup timed out after 15 seconds.':error.message;throw request.timedOut()?new Error(this.error):error}finally{request.close();this.loading=false;this.#emit()}
+  }
+  async #forecast(location,signal){
+    const params=new URLSearchParams({latitude:location.latitude,longitude:location.longitude,timezone:'auto',forecast_days:'10',current:'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,precipitation',hourly:'temperature_2m,weather_code,precipitation_probability',daily:'weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,sunrise,sunset,precipitation_probability_max'});
+    const response=await fetch(`https://api.open-meteo.com/v1/forecast?${params}`,{signal});
+    if(!response.ok)throw new Error(`Weather service failed (${response.status})`);
+    return{...(await response.json()),fetchedAt:Date.now()};
+  }
+  #request(parent,timeout){
+    const controller=new AbortController();let timeoutId=0,didTimeout=false;
+    const abort=()=>controller.abort(parent?.reason);
+    if(parent?.aborted)abort();else parent?.addEventListener('abort',abort,{once:true});
+    if(timeout)timeoutId=setTimeout(()=>{didTimeout=true;controller.abort()},timeout);
+    return{signal:controller.signal,timedOut:()=>didTimeout,close:()=>{clearTimeout(timeoutId);parent?.removeEventListener('abort',abort)}};
   }
   #emit(){this.kernel?.bus.emit('weather:update',this.snapshot())}
 }

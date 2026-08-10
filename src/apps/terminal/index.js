@@ -1,29 +1,96 @@
-const shellQuote=value=>`'${String(value).replace(/'/g,`'"'"'`)}'`,home='/home/aeris';
-const escapeHtml=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const resolvePath=(cwd,target)=>{if(!target||target==='~')return home;if(target.startsWith('~/'))return `${home}/${target.slice(2)}`;if(target.startsWith('/'))return target;return `${cwd.replace(/\/$/,'')}/${target}`};
-const fileKind=entry=>{if(entry.type==='directory')return'directory';const name=entry.name.toLowerCase();if(/\.(sh|bash|zsh|fish|run|bin|appimage)$/.test(name))return'executable';if(/\.(tar|tgz|gz|bz2|xz|zip|7z|rar|apk|deb|rpm)$/.test(name))return'archive';if(/\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff?)$/.test(name))return'image';if(/\.(mp3|wav|flac|ogg|m4a|mp4|mkv|mov|webm|avi)$/.test(name))return'media';if(/\.(js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|c|cc|cpp|h|hpp|java|kt|swift|php|lua|html?|css|scss|vue|svelte)$/.test(name))return'code';if(/(^|\.)(env|ini|conf|config|toml|yaml|yml|properties|service|profile|rc)$/.test(name)||/^\.(bashrc|zshrc|profile|gitconfig)$/.test(name))return'config';if(/\.(md|txt|rtf|pdf|docx?|odt)$/.test(name))return'document';if(/\.(json|csv|tsv|xml|sql|db|sqlite)$/.test(name))return'data';return'file'};
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
+
+const theme={
+  background:'#0f181f',foreground:'#d9e2e8',cursor:'#67c58b',cursorAccent:'#0f181f',selectionBackground:'#356b7eaa',
+  black:'#111a22',red:'#ef7373',green:'#67c58b',yellow:'#e9bc64',blue:'#5aa7e8',magenta:'#b398ed',cyan:'#55c2c8',white:'#d9e2e8',
+  brightBlack:'#607582',brightRed:'#ff8a8a',brightGreen:'#7cdda0',brightYellow:'#f4cb75',brightBlue:'#72b8f2',brightMagenta:'#c7adff',brightCyan:'#6dd8de',brightWhite:'#f5f8fa'
+};
+
 export default{
-  id:'terminal',title:'terminal',icon:'terminal',color:'slate',width:900,height:590,singleInstance:true,
-  mount(root,{kernel,system,i18n,window,windowManager}){
-    let nextId=2,activeId=1,sessions=[{id:1,cwd:home,history:[],historyIndex:0,lines:[],busy:false}];
-    const active=()=>sessions.find(session=>session.id===activeId),shortPath=session=>session.cwd===home?'~':session.cwd.startsWith(`${home}/`)?`~${session.cwd.slice(home.length)}`:session.cwd;
-    const promptMarkup=path=>`<span class="terminal-prompt" aria-label="aeris at aeris, ${escapeHtml(path)}"><span class="prompt-segment prompt-user">aeris</span><span class="prompt-segment prompt-host">aeris</span><span class="prompt-segment prompt-path">${escapeHtml(path)}</span><span class="prompt-mark">❯</span></span>`;
-    const renderLine=line=>{
-      if(typeof line==='string')return `<div class="terminal-output-line">${escapeHtml(line)||'&nbsp;'}</div>`;
-      if(line.type==='command')return `<div class="terminal-history-command">${promptMarkup(line.path)}<span class="terminal-command-text">${escapeHtml(line.text)}</span></div>`;
-      if(line.type==='files')return `<div class="terminal-file-grid">${line.entries.map(entry=>`<div><span class="terminal-file terminal-file-${fileKind(entry)}">${escapeHtml(entry.name)}${entry.type==='directory'?'/':''}</span></div>`).join('')}</div>`;
-      return `<div class="terminal-output-line ${line.tone?`terminal-line-${line.tone}`:''}">${escapeHtml(line.text)||'&nbsp;'}</div>`
+  id:'terminal',title:'terminal',icon:'terminal',color:'slate',width:920,height:610,singleInstance:true,
+  mount(root,{kernel,system,i18n,clipboard,shell}){
+    let nextId=1,activeId=null,fitFrame=0,resizeTimer=0,sessions=[];
+    root.innerHTML=`<div class="system-app terminal-pro terminal-native" data-terminal-theme="agnoster"><header><div class="terminal-tabs" data-terminal-tabs></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><main class="terminal-native-host" data-terminal-host></main><footer><span class="terminal-connection"><i></i><b data-terminal-connection></b></span><span>UTF-8</span><span>ash</span></footer><menu class="terminal-context-menu" data-terminal-menu hidden><button data-terminal-copy>${i18n.t('copy')}</button><button data-terminal-paste>${i18n.t('paste')}</button></menu></div>`;
+    const host=root.querySelector('[data-terminal-host]'),tabs=root.querySelector('[data-terminal-tabs]'),menu=root.querySelector('[data-terminal-menu]');
+    const dispose=resource=>typeof resource==='function'?resource():resource?.dispose?.();
+    const active=()=>sessions.find(session=>session.id===activeId);
+    const setStatus=()=>{
+      const ready=system.ready,state=root.querySelector('[data-terminal-state]'),dot=root.querySelector('[data-terminal-state-dot]'),connection=root.querySelector('[data-terminal-connection]');
+      state.textContent=i18n.t(ready?'terminalReady':'terminalWaiting');
+      connection.textContent=ready?'aeris@aeris':'Linux offline';
+      dot.classList.toggle('offline',!ready);
+      root.querySelector('.terminal-connection i').classList.toggle('offline',!ready)
     };
-    const render=()=>{const session=active();root.innerHTML=`<div class="system-app terminal-pro" data-terminal-theme="agnoster"><header><div class="terminal-tabs">${sessions.map(item=>`<button data-terminal-tab="${item.id}" class="${item.id===activeId?'selected':''}"><i></i><span>${shortPath(item)}</span>${sessions.length>1?`<b data-terminal-close="${item.id}">×</b>`:''}</button>`).join('')}<button data-terminal-new aria-label="${i18n.t('newTab')}">+</button></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><div class="terminal-console" data-terminal-console><div class="terminal-output" data-terminal-output data-copyable aria-live="polite"></div><form class="terminal-live-line" data-terminal-form><span data-terminal-prompt></span><input data-terminal-input autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${i18n.t('terminal')}"></form></div><footer><span class="terminal-connection"><i></i>${system.ready?'aeris@aeris':'Linux offline'}</span><span>Agnoster · ash · UTF-8</span><span>${shortPath(session)}</span></footer></div>`;bind();draw()};
-    const draw=()=>{const session=active(),consoleNode=root.querySelector('[data-terminal-console]'),output=root.querySelector('[data-terminal-output]'),input=root.querySelector('[data-terminal-input]'),form=root.querySelector('[data-terminal-form]'),state=root.querySelector('[data-terminal-state]'),stateDot=root.querySelector('[data-terminal-state-dot]');if(!consoleNode)return;root.querySelector('[data-terminal-prompt]').innerHTML=promptMarkup(shortPath(session));output.innerHTML=session.lines.map(renderLine).join('');form.hidden=session.busy;input.disabled=session.busy||!system.ready;state.textContent=i18n.t(session.busy?'terminalRunning':'terminalReady');stateDot.classList.toggle('busy',session.busy);consoleNode.scrollTop=consoleNode.scrollHeight};
-    const append=(session,text,tone='')=>{if(text!==undefined&&text!==null&&String(text).length)session.lines.push(...String(text).replace(/\r/g,'').split('\n').map(value=>({type:'output',text:value,tone})));draw()};
-    const changeDirectory=async(session,target)=>{const requested=resolvePath(session.cwd,target),{output,code}=await system.execInteractive(`cd ${shellQuote(session.cwd)} && cd ${shellQuote(requested)} && pwd`);if(code!==0)append(session,`cd: ${target}: ${i18n.t('directoryUnavailable')}`,'error');else session.cwd=output.trim().split('\n').at(-1)||session.cwd};
-    const listRequest=(session,command)=>{const tokens=command.trim().split(/\s+/);if(tokens[0]!=='ls')return null;const args=tokens.slice(1),supported=new Set(['-1','--color','--color=auto','--color=always']);if(args.some(arg=>arg.startsWith('-')&&!supported.has(arg)))return null;const targets=args.filter(arg=>!arg.startsWith('-'));return targets.length<=1?resolvePath(session.cwd,targets[0]):null};
-    const executable=command=>{const trimmed=command.trim();if(!/^ping(?:\s|$)/.test(trimmed))return {command,timeout:30000};const rest=trimmed.replace(/^ping\s*/,''),count=/(?:^|\s)-c(?:\s|\d)/.test(rest),deadline=/(?:^|\s)-w(?:\s|\d)/.test(rest);return {command:`ping ${count?'':'-c 4 '}${deadline?'':'-w 12 '}${rest}`.trim(),timeout:20000}};
-    const run=async command=>{const session=active();if(!command.trim()||session.busy||!system.ready)return;session.history.push(command);session.historyIndex=session.history.length;session.lines.push({type:'command',path:shortPath(session),text:command});root.querySelector('[data-terminal-input]').value='';if(command.trim()==='clear'){session.lines=[];return draw()}if(command.trim()==='exit'){if(sessions.length===1)return windowManager.close(window.id);sessions=sessions.filter(item=>item.id!==session.id);activeId=sessions.at(-1).id;return render()}session.busy=true;draw();try{const cd=command.trim().match(/^cd(?:\s+(.+))?$/),listing=listRequest(session,command);if(cd)await changeDirectory(session,cd[1]?.trim());else if(listing){const entries=await system.list(listing,{priority:true});session.lines.push({type:'files',entries});draw()}else{const execution=executable(command),result=await system.execInteractive(`cd ${shellQuote(session.cwd)} && ${execution.command}`,execution.timeout);if(result.output)append(session,result.output);if(result.code!==0&&result.code!==130)append(session,`${i18n.t('commandExited')} ${result.code}`,'error')}}catch(error){append(session,/timed out/i.test(error.message)?i18n.t('terminalCommandTimedOut'):`${i18n.t('terminalError')}: ${error.message}`,'error')}finally{session.busy=false;if(activeId===session.id){render();setTimeout(()=>root.querySelector('[data-terminal-input]')?.focus())}}};
-    const caretAt=(container,x,y)=>{const position=document.caretPositionFromPoint?.(x,y),legacy=!position&&document.caretRangeFromPoint?.(x,y),node=position?.offsetNode||legacy?.startContainer,offset=position?.offset??legacy?.startOffset;if(!node||!container.contains(node.nodeType===Node.ELEMENT_NODE?node:node.parentElement))return null;return {node,offset}};
-    const selectBetween=(start,end)=>{const range=document.createRange();range.setStart(start.node,start.offset);range.setEnd(end.node,end.offset);if(range.collapsed&&(start.node!==end.node||start.offset!==end.offset)){range.setStart(end.node,end.offset);range.setEnd(start.node,start.offset)}const selection=getSelection();selection.removeAllRanges();selection.addRange(range)};
-    const bind=()=>{root.querySelectorAll('[data-terminal-tab]').forEach(button=>button.onclick=event=>{if(event.target.closest('[data-terminal-close]'))return;activeId=Number(button.dataset.terminalTab);render()});root.querySelectorAll('[data-terminal-close]').forEach(button=>button.onclick=event=>{event.stopPropagation();sessions=sessions.filter(item=>item.id!==Number(button.dataset.terminalClose));if(!sessions.some(item=>item.id===activeId))activeId=sessions[0].id;render()});root.querySelector('[data-terminal-new]').onclick=()=>{const session={id:nextId++,cwd:home,history:[],historyIndex:0,lines:[],busy:false};sessions.push(session);activeId=session.id;render()};const form=root.querySelector('[data-terminal-form]'),input=root.querySelector('[data-terminal-input]'),consoleNode=root.querySelector('[data-terminal-console]'),output=root.querySelector('[data-terminal-output]');let selectionDrag=null;form.onsubmit=event=>{event.preventDefault();run(input.value)};input.onkeydown=event=>{const session=active();if(event.key==='Enter'){event.preventDefault();run(input.value);return}if(event.key==='c'&&event.ctrlKey&&input.selectionStart===input.selectionEnd){event.preventDefault();input.value='';return}if(event.key==='l'&&event.ctrlKey){event.preventDefault();session.lines=[];draw();return}if(event.key==='ArrowUp'){event.preventDefault();if(session.history.length){session.historyIndex=Math.max(0,session.historyIndex-1);input.value=session.history[session.historyIndex]||''}}if(event.key==='ArrowDown'){event.preventDefault();session.historyIndex=Math.min(session.history.length,session.historyIndex+1);input.value=session.history[session.historyIndex]||''}};output.onpointerdown=event=>{if(event.button!==0)return;const start=caretAt(output,event.clientX,event.clientY);if(start)selectionDrag={start,x:event.clientX,y:event.clientY,moved:false}};consoleNode.onpointermove=event=>{if(!selectionDrag||!(event.buttons&1))return;const end=caretAt(output,event.clientX,event.clientY);if(!end)return;if(Math.hypot(event.clientX-selectionDrag.x,event.clientY-selectionDrag.y)>3)selectionDrag.moved=true;if(selectionDrag.moved)selectBetween(selectionDrag.start,end)};consoleNode.onpointerup=event=>{const moved=selectionDrag?.moved;selectionDrag=null;if(event.button===0&&!moved&&!event.target.closest('input')&&getSelection()?.isCollapsed)input.focus()};consoleNode.onpointercancel=()=>selectionDrag=null};
-    if(!system.ready)active().lines=[{type:'output',text:i18n.t('terminalWaiting')}];const off=kernel.bus.on('guest:ready',()=>{sessions.forEach(session=>{session.lines=[];session.busy=false});render();root.querySelector('[data-terminal-input]')?.focus()});render();setTimeout(()=>root.querySelector('[data-terminal-input]')?.focus());return off
+    const drawTabs=()=>{
+      tabs.innerHTML=`${sessions.map((session,index)=>`<button data-terminal-tab="${session.id}" class="${session.id===activeId?'selected':''}"><i></i><span>${i18n.t('terminal')}${sessions.length>1?` ${index+1}`:''}</span>${sessions.length>1?`<b data-terminal-close="${session.id}">×</b>`:''}</button>`).join('')}<button data-terminal-new aria-label="${i18n.t('newTab')}">+</button>`;
+      tabs.querySelectorAll('[data-terminal-tab]').forEach(button=>button.onclick=event=>{if(event.target.closest('[data-terminal-close]'))return;show(Number(button.dataset.terminalTab))});
+      tabs.querySelectorAll('[data-terminal-close]').forEach(button=>button.onclick=event=>{event.stopPropagation();closeSession(Number(button.dataset.terminalClose))});
+      tabs.querySelector('[data-terminal-new]').onclick=createSession
+    };
+    const resize=()=>{
+      cancelAnimationFrame(fitFrame);
+      fitFrame=requestAnimationFrame(()=>{
+        const session=active();
+        if(!session||session.pane.hidden)return;
+        try{session.fit.fit()}catch{return}
+        clearTimeout(resizeTimer);
+        resizeTimer=setTimeout(()=>system.resizeTerminal(session.port,session.terminal.cols,session.terminal.rows),180)
+      })
+    };
+    const show=id=>{
+      activeId=id;
+      sessions.forEach(session=>session.pane.hidden=session.id!==id);
+      drawTabs();
+      const session=active();
+      resize();
+      setTimeout(()=>session?.terminal.focus())
+    };
+    const copy=async()=>{const text=active()?.terminal.getSelection()||'';if(text&&await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard'));menu.hidden=true};
+    const paste=()=>{const text=clipboard.value||'';if(text)system.writeTerminal(text,active()?.port);menu.hidden=true;active()?.terminal.focus()};
+    const shortcut=(session,event)=>{
+      const key=event.key.toLowerCase(),copyKey=(event.metaKey||event.ctrlKey&&event.shiftKey)&&key==='c',pasteKey=(event.metaKey||event.ctrlKey&&event.shiftKey)&&key==='v';
+      if(event.ctrlKey&&!event.metaKey&&!event.shiftKey&&key==='c'){
+        if(event.type==='keydown')system.writeTerminal('\u0003',session.port);
+        return false
+      }
+      if(copyKey&&session.terminal.hasSelection()){if(event.type==='keydown')copy();return false}
+      if(pasteKey){if(event.type==='keydown')paste();return false}
+      return true
+    };
+    function createSession(){
+      const used=new Set(sessions.map(session=>session.port)),port=system.terminalPorts().find(candidate=>!used.has(candidate));
+      if(!port){shell.toast(i18n.t('terminalSessionLimit'));return}
+      const id=nextId++,pane=document.createElement('section');
+      pane.className='terminal-native-pane';pane.dataset.terminalPane=id;host.appendChild(pane);
+      const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:'"Ubuntu Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:80,theme});
+      const fit=new FitAddon();terminal.loadAddon(fit);terminal.open(pane);
+      const session={id,port,pane,terminal,fit,disposables:[]};sessions.push(session);
+      session.disposables.push(terminal.onData(data=>system.writeTerminal(data,port)));
+      session.disposables.push(terminal.onTitleChange(title=>{session.title=title;drawTabs()}));
+      session.disposables.push(kernel.bus.on('terminal:data',detail=>{if(detail.port===port)terminal.write(detail.data)}));
+      terminal.attachCustomKeyEventHandler(event=>shortcut(session,event));
+      pane.oncontextmenu=event=>{event.preventDefault();show(id);const bounds=root.getBoundingClientRect();menu.style.left=`${Math.max(8,Math.min(event.clientX-bounds.left,bounds.width-130))}px`;menu.style.top=`${Math.max(48,Math.min(event.clientY-bounds.top,bounds.height-82))}px`;menu.querySelector('[data-terminal-copy]').disabled=!terminal.hasSelection();menu.querySelector('[data-terminal-paste]').disabled=!clipboard.value;menu.hidden=false};
+      const replay=system.terminalReplay(port);if(replay)terminal.write(replay);
+      show(id);
+      if(system.ready)setTimeout(()=>{resize();system.writeTerminal('\r',port)},80)
+    }
+    function closeSession(id){
+      const session=sessions.find(item=>item.id===id);if(!session)return;
+      session.disposables.forEach(dispose);
+      session.terminal.dispose();session.pane.remove();system.resetTerminal(session.port);
+      sessions=sessions.filter(item=>item.id!==id);
+      if(!sessions.length)return createSession();
+      show(sessions.at(-1).id)
+    }
+    menu.querySelector('[data-terminal-copy]').onclick=copy;
+    menu.querySelector('[data-terminal-paste]').onclick=paste;
+    root.addEventListener('pointerdown',event=>{if(!event.target.closest('[data-terminal-menu]'))menu.hidden=true});
+    const observer=new ResizeObserver(resize);observer.observe(host);
+    const offDataReady=kernel.bus.on('guest:ready',()=>{setStatus();sessions.forEach(session=>{session.terminal.reset();const replay=system.terminalReplay(session.port);if(replay)session.terminal.write(replay);system.writeTerminal('\r',session.port)});resize()});
+    const offStatus=kernel.bus.on('machine:status',setStatus);
+    createSession();setStatus();
+    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();sessions.forEach(session=>{session.disposables.forEach(dispose);session.terminal.dispose();system.resetTerminal(session.port)})}
   }
 };

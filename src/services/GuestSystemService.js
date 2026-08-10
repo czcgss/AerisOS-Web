@@ -14,7 +14,11 @@ export class GuestSystemService {
   async exec(command, timeout) { this.requireReady(); return this.machine.serial.execute(command, timeout); }
   async execInteractive(command, timeout) { this.requireReady(); return this.machine.serial.execute(command, timeout, true); }
   async execChecked(command, timeout) { const result=await this.exec(command,timeout);if(result.code!==0)throw new Error(result.output||`Linux command failed (${result.code})`);return result; }
-  writeTerminal(data) { this.machine.sendUserInput(data); this.kernel.bus.emit('terminal:activity'); }
+  terminalPorts(){return this.machine.terminalPorts()}
+  terminalReplay(port){return this.machine.terminalReplay(port)}
+  writeTerminal(data,port=1){this.machine.terminalWrite(port,data)}
+  resizeTerminal(port,columns,rows){return this.machine.resizeTerminal(port,columns,rows)}
+  resetTerminal(port){return this.machine.resetTerminal(port)}
 
   async processes() {
     const {output}=await this.exec("ps -o pid,stat,comm 2>/dev/null | awk 'NR>1 && NR<34 {printf \"%s,%s,%s;\", $1,$2,$3}'");
