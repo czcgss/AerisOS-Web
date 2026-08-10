@@ -54,7 +54,7 @@ export async function createSystem(root) {
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const agentTasks=kernel.register('agentTasks',new AgentTaskService());
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
-  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,weather,metrics,machine,dialog,registry,i18n}));
+  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,weather,metrics,machine,registry,i18n}));
   const aiAgent=kernel.register('aiAgent',new AiAgentService(system,tools,localStorage,agentContext,agentTasks));
   const context={kernel,settings,i18n,dialog,machine,system,metrics,tools,aiAgent,agentContext,agentEntry,agentTasks,userdata,clipboard,weather,notifications,registry};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();

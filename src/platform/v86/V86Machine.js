@@ -12,6 +12,7 @@ export class V86Machine {
     this.startedAt = 0;
     this.serial = null;
     this.terminals = new Map();
+    this.terminalResets = new Map();
     this.controlConsole = 1;
     this.stateStore = new MachineStateStore();
     this.guestReady = false;
@@ -351,9 +352,18 @@ export class V86Machine {
   #activateSerialLines() { this.emulator?.serial_set_carrier_detect(0,true);this.emulator?.serial_set_data_set_ready(0,true);this.emulator?.serial_set_clear_to_send(0,true); }
   #activateTerminalLines(){for(const port of [1,2,3]){this.emulator?.serial_set_carrier_detect(port,true);this.emulator?.serial_set_data_set_ready(port,true);this.emulator?.serial_set_clear_to_send(port,true)}}
 
-  terminalWrite(port,data){this.terminals.get(Number(port))?.write(data)}
+  terminalWrite(port,data){
+    const tty=Number(port),bridge=this.terminals.get(tty),reset=this.terminalResets.get(tty);
+    if(reset)return reset.finally(()=>bridge?.write(data));
+    bridge?.write(data)
+  }
   terminalReplay(port){return this.terminals.get(Number(port))?.replay()||''}
-  terminalPorts(){return[1,2,3]}
+  terminalPorts(){return[1].sort((a,b)=>Number(this.terminalResets.has(a))-Number(this.terminalResets.has(b)))}
+  executeAgentTerminal(command,timeout,signal){
+    const terminal=this.terminals.get(2);
+    if(!terminal)return Promise.reject(new Error('The Aeris agent terminal is not available.'));
+    return terminal.execute(command,timeout,signal);
+  }
   resizeTerminal(port,columns,rows){
     const tty=Number(port),cols=Math.max(20,Math.min(400,Number(columns)||80)),lines=Math.max(5,Math.min(200,Number(rows)||24));
     if(!this.serial||!this.guestReady)return Promise.resolve();
@@ -361,15 +371,20 @@ export class V86Machine {
   }
   resetTerminal(port){
     const tty=Number(port),bridge=this.terminals.get(tty);
-    bridge?.clear();
-    if(!this.serial||!this.guestReady)return Promise.resolve();
-    return this.serial.execute(`for terminal_pid in $(ps -eo pid,tty 2>/dev/null | awk '$2=="ttyS${tty}" {print $1}'); do kill -HUP "$terminal_pid" 2>/dev/null || true; done`,5000,true).catch(()=>{});
+    if(this.terminalResets.has(tty))return this.terminalResets.get(tty);
+    bridge?.suspend();
+    if(!this.serial||!this.guestReady){bridge?.resume();return Promise.resolve()}
+    const command=`terminal_device=/dev/ttyS${tty}; for terminal_fd in /proc/[0-9]*/fd/0; do [ "$(readlink "$terminal_fd" 2>/dev/null)" = "$terminal_device" ] || continue; terminal_pid=$(printf %s "$terminal_fd" | cut -d/ -f3); kill -KILL "$terminal_pid" 2>/dev/null || true; done; terminal_ready=; for terminal_attempt in $(seq 1 40); do for terminal_fd in /proc/[0-9]*/fd/0; do [ "$(readlink "$terminal_fd" 2>/dev/null)" = "$terminal_device" ] || continue; terminal_pid=$(printf %s "$terminal_fd" | cut -d/ -f3); if [ "$(readlink "/proc/$terminal_pid/cwd" 2>/dev/null)" = /home/aeris ]; then terminal_ready=1; break; fi; done; [ "$terminal_ready" = 1 ] && break; sleep 0.1; done; [ "$terminal_ready" = 1 ]`;
+    const task=this.serial.execute(command,10000,true)
+      .catch(()=>{}).finally(()=>{bridge?.resume();if(this.terminalResets.get(tty)===task)this.terminalResets.delete(tty)});
+    this.terminalResets.set(tty,task);
+    return task;
   }
 
   pause() { this.emulator?.stop(); this.#setStatus('paused'); }
   resume() { this.emulator?.run(); this.#setStatus('running'); }
   async restart() { if(!this.emulator)return this.start();await this.checkpoint();await this.stop(false);await this.start(); }
-  async stop(save = true) { if(!this.emulator)return;if(save)await this.checkpoint();clearInterval(this._checkpointInterval);clearTimeout(this._checkpointTimer);this.#stopBootActivityMonitor();clearInterval(this._promptTimer);this.emulator.stop();await this.emulator.destroy();this.emulator=null;this.serial=null;this.terminals.clear();this.guestReady=false;this.controlReady=false;this.#setStatus('stopped'); }
+  async stop(save = true) { if(!this.emulator)return;if(save)await this.checkpoint();clearInterval(this._checkpointInterval);clearTimeout(this._checkpointTimer);this.#stopBootActivityMonitor();clearInterval(this._promptTimer);this.emulator.stop();await this.emulator.destroy();this.emulator=null;this.serial=null;this.terminalResets.clear();this.terminals.clear();this.guestReady=false;this.controlReady=false;this.#setStatus('stopped'); }
   uptime() { return this.startedAt ? Date.now()-this.startedAt : 0; }
   instructionCount() { return this.emulator?.get_instruction_counter?.() || 0; }
   screenText() { return this.screenRows().join('\n'); }
