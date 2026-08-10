@@ -25,8 +25,13 @@ export class GuestSystemService {
     if(source.includes('\0'))throw new Error('Terminal commands cannot contain null bytes.');
     if(source.length>24000)throw new Error('Terminal command is too long.');
     const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/aeris-agent-${id}.sh`,encoded=base64(source);
-    const wrapper=`( printf %s ${quote(encoded)} | base64 -d > ${quote(script)} && chown aeris:aeris ${quote(script)} && chmod 700 ${quote(script)} && su aeris -s /bin/ash -c ${quote(`cd /home/aeris && /bin/ash ${script}`)}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;
-    return this.execInteractive(wrapper,timeout);
+    // BusyBox su requires its options before USER. Putting -s/-c after aeris
+    // starts a login shell instead of the finite command and never returns.
+    const wrapper=`( printf %s ${quote(encoded)} | base64 -d > ${quote(script)} && chown aeris:aeris ${quote(script)} && chmod 700 ${quote(script)} && su -s /bin/ash aeris -c ${quote(`cd /home/aeris && /bin/ash ${script}`)}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;
+    try{return await this.execInteractive(wrapper,timeout)}catch(error){
+      if(/Guest command timed out/i.test(error?.message||''))throw new Error(`Terminal command timed out after ${Math.ceil(timeout/1000)} seconds: ${source.slice(0,240)}`);
+      throw error;
+    }
   }
   async execChecked(command, timeout) { const result=await this.exec(command,timeout);if(result.code!==0)throw new Error(result.output||`Linux command failed (${result.code})`);return result; }
   terminalPorts(){return this.machine.terminalPorts()}
