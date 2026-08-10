@@ -58,8 +58,14 @@ export class TerminalBridge {
     // mistaken for actual framed output.
     const prefix='__AERIS_TTY_',beginSuffix=`BEGIN_${token}__`,endSuffix=`END_${token}__`;
     const framed=`__aeris_prefix='${prefix}'; __aeris_begin='${beginSuffix}'; __aeris_end='${endSuffix}'; printf '\\n%s%s\\n' "$__aeris_prefix" "$__aeris_begin"; ( ${request.command} ); __aeris_status=$?; printf '\\n%s%s:%s\\n' "$__aeris_prefix" "$__aeris_end" "$__aeris_status"`;
-    this.write(`\u0003${framed}\r`);
-    request.timer=setTimeout(()=>{this.write('\u0003');this.#finishExecution(new Error(`Terminal command timed out after ${Math.ceil(request.timeout/1000)} seconds.`))},request.timeout);
+    // VINTR flushes the TTY input queue. Sending Ctrl+C and the command in one
+    // serial packet discards the command bytes that follow the interrupt.
+    this.write('\u0003');
+    request.startTimer=setTimeout(()=>{
+      if(this.activeExecution!==request)return;
+      this.write(`${framed}\r`);
+      request.timer=setTimeout(()=>{this.write('\u0003');this.#finishExecution(new Error(`Terminal command timed out after ${Math.ceil(request.timeout/1000)} seconds.`))},request.timeout);
+    },140);
   }
 
   #inspectExecution(data){
@@ -78,7 +84,7 @@ export class TerminalBridge {
 
   #finishExecution(error,result){
     const request=this.activeExecution;if(!request)return;
-    clearTimeout(request.timer);request.signal?.removeEventListener('abort',request.abort);this.activeExecution=null;this.executionBuffer='';
+    clearTimeout(request.startTimer);clearTimeout(request.timer);request.signal?.removeEventListener('abort',request.abort);this.activeExecution=null;this.executionBuffer='';
     error?request.reject(error):request.resolve(result);setTimeout(()=>this.#nextExecution(),error?180:0);
   }
 }
