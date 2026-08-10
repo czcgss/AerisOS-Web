@@ -19,9 +19,10 @@ export class AgentContextService {
       const app = this.registry?.get(appId), name = app ? this.i18n?.t(app.title) || app.title : appId;
       this.set({ appId, label: name, resource: { kind: 'application', id: appId, uri: `aeris://apps/${appId}`, name } });
     });
+    this.offClose = this.kernel.bus.on('window:closed', ({appId,remaining}) => { if(!remaining)this.clear(appId) });
     this.kernel.bus.emit('agent:context-changed', this.snapshot());
   }
-  stop() { this.offFocus?.(); }
+  stop() { this.offFocus?.();this.offClose?.(); }
   snapshot() { return this.current ? structuredClone(this.current) : null; }
 
   set(value = {}) {

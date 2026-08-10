@@ -91,6 +91,6 @@ export default{
     const offDataReady=kernel.bus.on('guest:ready',()=>{setStatus();sessions.forEach(session=>{session.terminal.reset();const replay=system.terminalReplay(session.port);if(replay)session.terminal.write(replay);system.writeTerminal('\r',session.port)});resize()});
     const offStatus=kernel.bus.on('machine:status',setStatus);
     createSession();setStatus();
-    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();sessions.forEach(session=>{session.disposables.forEach(dispose);session.terminal.dispose();system.resetTerminal(session.port)})}
+    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();const resets=sessions.map(session=>{session.disposables.forEach(dispose);session.terminal.dispose();return system.resetTerminal(session.port)});sessions=[];return Promise.allSettled(resets)}
   }
 };
