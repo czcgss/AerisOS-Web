@@ -4,12 +4,6 @@ const base64 = value => {
   for(let offset=0;offset<bytes.length;offset+=32768)binary+=String.fromCharCode(...bytes.subarray(offset,offset+32768));
   return btoa(binary);
 };
-const unbase64 = value => {
-  const binary=atob(String(value).replace(/\s+/g,'')),bytes=new Uint8Array(binary.length);
-  for(let index=0;index<binary.length;index++)bytes[index]=binary.charCodeAt(index);
-  return new TextDecoder().decode(bytes);
-};
-const wait = milliseconds => new Promise(resolve=>setTimeout(resolve,milliseconds));
 
 export class GuestSystemService {
   constructor(machine) { this.machine = machine; this._ready = false; this.listInflight=new Map();this.directoryRevision=new Map();this.directoryCache=this.#loadDirectoryCache();this.#seedDirectoryCache();this.networkTask=null;this.networkState={status:'offline',interface:'eth0',address:'',gateway:'',dns:'',error:''}; }
@@ -30,34 +24,22 @@ export class GuestSystemService {
     if(!source.trim())throw new Error('A terminal command is required.');
     if(source.includes('\0'))throw new Error('Terminal commands cannot contain null bytes.');
     if(source.length>24000)throw new Error('Terminal command is too long.');
-    const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),prefix=`/tmp/aeris-agent-${id}`,script=`${prefix}.sh`,output=`${prefix}.out`,status=`${prefix}.status`,pid=`${prefix}.pid`,encoded=base64(source);
-    const child=`cd /home/aeris && /bin/ash ${script} > ${output} 2>&1; printf %s "$?" > ${status}`;
-    // OpenRC start-stop-daemon detaches without leaving an asynchronous ash
-    // job attached to the control UART. It also changes uid/gid before exec.
+    const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/aeris-agent-${id}.sh`,encoded=base64(source),seconds=Math.max(1,Math.ceil(timeout/1000));
     const prepare=`printf %s ${quote(encoded)} | base64 -d > ${quote(script)} && chown aeris:aeris ${quote(script)} && chmod 700 ${quote(script)}`;
-    const launch=`${prepare} && start-stop-daemon -S -b -m -p ${quote(pid)} -c aeris:aeris -x /bin/ash -- -c ${quote(child)}`;
-    const cleanup=async({terminate=false}={})=>{
-      const stop=terminate?`[ ! -s ${quote(pid)} ] || start-stop-daemon -K -p ${quote(pid)} -s TERM -o 2>/dev/null || true`:'true';
-      await this.execInteractive(`${stop}; rm -f ${quote(script)} ${quote(output)} ${quote(status)} ${quote(pid)}`,6000).catch(()=>{});
-    };
     if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
-    const launched=await this.execInteractive(launch,15000);
-    if(launched.code!==0){await cleanup({terminate:true});throw new Error(launched.output||`Unable to start terminal command (${launched.code}).`)}
-    const startedAt=Date.now();
+    // A finite foreground command is the only reliable contract on the v86
+    // control UART. BusyBox timeout bounds it; su receives every option before
+    // USER, then the control shell continues and emits its normal end marker.
+    const run=`timeout -s TERM ${seconds} su -s /bin/ash -c ${quote(`cd /home/aeris && /bin/ash ${script}`)} aeris`;
+    const wrapper=`( ${prepare} && ${run}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;
     try{
-      while(Date.now()-startedAt<timeout){
-        if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
-        const probe=await this.exec(`[ -s ${quote(status)} ] && printf '__AERIS_AGENT_DONE__'; [ -s ${quote(status)} ] && cat ${quote(status)}`,5000);
-        if(probe.output.includes('__AERIS_AGENT_DONE__')){
-          const code=Number(probe.output.split('__AERIS_AGENT_DONE__').at(-1).trim());
-          const result=await this.exec(`head -c 12000 ${quote(output)} 2>/dev/null | base64 | tr -d '\\n'`,12000);
-          await cleanup();
-          return{code:Number.isFinite(code)?code:1,output:result.output.trim()?unbase64(result.output):''};
-        }
-        await wait(250);
-      }
-      throw new Error(`Terminal command timed out after ${Math.ceil(timeout/1000)} seconds: ${source.slice(0,240)}`);
-    }catch(error){await cleanup({terminate:true});throw error}
+      const result=await this.execInteractive(wrapper,timeout+7000);
+      if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
+      return result;
+    }catch(error){
+      if(/Guest command timed out/i.test(error?.message||''))throw new Error(`Terminal command timed out after ${seconds} seconds: ${source.slice(0,240)}`);
+      throw error;
+    }
   }
   async execChecked(command, timeout) { const result=await this.exec(command,timeout);if(result.code!==0)throw new Error(result.output||`Linux command failed (${result.code})`);return result; }
   terminalPorts(){return this.machine.terminalPorts()}
