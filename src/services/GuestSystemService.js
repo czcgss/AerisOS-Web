@@ -1,4 +1,9 @@
 const quote = value => `'${String(value).replace(/'/g, `'"'"'`)}'`;
+const base64 = value => {
+  const bytes=new TextEncoder().encode(String(value));let binary='';
+  for(let offset=0;offset<bytes.length;offset+=32768)binary+=String.fromCharCode(...bytes.subarray(offset,offset+32768));
+  return btoa(binary);
+};
 
 export class GuestSystemService {
   constructor(machine) { this.machine = machine; this._ready = false; this.listInflight=new Map();this.directoryRevision=new Map();this.directoryCache=this.#loadDirectoryCache();this.#seedDirectoryCache();this.networkTask=null;this.networkState={status:'offline',interface:'eth0',address:'',gateway:'',dns:'',error:''}; }
@@ -13,6 +18,16 @@ export class GuestSystemService {
   requireReady() { if (!this.ready || !this.machine.serial) throw new Error(`Linux system service is not ready (${this.machine.status}, guest=${this.machine.guestReady?'yes':'no'})`); }
   async exec(command, timeout) { this.requireReady(); return this.machine.serial.execute(command, timeout); }
   async execInteractive(command, timeout) { this.requireReady(); return this.machine.serial.execute(command, timeout, true); }
+  async runAgentCommand(command, timeout = 60000) {
+    this.requireReady();
+    const source=String(command||'');
+    if(!source.trim())throw new Error('A terminal command is required.');
+    if(source.includes('\0'))throw new Error('Terminal commands cannot contain null bytes.');
+    if(source.length>24000)throw new Error('Terminal command is too long.');
+    const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/aeris-agent-${id}.sh`,encoded=base64(source);
+    const wrapper=`( printf %s ${quote(encoded)} | base64 -d > ${quote(script)} && chown aeris:aeris ${quote(script)} && chmod 700 ${quote(script)} && su aeris -s /bin/ash -c ${quote(`cd /home/aeris && /bin/ash ${script}`)}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;
+    return this.execInteractive(wrapper,timeout);
+  }
   async execChecked(command, timeout) { const result=await this.exec(command,timeout);if(result.code!==0)throw new Error(result.output||`Linux command failed (${result.code})`);return result; }
   terminalPorts(){return this.machine.terminalPorts()}
   terminalReplay(port){return this.machine.terminalReplay(port)}

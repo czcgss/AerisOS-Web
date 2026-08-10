@@ -6,10 +6,11 @@ const safeName = value => String(value || '').trim().replace(/[\r\n]/g, ' ');
 const toolResult = (message, details) => ({ content: [{ type: 'text', text: message }], details });
 
 export class SystemToolService {
-  constructor({ userdata, system, settings, weather, metrics, machine, dialog, registry, i18n }) {
-    Object.assign(this, { userdata, system, settings, weather, metrics, machine, dialog, registry, i18n });
+  constructor({ userdata, system, settings, weather, metrics, machine, registry, i18n }) {
+    Object.assign(this, { userdata, system, settings, weather, metrics, machine, registry, i18n });
     this.definitions = new Map();
     this.executions = new Map();
+    this.approvals = new Map();
     this.#registerBuiltins();
   }
 
@@ -25,6 +26,8 @@ export class SystemToolService {
     return {name:`aeris_${appId}`,appId,operation:'app_capability',label:`${this.i18n.t(app.title)} tool`,description:definitions.map(definition=>`${definition.operation}: ${definition.description}`).join('\n'),risk:definitions.some(definition=>definition.risk==='high')?'mixed':'safe'};
   }
   execution(id) { return this.executions.get(id) ? structuredClone(this.executions.get(id)) : null; }
+  pendingApproval() { const id=[...this.approvals.keys()].at(-1);return id?this.execution(id):null; }
+  resolveApproval(id, approved) { const pending=this.approvals.get(id);if(!pending)return false;this.approvals.delete(id);pending.resolve(!!approved);return true; }
   apps() {
     const grouped = new Map();
     for (const tool of this.definitions.values()) {
@@ -57,9 +60,9 @@ export class SystemToolService {
         signal?.addEventListener('abort',onAbort,{once:true});
         this.#setExecution(state); onUpdate?.(toolResult(`Preparing ${definition.label}…`, state));
         if (definition.risk === 'high') {
-          state.phase = 'approval'; this.#setExecution(state); onUpdate?.(toolResult('Waiting for user approval.', state));
-          const approved = await this.dialog.confirm({ title: this.i18n.t('approveAgentAction'), message: definition.approval(params), confirmLabel: this.i18n.t('approve'), danger: true });
-          if (!approved) { signal?.removeEventListener('abort',onAbort);state.phase = 'denied'; state.finishedAt = Date.now(); this.#setExecution(state); return toolResult('The user denied this system action.', state); }
+          state.phase = 'approval';state.approvalMessage=definition.approval(params); this.#setExecution(state); onUpdate?.(toolResult('Waiting for user approval.', state));
+          const approved = await this.#requestApproval(state,signal);
+          if (!approved) { signal?.removeEventListener('abort',onAbort);if(signal?.aborted){onAbort();throw new Error('System action cancelled.');}state.phase = 'denied'; state.finishedAt = Date.now(); this.#setExecution(state); return toolResult('The user denied this system action.', state); }
         }
         if (signal?.aborted) {signal.removeEventListener('abort',onAbort);onAbort();throw new Error('System action cancelled.');}
         try {
@@ -78,6 +81,16 @@ export class SystemToolService {
   #setExecution(state) {
     this.executions.set(state.toolCallId, structuredClone(state));
     this.kernel?.bus.emit('capability:execution', structuredClone(state));
+  }
+
+  #requestApproval(state, signal) {
+    return new Promise(resolve=>{
+      const finish=value=>{signal?.removeEventListener('abort',abort);if(this.approvals.get(state.toolCallId)?.resolve===finish)this.approvals.delete(state.toolCallId);resolve(value)};
+      const abort=()=>finish(false);
+      this.approvals.set(state.toolCallId,{resolve:finish});
+      signal?.addEventListener('abort',abort,{once:true});
+      if(signal?.aborted)abort();
+    });
   }
 
   #register(definition) {
@@ -121,7 +134,7 @@ export class SystemToolService {
     this.#register({ name:'disk_list_volumes',appId:'diskutility',operation:'list_volumes',label:'List mounted volumes',description:'List mounted Aeris Linux filesystems.',parameters:object({}),execute:async()=>({output:(await this.system.exec('df -kP',12000)).output}),success:result=>result.output });
 
     this.#register({ name:'settings_update',appId:'settings',operation:'update',label:'Change system setting',description:'Change an allowed Aeris setting: theme, accent, wallpaper, or locale.',parameters:object({key:Type.Union([Type.Literal('theme'),Type.Literal('accent'),Type.Literal('wallpaper'),Type.Literal('locale')]),value:Type.String()}),execute:async({key,value})=>{const allowed={theme:['light','dark'],wallpaper:['aurora','mist','sunset'],locale:['en','zh']};if(allowed[key]&&!allowed[key].includes(value))throw new Error(`Unsupported ${key} value.`);this.settings.set(key,value);return{key,value}},success:result=>`Changed ${result.key} to ${result.value}.` });
-    this.#register({ name:'terminal_run_command',appId:'terminal',operation:'run_command',risk:'high',label:'Run terminal command',description:'Run a command inside Aeris Linux. Always requires explicit user approval.',parameters:object({command:Type.String(),reason:optionalString('Why this command is required')}),approval:params=>`Allow Aeris AI to run this command?\n\n${params.command}${params.reason?`\n\nReason: ${params.reason}`:''}`,execute:async({command})=>{const result=await this.system.execInteractive(command,30000);return{exitCode:result.code,output:result.output.slice(0,12000)}},success:result=>`Command exited with status ${result.exitCode}.\n${result.output}` });
+    this.#register({ name:'terminal_run_command',appId:'terminal',operation:'run_command',risk:'high',label:'Run terminal command',description:'Run a non-interactive command as the aeris user inside /home/aeris. Always requires explicit user approval.',parameters:object({command:Type.String({description:'A finite, non-interactive shell command. Add command flags that disable prompts and bound continuous output.'}),reason:optionalString('Why this command is required')}),approval:params=>`Allow Aeris AI to run this command?\n\n${params.command}${params.reason?`\n\nReason: ${params.reason}`:''}`,execute:async({command})=>{const result=await this.system.runAgentCommand(command,60000);return{exitCode:result.code,output:result.output.slice(0,12000)}},success:result=>`Command exited with status ${result.exitCode}.\n${result.output}` });
     this.#register({ name:'machine_restart',appId:'machine',operation:'restart',risk:'high',label:'Restart virtual computer',description:'Restart the Aeris Linux virtual computer. Requires user approval.',parameters:object({reason:optionalString('Reason for restart')}),approval:params=>`Restart the Aeris Linux computer?${params.reason?`\n\n${params.reason}`:''}`,execute:async()=>{await this.machine.restart();return{restarted:true}},success:()=> 'The Aeris Linux computer is restarting.' });
     this.#register({ name:'trash_empty',appId:'trash',operation:'empty',risk:'high',label:'Empty Trash',description:'Permanently delete every item in Trash. Requires user approval.',parameters:object({}),approval:()=> 'Permanently delete every item in Trash? This cannot be undone.',execute:async()=>{await this.system.emptyTrash();return{emptied:true}},success:()=> 'Trash was emptied.' });
 
