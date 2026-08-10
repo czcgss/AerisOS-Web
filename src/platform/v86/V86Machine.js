@@ -358,7 +358,7 @@ export class V86Machine {
     bridge?.write(data)
   }
   terminalReplay(port){return this.terminals.get(Number(port))?.replay()||''}
-  terminalPorts(){return[1,2,3]}
+  terminalPorts(){return[1,2,3].sort((a,b)=>Number(this.terminalResets.has(a))-Number(this.terminalResets.has(b)))}
   resizeTerminal(port,columns,rows){
     const tty=Number(port),cols=Math.max(20,Math.min(400,Number(columns)||80)),lines=Math.max(5,Math.min(200,Number(rows)||24));
     if(!this.serial||!this.guestReady)return Promise.resolve();
@@ -369,8 +369,9 @@ export class V86Machine {
     if(this.terminalResets.has(tty))return this.terminalResets.get(tty);
     bridge?.suspend();
     if(!this.serial||!this.guestReady){bridge?.resume();return Promise.resolve()}
-    const task=this.serial.execute(`for terminal_pid in $(ps -eo pid,tty 2>/dev/null | awk '$2=="ttyS${tty}" {print $1}'); do kill -HUP "$terminal_pid" 2>/dev/null || true; done`,5000,true)
-      .catch(()=>{}).then(()=>new Promise(resolve=>setTimeout(resolve,250))).finally(()=>{bridge?.resume();if(this.terminalResets.get(tty)===task)this.terminalResets.delete(tty)});
+    const command=`terminal_device=/dev/ttyS${tty}; for terminal_fd in /proc/[0-9]*/fd/0; do [ "$(readlink "$terminal_fd" 2>/dev/null)" = "$terminal_device" ] || continue; terminal_pid=$(printf %s "$terminal_fd" | cut -d/ -f3); kill -KILL "$terminal_pid" 2>/dev/null || true; done; terminal_ready=; for terminal_attempt in $(seq 1 40); do for terminal_fd in /proc/[0-9]*/fd/0; do [ "$(readlink "$terminal_fd" 2>/dev/null)" = "$terminal_device" ] || continue; terminal_pid=$(printf %s "$terminal_fd" | cut -d/ -f3); if [ "$(readlink "/proc/$terminal_pid/cwd" 2>/dev/null)" = /home/aeris ]; then terminal_ready=1; break; fi; done; [ "$terminal_ready" = 1 ] && break; sleep 0.1; done; [ "$terminal_ready" = 1 ]`;
+    const task=this.serial.execute(command,10000,true)
+      .catch(()=>{}).finally(()=>{bridge?.resume();if(this.terminalResets.get(tty)===task)this.terminalResets.delete(tty)});
     this.terminalResets.set(tty,task);
     return task;
   }
