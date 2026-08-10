@@ -32,12 +32,12 @@ export class GuestSystemService {
     if(source.length>24000)throw new Error('Terminal command is too long.');
     const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),prefix=`/tmp/aeris-agent-${id}`,script=`${prefix}.sh`,output=`${prefix}.out`,status=`${prefix}.status`,pid=`${prefix}.pid`,encoded=base64(source);
     const child=`cd /home/aeris && /bin/ash ${script} > ${output} 2>&1; printf %s "$?" > ${status}`;
-    // Keep the control channel free while the command runs. The separate
-    // process group lets an AbortSignal terminate the actual guest task.
+    // OpenRC start-stop-daemon detaches without leaving an asynchronous ash
+    // job attached to the control UART. It also changes uid/gid before exec.
     const prepare=`printf %s ${quote(encoded)} | base64 -d > ${quote(script)} && chown aeris:aeris ${quote(script)} && chmod 700 ${quote(script)}`;
-    const launch=`if ${prepare}; then setsid su -s /bin/ash -c ${quote(child)} aeris </dev/null & printf %s "$!" > ${quote(pid)}; else exit 1; fi`;
+    const launch=`${prepare} && start-stop-daemon -S -b -m -p ${quote(pid)} -c aeris:aeris -x /bin/ash -- -c ${quote(child)}`;
     const cleanup=async({terminate=false}={})=>{
-      const stop=terminate?`agent_pid=$(cat ${quote(pid)} 2>/dev/null); [ -z "$agent_pid" ] || { kill -TERM "-$agent_pid" 2>/dev/null || kill -TERM "$agent_pid" 2>/dev/null || true; }`:'true';
+      const stop=terminate?`[ ! -s ${quote(pid)} ] || start-stop-daemon -K -p ${quote(pid)} -s TERM -o 2>/dev/null || true`:'true';
       await this.execInteractive(`${stop}; rm -f ${quote(script)} ${quote(output)} ${quote(status)} ${quote(pid)}`,6000).catch(()=>{});
     };
     if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
