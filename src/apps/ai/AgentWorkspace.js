@@ -6,6 +6,19 @@ const esc = value => String(value ?? '')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
+const terminalText = value => String(value ?? '')
+  .replace(new RegExp('\\u001b\\][^\\u0007]*(?:\\u0007|\\u001b\\\\)', 'g'), '')
+  .replace(new RegExp('\\u001b\\[[0-?]*[ -/]*[@-~]', 'g'), '')
+  .replace(/\r\n?/g, '\n')
+  .split('')
+  .filter(character => {
+    const code = character.charCodeAt(0);
+    return code === 9 || code === 10 || code >= 32;
+  })
+  .join('')
+  .replace(/\n{4,}/g, '\n\n\n')
+  .trimEnd();
+
 const messageText = message => typeof message?.content === 'string'
   ? message.content
   : (message?.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
@@ -143,9 +156,21 @@ const weatherSurface = (activity, i18n) => {
   return `<div class="agent-weather-surface"><span>${icon('sun', 58)}</span><h3>${esc(location)}</h3><strong>${esc(temperature)}${temperature === '—' ? '' : '°'}</strong><p>${i18n.t('weatherUpdated')} ${new Intl.DateTimeFormat(i18n.t('dateFormat'), { hour: '2-digit', minute: '2-digit' }).format(new Date())}</p></div>`;
 };
 
-const terminalSurface = activity => {
+const terminalSurface = (activity, i18n) => {
   const result = activity.result || {};
-  return `<div class="agent-terminal-surface"><header><i></i><i></i><i></i><span>Terminal</span></header><pre data-copyable><b>❯</b> ${esc(activity.params.command || '')}\n${esc(result.output || activity.output || '')}</pre></div>`;
+  const command = terminalText(activity.params.command || '');
+  const output = terminalText(typeof result === 'object' ? (result.output || activity.output) : (result || activity.output));
+  const exitCode = typeof result === 'object' ? (result.exitCode ?? result.code) : undefined;
+  const finished = ['completed', 'failed', 'denied', 'cancelled'].includes(activity.phase);
+  const failed = activity.phase === 'failed' || (Number.isInteger(exitCode) && exitCode !== 0);
+  return `<div class="agent-terminal-surface">
+    <header><span class="agent-terminal-lights"><i></i><i></i><i></i></span><strong>Terminal</strong><small class="phase-${esc(activity.phase)}">${esc(phaseCopy(activity, i18n))}</small></header>
+    <div class="agent-terminal-session" data-copyable>
+      <div class="agent-terminal-command"><b>❯</b><code>${esc(command)}</code></div>
+      ${output ? `<pre>${esc(output)}</pre>` : `<div class="agent-terminal-empty ${finished ? '' : 'is-running'}">${finished ? '—' : '<i></i><i></i><i></i>'}</div>`}
+    </div>
+    <footer><span>ash</span><span>UTF-8</span>${Number.isInteger(exitCode) ? `<strong class="${failed ? 'is-error' : ''}">exit ${exitCode}</strong>` : ''}</footer>
+  </div>`;
 };
 
 const calculatorSurface = activity => {
