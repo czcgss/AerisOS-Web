@@ -30,7 +30,17 @@ export class WindowManager {
     return record;
   }
 
-  close(id) { const record = this.windows.get(id); if (!record) return; record.cleanup?.(); record.element.remove(); this.windows.delete(id); this.context.kernel.bus.emit('window:closed',{ id, appId: record.app.id }); this.#persistSession(); }
+  close(id) {
+    const record=this.windows.get(id);if(!record)return;
+    const wasFocused=record.element.classList.contains('focused');
+    let cleanup;
+    try{cleanup=record.cleanup?.()}catch(error){this.context.kernel.bus.emit('app:cleanup-error',{appId:record.app.id,error})}
+    record.cleanup=null;record.element.remove();this.windows.delete(id);
+    const remaining=this.isOpen(record.app.id);
+    this.context.kernel.bus.emit('window:closed',{id,appId:record.app.id,remaining});this.#persistSession();
+    if(wasFocused){const next=[...this.windows.values()].filter(item=>!item.element.hidden).sort((a,b)=>(Number(b.element.style.zIndex)||0)-(Number(a.element.style.zIndex)||0))[0];next?this.focus(next.id):this.context.kernel.bus.emit('window:focused',null)}
+    Promise.resolve(cleanup).catch(error=>this.context.kernel.bus.emit('app:cleanup-error',{appId:record.app.id,error}));
+  }
   isOpen(appId) { return [...this.windows.values()].some(record => record.app.id === appId); }
   closeApp(appId) { [...this.windows.values()].filter(record => record.app.id === appId).forEach(record => this.close(record.id)); }
   minimize(id) { const record = this.windows.get(id); if (record) { record.element.hidden=true;this.#persistSession(); } }
