@@ -27,7 +27,7 @@ export class GuestSystemService {
     const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/aeris-agent-${id}.sh`,encoded=base64(source),seconds=Math.max(1,Math.ceil(timeout/1000));
     const prepare=`printf %s ${quote(encoded)} | base64 -d > ${quote(script)}`;
     if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
-    // Agent commands use a reserved real login terminal (ttyS3), not the
+    // Agent commands use a reserved real login terminal (ttyS2), not the
     // root service channel (ttyS0). This matches Terminal app shell semantics.
     const run=`cd /home/aeris && timeout -s TERM ${seconds} /bin/ash ${quote(script)}`;
     const wrapper=`( ${prepare} && ${run}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;

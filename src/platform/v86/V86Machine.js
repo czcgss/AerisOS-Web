@@ -358,9 +358,9 @@ export class V86Machine {
     bridge?.write(data)
   }
   terminalReplay(port){return this.terminals.get(Number(port))?.replay()||''}
-  terminalPorts(){return[1,2].sort((a,b)=>Number(this.terminalResets.has(a))-Number(this.terminalResets.has(b)))}
+  terminalPorts(){return[1].sort((a,b)=>Number(this.terminalResets.has(a))-Number(this.terminalResets.has(b)))}
   executeAgentTerminal(command,timeout,signal){
-    const terminal=this.terminals.get(3);
+    const terminal=this.terminals.get(2);
     if(!terminal)return Promise.reject(new Error('The Aeris agent terminal is not available.'));
     return terminal.execute(command,timeout,signal);
   }
