@@ -64,7 +64,7 @@ export default{
       if(!port){shell.toast(i18n.t('terminalSessionLimit'));return}
       const id=nextId++,pane=document.createElement('section');
       pane.className='terminal-native-pane';pane.dataset.terminalPane=id;host.appendChild(pane);
-      const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:'"Ubuntu Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:80,theme});
+      const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:'"Ubuntu Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:0,theme});
       const fit=new FitAddon();terminal.loadAddon(fit);terminal.open(pane);
       const session={id,port,pane,terminal,fit,disposables:[]};sessions.push(session);
       session.disposables.push(terminal.onData(data=>system.writeTerminal(data,port)));

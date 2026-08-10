@@ -7,6 +7,8 @@ export class TerminalBridge {
     this.encoder = new TextEncoder();
     this.buffer = '';
     this.suspended = false;
+    this.pending = '';
+    this.flushTimer = 0;
   }
 
   attach(emulator) {
@@ -14,8 +16,8 @@ export class TerminalBridge {
       if(this.suspended)return;
       const data=this.decoder.decode(Uint8Array.of(byte),{stream:true});
       if(!data)return;
-      this.buffer=(this.buffer+data).slice(-131072);
-      this.bus.emit('terminal:data',{port:this.port,data});
+      this.pending+=data;
+      if(!this.flushTimer)this.flushTimer=setTimeout(()=>this.flush(),8);
     });
   }
 
@@ -25,8 +27,10 @@ export class TerminalBridge {
     this.bus.emit('terminal:activity',{port:this.port});
   }
 
-  replay(){return this.buffer}
+  replay(){this.drain(false);return this.buffer}
   clear(){this.buffer=''}
-  suspend(){this.suspended=true;this.clear()}
+  drain(emit=true){clearTimeout(this.flushTimer);this.flushTimer=0;const data=this.pending;this.pending='';if(!data||this.suspended)return;this.buffer=(this.buffer+data).slice(-131072);if(emit)this.bus.emit('terminal:data',{port:this.port,data})}
+  flush(){this.drain(true)}
+  suspend(){this.suspended=true;clearTimeout(this.flushTimer);this.flushTimer=0;this.pending='';this.clear()}
   resume(){this.clear();this.suspended=false}
 }
