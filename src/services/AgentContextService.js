@@ -12,12 +12,14 @@ const normalizeResource = resource => resource && typeof resource === 'object' ?
 } : null;
 
 export class AgentContextService {
-  constructor(registry = null, i18n = null) { this.current = null; this.registry = registry; this.i18n = i18n; }
+  constructor(registry = null, i18n = null) { this.current = null; this.focusedWindow = null; this.registry = registry; this.i18n = i18n; }
   start() {
-    this.offFocus = this.kernel.bus.on('window:focused', appId => {
-      if (!appId || appId === 'ai' || this.current?.appId === appId) return;
-      const app = this.registry?.get(appId), name = app ? this.i18n?.t(app.title) || app.title : appId;
-      this.set({ appId, label: name, resource: { kind: 'application', id: appId, uri: `aeris://apps/${appId}`, name } });
+    this.offFocus = this.kernel.bus.on('window:context-focused', window => {
+      if (!window) { this.focusedWindow = null; return; }
+      if (window.appId === 'ai') return;
+      this.focusedWindow = structuredClone(window);
+      if (this.current?.appId === window.appId) this.set({ ...this.current, windowId: window.id });
+      else this.focusWindow(window);
     });
     this.offClose = this.kernel.bus.on('window:closed', ({appId,remaining}) => { if(!remaining)this.clear(appId) });
     this.kernel.bus.emit('agent:context-changed', this.snapshot());
@@ -28,6 +30,7 @@ export class AgentContextService {
   set(value = {}) {
     const next = {
       appId: clean(value.appId),
+      windowId: clean(value.windowId || (this.focusedWindow?.appId === value.appId ? this.focusedWindow.id : '')),
       label: clean(value.label),
       resource: normalizeResource(value.resource),
       selection: value.selection ? {
@@ -42,6 +45,18 @@ export class AgentContextService {
     this.current = next;
     this.kernel.bus.emit('agent:context-changed', this.snapshot());
     return this.snapshot();
+  }
+
+  focusWindow(window) {
+    if (!window || window.appId === 'ai') return this.focusDesktop();
+    const app = this.registry?.get(window.appId), name = window.title || (app ? this.i18n?.t(app.title) || app.title : window.appId);
+    this.focusedWindow = structuredClone(window);
+    return this.set({ appId: window.appId, windowId: window.id, label: name, resource: { kind: 'application-window', id: window.id, uri: `aeris://windows/${window.id}`, name, path: window.path, metadata: { appId: window.appId, windowId: window.id, minimized: !!window.minimized } } });
+  }
+
+  focusDesktop() {
+    const name = this.i18n?.t('desktop') || 'Desktop';
+    return this.set({ appId: '', windowId: '', label: name, resource: { kind: 'desktop', id: 'desktop', uri: 'aeris://desktop', name } });
   }
 
   clear(appId = '') {
