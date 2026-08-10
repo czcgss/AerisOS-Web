@@ -27,13 +27,12 @@ export class GuestSystemService {
     const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/aeris-agent-${id}.sh`,encoded=base64(source),seconds=Math.max(1,Math.ceil(timeout/1000));
     const prepare=`printf %s ${quote(encoded)} | base64 -d > ${quote(script)}`;
     if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
-    // Use the same foreground control shell as the rest of Aeris services.
-    // Adding su/background process layers prevents the UART command frame from
-    // completing on this v86 guest, even when the requested command is finite.
+    // Agent commands use a reserved real login terminal (ttyS3), not the
+    // root service channel (ttyS0). This matches Terminal app shell semantics.
     const run=`cd /home/aeris && timeout -s TERM ${seconds} /bin/ash ${quote(script)}`;
     const wrapper=`( ${prepare} && ${run}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;
     try{
-      const result=await this.execInteractive(wrapper,timeout+7000);
+      const result=await this.machine.executeAgentTerminal(wrapper,timeout+7000,signal);
       if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
       return result;
     }catch(error){
