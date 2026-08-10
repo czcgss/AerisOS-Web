@@ -25,12 +25,12 @@ export class GuestSystemService {
     if(source.includes('\0'))throw new Error('Terminal commands cannot contain null bytes.');
     if(source.length>24000)throw new Error('Terminal command is too long.');
     const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/aeris-agent-${id}.sh`,encoded=base64(source),seconds=Math.max(1,Math.ceil(timeout/1000));
-    const prepare=`printf %s ${quote(encoded)} | base64 -d > ${quote(script)} && chown aeris:aeris ${quote(script)} && chmod 700 ${quote(script)}`;
+    const prepare=`printf %s ${quote(encoded)} | base64 -d > ${quote(script)}`;
     if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
-    // A finite foreground command is the only reliable contract on the v86
-    // control UART. BusyBox timeout bounds it; su receives every option before
-    // USER, then the control shell continues and emits its normal end marker.
-    const run=`timeout -s TERM ${seconds} su -s /bin/ash -c ${quote(`cd /home/aeris && /bin/ash ${script}`)} aeris`;
+    // Use the same foreground control shell as the rest of Aeris services.
+    // Adding su/background process layers prevents the UART command frame from
+    // completing on this v86 guest, even when the requested command is finite.
+    const run=`cd /home/aeris && timeout -s TERM ${seconds} /bin/ash ${quote(script)}`;
     const wrapper=`( ${prepare} && ${run}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;
     try{
       const result=await this.execInteractive(wrapper,timeout+7000);
