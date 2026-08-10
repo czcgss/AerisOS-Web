@@ -1,5 +1,5 @@
 export default {
-  _name: 'English', system: 'Aeris', applications: 'Applications', search: 'Search applications, files and commands',
+  _name: 'English', deny: 'Deny', system: 'Aeris', applications: 'Applications', search: 'Search applications, files and commands',
   files: 'Files', terminal: 'Terminal', settings: 'Settings', machine: 'Computer', monitor: 'System Monitor', notes: 'Notes',
   desktop: 'Desktop', documents: 'Documents', downloads: 'Downloads', pictures: 'Pictures', home: 'Home', shared: 'Shared', locations: 'Locations',
   name: 'Name', type: 'Type', size: 'Size', modified: 'Modified', status: 'Status', pid: 'PID', cpu: 'CPU', memory: 'Memory',

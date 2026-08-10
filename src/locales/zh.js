@@ -1,5 +1,5 @@
 export default {
-  _name: '简体中文', system: 'Aeris', applications: '应用程序', search: '搜索应用、文件和命令',
+  _name: '简体中文', deny: '拒绝', system: 'Aeris', applications: '应用程序', search: '搜索应用、文件和命令',
   files: '文件', terminal: '终端', settings: '设置', machine: '计算机', monitor: '系统监视器', notes: '备忘录',
   desktop: '桌面', documents: '文稿', downloads: '下载', pictures: '图片', home: '主目录', shared: '共享空间', locations: '位置',
   name: '名称', type: '类型', size: '大小', modified: '修改时间', status: '状态', pid: 'PID', cpu: 'CPU', memory: '内存',

@@ -9,12 +9,11 @@ export class AgentTaskService {
 
   start() {
     try {
-      this.tasks = JSON.parse(this.storage?.getItem(STORAGE_KEY) || '[]').slice(0, MAX_TASKS).map(task => task.status === 'running' ? {
-        ...task,
-        status: 'cancelled',
-        finishedAt: task.finishedAt || Date.now(),
-        steps: (task.steps || []).map(step => ['running','approval'].includes(step.phase) ? { ...step, phase: 'cancelled', finishedAt: Date.now() } : step),
-      } : task);
+      this.tasks = JSON.parse(this.storage?.getItem(STORAGE_KEY) || '[]').slice(0, MAX_TASKS).map(task => {
+        const status=task.status==='running'?'cancelled':task.status,finishedAt=task.finishedAt||(status!=='running'?Date.now():null);
+        const phase=status==='cancelled'?'cancelled':status==='failed'?'failed':status==='completed'?'completed':null;
+        return{...task,status,finishedAt,steps:(task.steps||[]).map(step=>phase&&['running','approval'].includes(step.phase)?{...step,phase,finishedAt}:step)};
+      });
     } catch { this.tasks = []; }
     this.offExecution = this.kernel.bus.on('capability:execution', detail => this.#execution(detail));
     this.#save();
@@ -35,16 +34,28 @@ export class AgentTaskService {
   finish(turnId, status = 'completed', error = '') {
     const task = this.tasks.find(item => item.turnId === turnId);
     if (!task) return;
-    task.status = status;
+    const effectiveStatus=status==='completed'&&task.steps?.some(step=>step.phase==='failed')?'failed':status;
+    task.status = effectiveStatus;
     task.error = String(error || '');
     task.updatedAt = Date.now();
     task.finishedAt = Date.now();
+    const finalPhase=effectiveStatus==='cancelled'?'cancelled':effectiveStatus==='failed'?'failed':'completed';
+    task.steps=(task.steps||[]).map(step=>['running','approval'].includes(step.phase)?{...step,phase:finalPhase,finishedAt:task.finishedAt,error:step.error||task.error}:step);
     this.#save();
+  }
+
+  dismiss(taskId) {
+    const task=this.tasks.find(item=>item.id===taskId);
+    if(!task||task.status==='running')return false;
+    task.dismissed=true;
+    task.updatedAt=Date.now();
+    this.#save();
+    return true;
   }
 
   #execution(detail) {
     if (!detail?.toolCallId) return;
-    const task = this.tasks.find(item => item.status === 'running');
+    const task = this.tasks.find(item=>item.steps?.some(step=>step.toolCallId===detail.toolCallId)) || this.tasks.find(item => item.status === 'running');
     if (!task) return;
     let step = task.steps.find(item => item.toolCallId === detail.toolCallId);
     if (!step) {

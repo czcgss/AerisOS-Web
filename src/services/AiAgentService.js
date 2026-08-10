@@ -8,10 +8,12 @@ export const AI_PREVIOUS_STATE_PATH = `${AI_DATA_DIRECTORY}/state.previous.json`
 export const AI_RECOVERY_KEY = 'aeris.ai.recovery.v1';
 
 const PROVIDER_ID = 'aeris-openai-compatible';
+const LEGACY_DEFAULT_MODEL = 'gpt-4o-mini';
 const defaultConfig = () => ({
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
-  model: 'gpt-4o-mini',
+  model: LEGACY_DEFAULT_MODEL,
+  recentModels: [],
   systemPrompt: 'You are the Aeris system assistant. Be concise, helpful, and transparent. Reply in the language used by the user.',
   disabledToolApps: [],
 });
@@ -117,7 +119,8 @@ export class AiAgentService {
     };
   }
 
-  config() { return { ...this.state.config, disabledToolApps: [...(this.state.config.disabledToolApps||[])] }; }
+  config() { return { ...this.state.config, disabledToolApps: [...(this.state.config.disabledToolApps||[])], recentModels: [...(this.state.config.recentModels||[])] }; }
+  modelOptions() { return [...new Set([this.state.config.model,...(this.state.config.recentModels||[])].map(value=>String(value||'').trim()).filter(Boolean))]; }
 
   toolApps() {
     const disabled=new Set(this.state.config.disabledToolApps||[]);
@@ -139,11 +142,13 @@ export class AiAgentService {
 
   async updateConfig(changes) {
     const previous = this.state.config;
+    const model=String(changes.model ?? previous.model).trim();
     this.state.config = {
       ...previous,
       ...changes,
       baseUrl: String(changes.baseUrl ?? previous.baseUrl).trim().replace(/\/+$/, ''),
-      model: String(changes.model ?? previous.model).trim(),
+      model,
+      recentModels: [...new Set([model,...(previous.recentModels||[])])].filter(Boolean).slice(0,8),
       apiKey: String(changes.apiKey ?? previous.apiKey).trim(),
       systemPrompt: String(changes.systemPrompt ?? previous.systemPrompt).trim() || defaultConfig().systemPrompt,
     };
@@ -408,6 +413,11 @@ export class AiAgentService {
   #normalise(saved) {
     const config = { ...defaultConfig(), ...(saved?.config || {}) };
     config.disabledToolApps=Array.isArray(config.disabledToolApps)?[...new Set(config.disabledToolApps.map(String))]:[];
+    config.model=String(config.model||'').trim();
+    const recentModels=(Array.isArray(config.recentModels)?config.recentModels:[])
+      .map(model=>String(model||'').trim())
+      .filter(model=>model&&!(model===LEGACY_DEFAULT_MODEL&&config.model!==LEGACY_DEFAULT_MODEL));
+    config.recentModels=[...new Set([config.model,...recentModels].filter(Boolean))].slice(0,8);
     const sessions = Array.isArray(saved?.sessions) ? saved.sessions.filter(item => item?.id).map(item => ({
       id: String(item.id),
       title: String(item.title || 'New chat'),

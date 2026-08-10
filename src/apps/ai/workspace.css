@@ -343,14 +343,97 @@
 .agent-weather-surface strong { margin: 4px 0; font-size: 57px; font-weight: 250; letter-spacing: -.06em; }
 .agent-weather-surface p { margin: 0; opacity: .78; font-size: 9px; }
 
-.agent-terminal-surface { min-height: 100%; background: #1d2230; color: #dce5ee; }
-.agent-terminal-surface>header { display: flex; align-items: center; gap: 6px; height: 31px; padding: 0 10px; background: #292f3e; }
-.agent-terminal-surface>header i { width: 7px; height: 7px; border-radius: 50%; background: #ed6a5f; }
-.agent-terminal-surface>header i:nth-child(2) { background: #f2bd4c; }
-.agent-terminal-surface>header i:nth-child(3) { background: #61c454; }
-.agent-terminal-surface>header span { margin-left: auto; margin-right: auto; color: #9199a9; font-size: 8px; }
-.agent-terminal-surface pre { margin: 0; padding: 17px; overflow: auto; background: transparent; color: #dce5ee; font: 11px/1.65 'Ubuntu Mono', ui-monospace, monospace; white-space: pre-wrap; user-select: text; }
-.agent-terminal-surface pre b { color: #72d5a5; }
+.agent-terminal-surface {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  background: #171b26;
+  color: #dce5ee;
+  font-family: 'Ubuntu Mono', ui-monospace, monospace;
+  font-variant-ligatures: none;
+}
+
+.agent-terminal-surface>header {
+  position: relative;
+  display: grid;
+  height: 35px;
+  flex: 0 0 35px;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, .05);
+  background: #272d3b;
+}
+
+.agent-terminal-lights { display: flex; align-items: center; gap: 6px; }
+.agent-terminal-lights i { width: 7px; height: 7px; border-radius: 50%; background: #ed6a5f; }
+.agent-terminal-lights i:nth-child(2) { background: #f2bd4c; }
+.agent-terminal-lights i:nth-child(3) { background: #61c454; }
+.agent-terminal-surface>header strong { color: #aeb6c5; font: 600 9px/1 system-ui, sans-serif; }
+.agent-terminal-surface>header small { justify-self: end; color: #8d96a8; font: 700 7px/1 system-ui, sans-serif; letter-spacing: .025em; }
+.agent-terminal-surface>header small.phase-completed { color: #72d5a5; }
+.agent-terminal-surface>header small.phase-failed,
+.agent-terminal-surface>header small.phase-denied,
+.agent-terminal-surface>header small.phase-cancelled { color: #ef8a88; }
+
+.agent-terminal-session {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 16px 17px 22px;
+  scrollbar-color: #465064 transparent;
+  tab-size: 4;
+  user-select: text;
+}
+
+.agent-terminal-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #f0f4f8;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.agent-terminal-command b { flex: 0 0 auto; color: #72d5a5; font-weight: 800; }
+.agent-terminal-command code { overflow-wrap: anywhere; color: inherit; font: inherit; white-space: pre-wrap; }
+.agent-terminal-session pre {
+  width: max-content;
+  min-width: 100%;
+  margin: 9px 0 0;
+  background: transparent;
+  color: #c5cfda;
+  font: 11px/1.55 'Ubuntu Mono', ui-monospace, monospace;
+  white-space: pre;
+}
+
+.agent-terminal-empty { margin: 10px 0 0 17px; color: #697386; font-size: 10px; }
+.agent-terminal-empty.is-running { display: flex; gap: 4px; padding-top: 3px; }
+.agent-terminal-empty.is-running i { width: 4px; height: 4px; border-radius: 50%; background: #718096; animation: agentTerminalPulse 1.2s ease-in-out infinite; }
+.agent-terminal-empty.is-running i:nth-child(2) { animation-delay: .15s; }
+.agent-terminal-empty.is-running i:nth-child(3) { animation-delay: .3s; }
+
+.agent-terminal-surface>footer {
+  display: flex;
+  height: 23px;
+  flex: 0 0 23px;
+  align-items: center;
+  gap: 11px;
+  padding: 0 11px;
+  border-top: 1px solid rgba(255, 255, 255, .055);
+  background: #202633;
+  color: #747f91;
+  font-size: 7px;
+  letter-spacing: .04em;
+}
+
+.agent-terminal-surface>footer strong { margin-left: auto; color: #72d5a5; font-weight: 700; }
+.agent-terminal-surface>footer strong.is-error { color: #ef8a88; }
+
+@keyframes agentTerminalPulse {
+  0%, 70%, 100% { opacity: .35; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-2px); }
+}
 
 .agent-calculator-surface { display: flex; min-height: 100%; align-items: flex-end; padding: 25px; flex-direction: column; background: linear-gradient(145deg, #313847, #252a36); color: #fff; }
 .agent-calculator-surface small { margin-top: 42px; color: #9ca7b8; font-size: 12px; }
