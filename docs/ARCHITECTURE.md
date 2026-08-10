@@ -59,11 +59,11 @@ The window manager is the source of truth for application running state. Dock in
 
 ## Guest command transport
 
-The Alpine compatibility runtime uses `tty2` as the interactive `aeris` console shown by Computer and Terminal. System requests are serialized by the platform bridge, wrapped in unique begin/end markers and paired with a real Linux exit status. The Terminal application pauses screen synchronization while a framed system request is active and preserves its previous rendered output until the user runs another command.
+The Alpine runtime separates system control from user terminals. `ttyS0` is a dedicated framed control plane: system requests are serialized by the platform bridge, wrapped in unique begin/end markers and paired with a real Linux exit status. Files, Agent tools, processes and metrics use this channel and therefore cannot consume or corrupt an interactive terminal stream.
 
-This compatibility transport was selected because the bundled Alpine kernel does not reliably retain a 16550A root session across v86 snapshot restoration. The platform boundary remains isolated in `src/platform/v86`, so a future virtio-console or guest daemon transport can replace it without changing applications. Files, processes, terminal commands and system metrics continue to come from the real Linux guest rather than browser-side fixtures.
+`ttyS1`, `ttyS2` and `ttyS3` are independent interactive Linux TTYs. BusyBox `getty` gives each device its own login shell and controlling terminal. The browser connects these UART byte streams to xterm.js, which implements VT/ANSI rendering, keyboard escape sequences, cursor movement, scrollback and selection. Terminal resize events update the guest TTY dimensions through `stty`, allowing full-screen applications to receive the correct geometry.
 
-Terminal presents the `tty2` user session as a conventional inline shell: the final Linux prompt is separated from the 80×25 VGA text grid and paired with the active input caret. Enter, Ctrl+C, Ctrl+L and command history are handled by the Terminal application and forwarded to the Linux shell.
+Terminal tabs map directly to these three emulated serial devices. Commands, shell history, completion, signals and full-screen behavior are handled by Linux rather than reimplemented in the Aeris UI. Closing a terminal session sends a hangup to its TTY process group so `init` can start a clean shell for the next session.
 
 ## Filesystem
 
