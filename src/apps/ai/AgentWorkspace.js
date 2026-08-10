@@ -26,7 +26,7 @@ export function collectToolActivities(session, tools, liveExecution = null) {
   if (!session) return [];
   const activities = new Map();
   const order = [];
-  const add = ({ id, name, args, resultMessage, turnId }) => {
+  const add = ({ id, name, args, resultMessage, turnId, turnStatus = 'running' }) => {
     if (!id) return;
     if (!activities.has(id)) order.push(id);
     const previous = activities.get(id) || {};
@@ -35,7 +35,12 @@ export function collectToolActivities(session, tools, liveExecution = null) {
     const execution = tools.execution(id) || {};
     const details = { ...persisted, ...execution };
     const output = resultMessage ? messageText(resultMessage) : previous.output || '';
-    const phase = details.phase || (resultMessage ? 'completed' : 'running');
+    let phase = details.phase || (resultMessage ? 'completed' : 'running');
+    if (['running','approval'].includes(phase)) {
+      if (resultMessage?.isError || turnStatus === 'failed') phase = 'failed';
+      else if (turnStatus === 'stopped') phase = 'cancelled';
+      else if (turnStatus === 'completed' && resultMessage) phase = 'completed';
+    }
     activities.set(id, {
       ...previous,
       id,
@@ -59,10 +64,10 @@ export function collectToolActivities(session, tools, liveExecution = null) {
     for (const response of turn.responses || []) {
       if (response.role === 'assistant') {
         for (const call of (response.content || []).filter?.(block => block.type === 'toolCall') || []) {
-          add({ id: call.id, name: results.get(call.id)?.toolName || call.name, args: call.arguments, resultMessage: results.get(call.id), turnId: turn.id });
+          add({ id: call.id, name: results.get(call.id)?.toolName || call.name, args: call.arguments, resultMessage: results.get(call.id), turnId: turn.id, turnStatus:turn.status });
         }
       } else if (response.role === 'toolResult' && !activities.has(response.toolCallId)) {
-        add({ id: response.toolCallId, name: response.toolName, resultMessage: response, turnId: turn.id });
+        add({ id: response.toolCallId, name: response.toolName, resultMessage: response, turnId: turn.id, turnStatus:turn.status });
       }
     }
     if (turn.id === session.activeTurnId && session.streamingMessage?.role === 'assistant') {
