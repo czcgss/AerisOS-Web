@@ -96,11 +96,11 @@ export function collectToolActivities(session, tools, liveExecution = null) {
   return order.map(id => activities.get(id)).filter(activity => activity.appId);
 }
 
-export const workspaceSignature = activity => {
+export const workspaceSignature = (activity, localeKey = '') => {
   const value=JSON.stringify({phase:activity?.phase,params:activity?.params,result:activity?.result,output:activity?.output});
   let hash=2166136261;
   for(let index=0;index<value.length;index++){hash^=value.charCodeAt(index);hash=Math.imul(hash,16777619)}
-  return`${activity?.id||''}:${(hash>>>0).toString(36)}`;
+  return`${activity?.id||''}:${(hash>>>0).toString(36)}:${localeKey}`;
 };
 
 const phaseCopy = (activity, i18n) => ({
@@ -196,13 +196,28 @@ const surfaceFor = (activity, i18n) => ({
   settings: settingsSurface,
 }[activity.appId]?.(activity, i18n) || genericSurface(activity, i18n));
 
-export function workspaceMarkup(activity, activities, tools, i18n, { animate = true } = {}) {
-  if (!activity) return '';
+export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '' } = {}) {
+  const resizeHandle = `<div class="ai-workspace-resize" data-ai-workspace-resize role="separator" aria-orientation="vertical" aria-label="${esc(i18n.t('resizeWorkspace'))}" tabindex="0"><i></i></div>`;
+  if (!activity) return `<aside class="ai-app-workspace ai-app-workspace-empty ${animate ? '' : 'ai-app-workspace-stable'}" data-ai-app-workspace data-workspace-tool-id="" data-workspace-signature="${esc(suppliedSignature || 'empty')}">
+    ${resizeHandle}
+    <header>
+      <span class="ai-workspace-brand">${icon('aerisAi', 20)}</span>
+      <div><strong>${esc(i18n.t('agentWorkspace'))}</strong><small>${esc(i18n.t('workspaceReady'))}</small></div>
+      <button data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}">${icon('close', 15)}</button>
+    </header>
+    <main class="ai-workspace-empty-state">
+      <span>${icon('panelRight', 27)}</span>
+      <strong>${esc(i18n.t('workspaceEmptyTitle'))}</strong>
+      <p>${esc(i18n.t('workspaceEmptyCopy'))}</p>
+    </main>
+    <footer><span>${icon('aerisAi', 14)} ${esc(i18n.t('agentWorkspace'))}</span></footer>
+  </aside>`;
   const app = tools.registry.get(activity.appId);
   if (!app) return '';
   const recent = activities.filter(item => item.turnId === activity.turnId).slice(-4);
-  const signature=workspaceSignature(activity);
+  const signature=suppliedSignature||workspaceSignature(activity);
   return `<aside class="ai-app-workspace ai-app-workspace-${esc(activity.phase)} ${animate?'':'ai-app-workspace-stable'}" data-ai-app-workspace data-workspace-tool-id="${esc(activity.id)}" data-workspace-signature="${esc(signature)}">
+    ${resizeHandle}
     <header>
       <span class="app-icon app-icon-${esc(app.color)}">${icon(app.icon, 21)}</span>
       <div><strong>${esc(i18n.t(app.title))}</strong><small><i></i>${esc(phaseCopy(activity, i18n))}</small></div>

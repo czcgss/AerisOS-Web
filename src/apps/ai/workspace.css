@@ -4,16 +4,16 @@
 }
 
 .ai-system-app.has-app-workspace {
-  grid-template-columns: 248px minmax(390px, 1fr) minmax(330px, 410px);
+  grid-template-columns: 248px minmax(340px, 1fr) var(--agent-workspace-width, 390px);
 }
 
 .ai-app-workspace {
   position: relative;
   z-index: 2;
-  display: grid;
+  display: flex;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 58px auto minmax(0, 1fr) 44px;
+  flex-direction: column;
   overflow: hidden;
   border-left: 1px solid color-mix(in srgb, var(--muted) 18%, transparent);
   background:
@@ -21,6 +21,43 @@
     color-mix(in srgb, var(--surface-2) 90%, #e8eff9);
   box-shadow: -12px 0 35px rgba(45, 55, 82, .07);
   animation: agentWorkspaceEnter .3s cubic-bezier(.2, .8, .2, 1);
+}
+
+.ai-workspace-resize {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ai-workspace-resize i {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 2px;
+  height: 38px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  opacity: 0;
+  transform: translateY(-50%) scaleY(.75);
+  transition: opacity .15s, transform .15s;
+}
+
+.ai-workspace-resize:hover i,
+.ai-workspace-resize:focus-visible i,
+.is-resizing-workspace .ai-workspace-resize i {
+  opacity: 1;
+  transform: translateY(-50%) scaleY(1);
+}
+
+.ai-system-app.is-resizing-workspace,
+.ai-system-app.is-resizing-workspace * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .ai-app-workspace>header {
@@ -31,6 +68,19 @@
   border-bottom: 1px solid color-mix(in srgb, var(--muted) 14%, transparent);
   background: color-mix(in srgb, var(--surface) 77%, transparent);
   backdrop-filter: blur(18px);
+  flex: 0 0 58px;
+}
+
+.ai-workspace-brand {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #7367e8, #5b9be8 48%, #db72ae);
+  box-shadow: 0 6px 16px rgba(89, 107, 211, .24), var(--inset);
+  color: #fff;
 }
 
 .ai-app-workspace>header>.app-icon {
@@ -162,7 +212,34 @@
   justify-content: center;
   padding: 18px;
   perspective: 1000px;
+  flex: 1;
 }
+
+.ai-app-workspace>main.ai-workspace-empty-state {
+  display: flex;
+  max-width: 280px;
+  margin: auto;
+  padding: 32px 24px;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.ai-workspace-empty-state>span {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 6px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface));
+  box-shadow: var(--small-shadow), var(--inset);
+  color: var(--accent);
+}
+
+.ai-workspace-empty-state>strong { color: var(--text); font-size: 13px; }
+.ai-workspace-empty-state>p { margin: 0; font-size: 10px; line-height: 1.55; }
 
 .agent-app-window {
   position: relative;
@@ -259,6 +336,13 @@
   border-top: 1px solid color-mix(in srgb, var(--muted) 12%, transparent);
   color: var(--muted);
   font-size: 9px;
+  flex: 0 0 44px;
+}
+
+.ai-toolbar>button.ai-workspace-toggle.selected {
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  box-shadow: var(--inset);
+  color: var(--accent);
 }
 
 .ai-app-workspace>footer>span,
@@ -471,21 +555,21 @@
 @keyframes agentWorkingBadge { 50% { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(41, 51, 78, .25); } }
 
 @media (max-width: 1160px) {
-  .ai-system-app.has-app-workspace { grid-template-columns: 210px minmax(350px, 1fr) minmax(310px, 370px); }
+  .ai-system-app.has-app-workspace { grid-template-columns: 210px minmax(330px, 1fr) var(--agent-workspace-width, 370px); }
 }
 
 @container agent-window (max-width: 1080px) {
-  .ai-system-app.has-app-workspace { grid-template-columns: 210px minmax(350px, 1fr) minmax(310px, 370px); }
+  .ai-system-app.has-app-workspace { grid-template-columns: 210px minmax(330px, 1fr) var(--agent-workspace-width, 370px); }
 }
 
 @container agent-window (max-width: 850px) {
   .ai-system-app.has-app-workspace { position: relative; grid-template-columns: 190px minmax(0, 1fr); }
-  .ai-app-workspace { position: absolute; top: 0; right: 0; bottom: 0; width: min(390px, calc(100% - 110px)); box-shadow: -20px 0 55px rgba(34, 42, 65, .25); }
+  .ai-app-workspace { position: absolute; top: 0; right: 0; bottom: 0; width: min(var(--agent-workspace-width, 390px), calc(100% - 110px)); box-shadow: -20px 0 55px rgba(34, 42, 65, .25); }
 }
 
 @media (max-width: 900px) {
   .ai-system-app.has-app-workspace { position: relative; grid-template-columns: 190px minmax(0, 1fr); }
-  .ai-app-workspace { position: absolute; top: 0; right: 0; bottom: 0; width: min(390px, calc(100% - 110px)); box-shadow: -20px 0 55px rgba(34, 42, 65, .25); }
+  .ai-app-workspace { position: absolute; top: 0; right: 0; bottom: 0; width: min(var(--agent-workspace-width, 390px), calc(100% - 110px)); box-shadow: -20px 0 55px rgba(34, 42, 65, .25); }
 }
 
 [data-reduce-motion="true"] .ai-app-workspace,
