@@ -1,3 +1,9 @@
+const encodeCommand = value => {
+  const bytes=new TextEncoder().encode(String(value));let binary='';
+  for(let offset=0;offset<bytes.length;offset+=32768)binary+=String.fromCharCode(...bytes.subarray(offset,offset+32768));
+  return btoa(binary);
+};
+
 export class SerialBridge {
   constructor(machine, bus) {
     this.machine = machine;
@@ -43,7 +49,9 @@ export class SerialBridge {
     this.bus.emit('system:command-start', { id });
     const begin = `__AERIS_BEGIN_${id}__`, end = `__AERIS_END_${id}__`;
     this.active.begin = begin; this.active.end = end;
-    await this.write(`export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/usr/sbin:/bin:/usr/bin; printf '\\n${begin}\\n'; ${command}; __aeris_status=$?; printf '\\n${end}:%s\\n' "$__aeris_status"\n`);
+    const guestSeconds=Math.max(1,Math.floor((timeout-350)/1000));
+    const body=this.transport==='serial'?`printf %s '${encodeCommand(command)}' | base64 -d | timeout -s KILL ${guestSeconds} /bin/ash`:command;
+    await this.write(`export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/usr/sbin:/bin:/usr/bin; printf '\\n${begin}\\n'; ${body}; __aeris_status=$?; printf '\\n${end}:%s\\n' "$__aeris_status"\n`);
     if(!this.active||this.active.id!==id)return;
     this.active.timer = setTimeout(() => this.#finish(new Error(`Guest command timed out: ${command}`)), timeout);
     if (this.transport !== 'serial') this.active.poll = setInterval(() => this.#inspect(this.machine.screenRows().join('\n')), 80);
@@ -77,7 +85,15 @@ export class SerialBridge {
     clearInterval(active.poll);
     this.active = null;
     if (error && this.transport === 'control-vga') await this.machine.interruptControlConsole().catch(()=>{});
-    if(error&&failedTransport==='serial')this.activateControl();
+    if(error&&failedTransport==='serial'){
+      // ttyS0 is the dedicated system shell. A missing frame usually means a
+      // partial or interrupted command, not that VGA is ready to replace it.
+      // Clear the current line and keep the next retry on the serial service;
+      // switching blindly to VGA leaves Files without a usable prompt.
+      await this.write('\u0003\n');
+      await new Promise(resolve=>setTimeout(resolve,140));
+      this.activateSerial();
+    }
     if (this.transport === 'control-vga') await this.machine.activateUserConsole();
     this.bus.emit('system:command-end', { id: active.id, error: error?.message || null });
     error ? active.reject(error) : active.resolve(result);
