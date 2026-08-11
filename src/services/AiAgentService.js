@@ -19,6 +19,9 @@ const defaultConfig = () => ({
 });
 const clone = value => structuredClone(value);
 const now = () => Date.now();
+const hasAssistantContent = message => message?.role === 'assistant' && (typeof message.content === 'string'
+  ? Boolean(message.content.trim())
+  : (message.content || []).some(block => block?.type === 'toolCall' || (block?.type === 'text' && String(block.text || '').trim())));
 const repairUtf8String = value => {
   if (typeof value !== 'string' || !value || [...value].some(character => character.charCodeAt(0) > 255)) return value;
   try {
@@ -45,8 +48,9 @@ export class AiAgentService {
     this.error = '';
     this.state = { version: 3, updatedAt: 0, config: defaultConfig(), sessions: [] };
     this.agents = new Map();
-    this.queuedMessages = new Map();
     this.activeTurns = new Map();
+    this.streamingAssistantMessages = new Map();
+    this.sessionRuns = new Map();
     this.settlingSessions = new Set();
     this.persistChain = Promise.resolve();
     this.guestSynced = false;
@@ -114,7 +118,7 @@ export class AiAgentService {
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
         messageCount: session.messages.length,
-        streaming: Boolean(this.agents.get(session.id)?.state.isStreaming && !this.settlingSessions.has(session.id)),
+        streaming: Boolean(this.agents.get(session.id)?.state.isStreaming),
       })).sort((a, b) => b.updatedAt - a.updatedAt),
     };
   }
@@ -154,7 +158,7 @@ export class AiAgentService {
     };
     this.agents.forEach(agent => agent.abort());
     this.agents.clear();
-    this.queuedMessages.clear();this.activeTurns.clear();this.settlingSessions.clear();
+    this.activeTurns.clear();this.streamingAssistantMessages.clear();this.sessionRuns.clear();this.settlingSessions.clear();
     await this.persist();
     this.#emit('ai:changed');
   }
@@ -179,8 +183,9 @@ export class AiAgentService {
   deleteSession(id) {
     this.agents.get(id)?.abort();
     this.agents.delete(id);
-    this.queuedMessages.delete(id);
     this.activeTurns.delete(id);
+    this.streamingAssistantMessages.delete(id);
+    this.sessionRuns.delete(id);
     this.settlingSessions.delete(id);
     this.state.sessions = this.state.sessions.filter(session => session.id !== id);
     this.persist();
@@ -195,52 +200,52 @@ export class AiAgentService {
       messages: agent ? clone(agent.state.messages) : clone(session.messages),
       activeTurnId: this.activeTurns.get(id) || null,
       streamingMessage: agent?.state.streamingMessage ? clone(agent.state.streamingMessage) : null,
-      streaming: Boolean(agent?.state.isStreaming && !this.settlingSessions.has(id)),
+      streaming: Boolean(agent?.state.isStreaming),
       error: agent?.state.errorMessage || '',
     };
   }
 
-  async send(id, text) {
+  send(id, text) {
+    const previous=this.sessionRuns.get(id)||Promise.resolve();let run;
+    run=previous.catch(()=>{}).then(()=>this.#sendTurn(id,text)).finally(()=>{if(this.sessionRuns.get(id)===run)this.sessionRuns.delete(id)});
+    this.sessionRuns.set(id,run);
+    return run;
+  }
+
+  async #sendTurn(id, text) {
     const prompt = String(text).trim();
     if (!prompt) return;
     if (!this.ready) throw new Error('The AI service is waiting for the Linux system.');
     if (!this.state.config.apiKey) throw new Error('Add an API key in AI settings first.');
     if (!this.state.config.baseUrl || !this.state.config.model) throw new Error('The AI provider configuration is incomplete.');
     const agent = this.#agent(id), session=this.#session(id);
-    if(this.settlingSessions.has(id))await agent.waitForIdle();
+    // A follow-up queued after Pi has performed its final queue poll but before
+    // isStreaming is cleared will never be consumed. Treat each visible user
+    // turn as a separate run and wait for the previous run to become truly idle.
+    if(agent.state.isStreaming||this.settlingSessions.has(id))await agent.waitForIdle();
     this.settlingSessions.delete(id);
+    // A turn cannot remain running without an active Pi run. This can happen
+    // after a provider failure, hot reload, or an interrupted older build.
+    for(const stale of session.turns.filter(item=>item.status==='running')){
+      stale.status='stopped';stale.error='';stale.updatedAt=now();this.agentTasks?.finish(stale.id,'cancelled');
+    }
+    this.activeTurns.delete(id);
     const timestamp=now(),context=this.agentContext?.snapshot()||null,contextBlock=this.agentContext?.promptBlock()||'';
     const visibleUserMessage={role:'user',content:prompt,timestamp},userMessage={...visibleUserMessage,content:contextBlock?`${prompt}\n\n${contextBlock}`:prompt};
-    const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:agent.state.isStreaming?'queued':'running',user:clone(visibleUserMessage),responses:[],messageIndex:null};
+    const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:'running',user:clone(visibleUserMessage),responses:[],messageIndex:null,error:''};
     const task=this.agentTasks?.begin({sessionId:id,turnId:turn.id,title:prompt,context});if(task)turn.taskId=task.id;
     session.turns.push(turn);session.updatedAt=userMessage.timestamp;
-    if (agent.state.isStreaming) {
-      this.queuedMessages.set(id,[...(this.queuedMessages.get(id)||[]),{turnId:turn.id,message:userMessage}]);
-      try { agent.followUp(userMessage); }
-      catch (error) {
-        this.agentTasks?.finish(turn.id,'failed',error?.message||String(error));
-        session.turns=session.turns.filter(item=>item.id!==turn.id);
-        const pending=(this.queuedMessages.get(id)||[]).filter(item=>item.turnId!==turn.id);
-        pending.length?this.queuedMessages.set(id,pending):this.queuedMessages.delete(id);
-        throw error;
-      }
-      this.#saveRecovery();
-      this.#emit('ai:agent-event', { sessionId: id, turnId:turn.id, event: { type: 'queued' } });
-      try {
-        await agent.waitForIdle();
-      } finally {
-        this.settlingSessions.delete(id);
-        this.#emit('ai:agent-event', { sessionId: id, event: { type: 'agent_idle' } });
-      }
-      return;
-    }
     this.activeTurns.set(id,turn.id);
     this.#saveRecovery();
     this.#emit('ai:agent-event', { sessionId:id, turnId:turn.id, event:{type:'turn_created'} });
     try {
       await agent.prompt(userMessage);
     } catch (error) {
+      turn.status='failed';turn.error=error.message||String(error);turn.updatedAt=now();
+      if(this.activeTurns.get(id)===turn.id)this.activeTurns.delete(id);
       this.agentTasks?.finish(turn.id,'failed',error.message||String(error));
+      this.#saveRecovery();
+      this.#emit('ai:agent-event',{sessionId:id,turnId:turn.id,event:{type:'turn_failed',error:turn.error}});
       throw error;
     } finally {
       this.settlingSessions.delete(id);
@@ -261,11 +266,6 @@ export class AiAgentService {
     this.settlingSessions.delete(id);
     if (agent.state.isStreaming) throw new Error('Wait for the current response to finish first.');
     const index=Number.isInteger(turn?.messageIndex)?turn.messageIndex:messages.findIndex(message=>message.role==='user'&&message.timestamp===turn?.user?.timestamp);
-    if(turnIndex>=0&&index<0&&turn?.status==='queued'){
-      session.turns=session.turns.slice(0,turnIndex);
-      const pending=(this.queuedMessages.get(id)||[]).filter(item=>item.turnId!==turn.id);pending.length?this.queuedMessages.set(id,pending):this.queuedMessages.delete(id);
-      session.updatedAt=now();this.persist();this.#emit('ai:changed',{sessionId:id});return this.send(id,prompt);
-    }
     if (turnIndex<0 || index<0 || messages[index]?.role !== 'user') throw new Error('This message can no longer be edited.');
     agent.state.messages = clone(messages.slice(0, index));
     session.messages = clone(agent.state.messages);
@@ -277,14 +277,12 @@ export class AiAgentService {
   }
 
   abort(id) {
-    const session=this.state.sessions.find(item=>item.id===id),activeId=this.activeTurns.get(id),queued=this.queuedMessages.get(id)||[];
+    const session=this.state.sessions.find(item=>item.id===id),activeId=this.activeTurns.get(id);
     if(session){
-      const queuedIds=new Set(queued.map(item=>item.turnId));
-      session.turns=session.turns.filter(turn=>!queuedIds.has(turn.id));
       const active=session.turns.find(turn=>turn.id===activeId);if(active){active.status='stopped';active.updatedAt=now();this.agentTasks?.finish(active.id,'cancelled')}
-      queued.forEach(item=>this.agentTasks?.finish(item.turnId,'cancelled'));
     }
-    this.queuedMessages.delete(id);this.activeTurns.delete(id);this.settlingSessions.delete(id);this.#saveRecovery();
+    this.activeTurns.delete(id);this.streamingAssistantMessages.delete(id);this.sessionRuns.delete(id);this.settlingSessions.delete(id);this.#saveRecovery();
+    this.agents.get(id)?.clearAllQueues();
     this.#emit('ai:agent-event', { sessionId: id, event: { type: 'queue_cleared' } });
     return this.agents.get(id)?.abort();
   }
@@ -361,23 +359,38 @@ export class AiAgentService {
       maxRetryDelayMs: 12000,
     });
     agent.subscribe(async event => {
+      let publishedEvent=event;
       if(event.type==='message_start'&&event.message?.role==='user'){
-        const queued=this.queuedMessages.get(id)||[],index=queued.findIndex(item=>item.message.timestamp===event.message.timestamp||item.message.content===event.message.content);
-        const previous=session.turns.find(turn=>turn.id===this.activeTurns.get(id));if(previous&&previous.status==='running'){previous.status='completed';previous.updatedAt=now();this.agentTasks?.finish(previous.id,'completed')}
-        let turn=index>=0?session.turns.find(item=>item.id===queued[index].turnId):session.turns.find(item=>item.user?.timestamp===event.message.timestamp);
-        if(!turn){turn={id:crypto.randomUUID(),createdAt:event.message.timestamp||now(),updatedAt:now(),status:'running',user:clone(event.message),responses:[],messageIndex:null};session.turns.push(turn)}
+        let turn=session.turns.find(item=>item.user?.timestamp===event.message.timestamp);
+        const previous=session.turns.find(item=>item.id===this.activeTurns.get(id));if(previous&&previous!==turn&&previous.status==='running'){previous.status='completed';previous.updatedAt=now();this.agentTasks?.finish(previous.id,'completed')}
+        if(!turn){turn={id:crypto.randomUUID(),createdAt:event.message.timestamp||now(),updatedAt:now(),status:'running',user:clone(event.message),responses:[],messageIndex:null,error:''};session.turns.push(turn)}
         turn.status='running';turn.updatedAt=now();this.activeTurns.set(id,turn.id);
-        if(index>=0){queued.splice(index,1);queued.length?this.queuedMessages.set(id,queued):this.queuedMessages.delete(id)}
       }
+      if(['message_start','message_update'].includes(event.type)&&event.message?.role==='assistant'&&hasAssistantContent(event.message))this.streamingAssistantMessages.set(id,clone(event.message));
       if(event.type==='message_end'){
         const turn=session.turns.find(item=>item.id===this.activeTurns.get(id));
         if(turn&&event.message?.role==='user')turn.messageIndex=agent.state.messages.length-1;
-        else if(turn&&['assistant','toolResult'].includes(event.message?.role)){turn.responses.push(clone(event.message));turn.updatedAt=now()}
+        else if(turn&&['assistant','toolResult'].includes(event.message?.role)){
+          let message=event.message;
+          if(message.role==='assistant'){
+            const streamed=this.streamingAssistantMessages.get(id);
+            if(!hasAssistantContent(message)&&hasAssistantContent(streamed)){
+              message={...clone(streamed),...clone(message),content:clone(streamed.content)};
+              // Pi has already appended message_end to its transcript before
+              // listeners run. Repair the same record used by later turns.
+              agent.state.messages[agent.state.messages.length-1]=clone(message);
+              publishedEvent={...event,message:clone(message)};
+            }
+            this.streamingAssistantMessages.delete(id);
+          }
+          turn.responses.push(clone(message));turn.updatedAt=now();
+        }
       }
       if (event.type === 'agent_end') {
         this.settlingSessions.add(id);
-        const turn=session.turns.find(item=>item.id===this.activeTurns.get(id));if(turn){turn.status=agent.state.errorMessage?'failed':'completed';turn.updatedAt=now();this.agentTasks?.finish(turn.id,turn.status,agent.state.errorMessage||'')}
+        const turn=session.turns.find(item=>item.id===this.activeTurns.get(id));if(turn){turn.status=agent.state.errorMessage?'failed':'completed';turn.error=agent.state.errorMessage||'';turn.updatedAt=now();this.agentTasks?.finish(turn.id,turn.status,turn.error)}
         this.activeTurns.delete(id);
+        this.streamingAssistantMessages.delete(id);
         session.messages = clone(agent.state.messages);
         session.updatedAt = now();
         if (session.title === 'New chat') {
@@ -388,7 +401,7 @@ export class AiAgentService {
         this.persist();
         this.#emit('ai:changed', { sessionId: id });
       }
-      this.#emit('ai:agent-event', { sessionId: id, event });
+      this.#emit('ai:agent-event', { sessionId: id, event:publishedEvent });
     });
     this.agents.set(id, agent);
     return agent;
@@ -426,7 +439,7 @@ export class AiAgentService {
       messages: Array.isArray(item.messages) ? item.messages : [],
       turns: Array.isArray(item.turns) ? item.turns.filter(turn=>turn?.id&&turn?.user).map(turn=>({
         id:String(turn.id),createdAt:Number(turn.createdAt)||now(),updatedAt:Number(turn.updatedAt)||now(),status:['running','queued'].includes(turn.status)?'stopped':String(turn.status||'completed'),
-        user:turn.user,responses:Array.isArray(turn.responses)?turn.responses:[],messageIndex:Number.isInteger(turn.messageIndex)?turn.messageIndex:null,taskId:turn.taskId?String(turn.taskId):'',
+        user:turn.user,responses:Array.isArray(turn.responses)?turn.responses:[],messageIndex:Number.isInteger(turn.messageIndex)?turn.messageIndex:null,taskId:turn.taskId?String(turn.taskId):'',error:String(turn.error||''),
       })) : [],
     })) : [];
     return { version: 3, updatedAt:Number(saved?.updatedAt)||0, config, sessions };
