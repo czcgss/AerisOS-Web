@@ -128,8 +128,13 @@ export default {
         if(message?.role!=='assistant'||(message.content||[]).some?.(block=>block.type==='toolCall'))return render({preserveComposer:true});
         const answer=[...root.querySelectorAll('[data-ai-turn-answer]')].find(node=>node.dataset.aiTurnAnswer===session.activeTurnId),target=answer?.querySelector('[data-ai-turn-stream]'),conversation=root.querySelector('[data-ai-conversation]');
         if(!target||!conversation)return render({preserveComposer:true});
+        const text=messageText(message);
+        // A new assistant message is briefly empty while the model switches
+        // from completed tool results to its final summary. Keep the existing
+        // tool cards and typing indicator until real text arrives.
+        if(!text)return;
         const nearBottom=conversation.scrollHeight-conversation.scrollTop-conversation.clientHeight<90;
-        target.innerHTML=renderText(messageText(message));
+        target.innerHTML=renderText(text);
         if(nearBottom)conversation.scrollTop=conversation.scrollHeight;
       });
     };
@@ -208,7 +213,7 @@ export default {
 
     const offReady = kernel.bus.on('ai:ready', async () => { await ensureSession(); activeId ||= aiAgent.snapshot().sessions[0]?.id || null; render(); });
     const offChanged = kernel.bus.on('ai:changed', () => { if (activeId && !aiAgent.snapshot().sessions.some(item => item.id === activeId)) activeId = aiAgent.snapshot().sessions[0]?.id || null; render({ preserveComposer: true }); });
-    const offAgent = kernel.bus.on('ai:agent-event', detail => { if(detail.sessionId!==activeId||settingsOpen)return;if(detail.event?.type==='message_update')updateStreamingMessage();else render({preserveComposer:true}); });
+    const offAgent = kernel.bus.on('ai:agent-event', detail => { if(detail.sessionId!==activeId||settingsOpen)return;const event=detail.event;if(event?.type==='message_update')return updateStreamingMessage();if(event?.type==='message_start'&&event.message?.role==='assistant'){const session=current(),answer=[...root.querySelectorAll('[data-ai-turn-answer]')].find(node=>node.dataset.aiTurnAnswer===session?.activeTurnId);if(answer?.querySelector('[data-ai-turn-stream]'))return}render({preserveComposer:true}); });
     const offCapability = kernel.bus.on('capability:execution', detail => { const session=current();if(session?.streaming){liveExecution=detail;liveExecutionTurnId=session.activeTurnId}if (!settingsOpen) render({ preserveComposer: true }); });
     const offNotifications = kernel.bus.on('notification:changed', state => {if(notificationOpen)render({preserveComposer:true,focusComposer:false});else root.querySelector('[data-ai-notification-dot]')?.classList.toggle('visible',state.unread>0)});
     const offContext = kernel.bus.on('agent:context-changed',()=>render({preserveComposer:true,focusComposer:false}));
