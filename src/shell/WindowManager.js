@@ -68,14 +68,20 @@ export class WindowManager {
 
   #bindWindow(record) {
     const { element, id } = record, bar = element.querySelector('.titlebar'), handle = element.querySelector('.resize-handle');
+    let drag;
     element.addEventListener('pointerdown', () => this.focus(id));
     element.querySelector('[data-window-action="close"]').onclick = () => this.close(id);
     element.querySelector('[data-window-action="minimize"]').onclick = () => this.minimize(id);
     element.querySelector('[data-window-action="maximize"]').onclick = () => this.maximize(id);
-    bar.ondblclick = event => { if (!event.target.closest('button')) this.maximize(id); };
-    let drag;
+    bar.ondblclick = event => {
+      if(event.button!==0||event.target.closest('button'))return;
+      event.preventDefault();
+      if(drag?.pointerId!=null&&bar.hasPointerCapture(drag.pointerId))bar.releasePointerCapture(drag.pointerId);
+      drag=null;
+      this.maximize(id);
+    };
     const stopDrag=event=>{const released=drag;drag=null;if(event?.pointerId!=null&&bar.hasPointerCapture(event.pointerId))bar.releasePointerCapture(event.pointerId);if(released&&event){if(event.clientY<=48)return this.maximize(id);if(event.clientX<=8)return this.snap(id,'left');if(event.clientX>=innerWidth-8)return this.snap(id,'right')}this.#persistSession()};
-    bar.onpointerdown = event => { if (event.button!==0||event.target.closest('button')||record.maximized) return; const rect=element.getBoundingClientRect(); drag={pointerId:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top}; bar.setPointerCapture(event.pointerId); };
+    bar.onpointerdown = event => { if (event.button!==0||event.detail>1||event.target.closest('button')||record.maximized) return; const rect=element.getBoundingClientRect(); drag={pointerId:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top}; bar.setPointerCapture(event.pointerId); };
     bar.onpointermove = event => { if (!drag) return;if(event.pointerId!==drag.pointerId||!(event.buttons&1))return stopDrag(event);element.style.left=Math.max(-element.offsetWidth+130,drag.left+event.clientX-drag.x)+'px';element.style.top=Math.max(44,drag.top+event.clientY-drag.y)+'px'; };
     bar.onpointerup=stopDrag;bar.onpointercancel=stopDrag;bar.onlostpointercapture=()=>drag=null;
     let resize;

@@ -28,8 +28,9 @@ export class TerminalBridge {
 
   write(data) {
     if(!this.machine.emulator)return;
-    this.machine.emulator.serial_send_bytes(this.port,this.encoder.encode(String(data)));
-    this.bus.emit('terminal:activity',{port:this.port});
+    const value=String(data);
+    this.machine.emulator.serial_send_bytes(this.port,this.encoder.encode(value));
+    this.bus.emit('terminal:activity',{port:this.port,submitted:/[\r\n]/.test(value)});
   }
 
   replay(){this.drain(false);return this.buffer}

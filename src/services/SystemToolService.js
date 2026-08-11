@@ -4,6 +4,29 @@ import { migrate as migrateCalendar, localDateTime, parseLocal } from '../apps/c
 const text = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 const safeName = value => String(value || '').trim().replace(/[\r\n]/g, ' ');
 const toolResult = (message, details) => ({ content: [{ type: 'text', text: message }], details });
+const aerisPath = value => {
+  const source=String(value||'').trim();
+  if(!source.startsWith('/')||source.includes('\0'))throw new Error('An absolute Aeris path is required.');
+  const parts=[];
+  for(const part of source.split('/')){
+    if(!part||part==='.')continue;
+    if(part==='..'){if(!parts.length)throw new Error('The path leaves the Aeris filesystem.');parts.pop();continue}
+    parts.push(part);
+  }
+  const path=`/${parts.join('/')}`;
+  if(path!=='/home/aeris'&&!path.startsWith('/home/aeris/')&&path!=='/mnt/aeris'&&!path.startsWith('/mnt/aeris/'))throw new Error('Files tools can only access /home/aeris or /mnt/aeris.');
+  return path;
+};
+const aerisName = value => {
+  const name=safeName(value);
+  if(!name||name==='.'||name==='..'||name.includes('/'))throw new Error('A valid file or folder name is required.');
+  return name;
+};
+const mutableAerisPath = value => {
+  const path=aerisPath(value);
+  if(path==='/home/aeris'||path==='/mnt/aeris')throw new Error('The root Aeris folders cannot be changed.');
+  return path;
+};
 
 export class SystemToolService {
   constructor({ userdata, system, settings, weather, metrics, machine, registry, i18n }) {
@@ -121,9 +144,14 @@ export class SystemToolService {
     this.#register({ name:'contacts_create',appId:'contacts',operation:'create',label:'Create contact',description:'Create a contact on this Aeris computer.',parameters:object({name:Type.String(),email:optionalString('Email address'),phone:optionalString('Phone number')}),execute:async params=>{const contacts=await this.userdata.load('contacts',[]),contact={id:crypto.randomUUID(),name:safeName(params.name),email:safeName(params.email),phone:safeName(params.phone),favorite:false};contacts.push(contact);await this.userdata.save('contacts',contacts);return contact},success:contact=>`Created contact “${contact.name}”.` });
     this.#register({ name:'contacts_search',appId:'contacts',operation:'search',label:'Search contacts',description:'Search contacts by name, email, or phone.',parameters:object({query:Type.String()}),execute:async({query})=>{const needle=query.toLowerCase();return(await this.userdata.load('contacts',[])).filter(item=>`${item.name} ${item.email} ${item.phone}`.toLowerCase().includes(needle)).slice(0,30)},success:contacts=>contacts.length?JSON.stringify(contacts):'No matching contacts.' });
 
-    this.#register({ name:'files_list',appId:'files',operation:'list',label:'List files',description:'List files and folders in an absolute Aeris Linux path.',parameters:object({path:Type.String()}),execute:async({path})=>this.system.list(path,{fresh:true,priority:true}),success:items=>JSON.stringify(items) });
-    this.#register({ name:'files_create_folder',appId:'files',operation:'create_folder',label:'Create folder',description:'Create a folder at an absolute Aeris Linux path.',parameters:object({path:Type.String()}),execute:async({path})=>{if(!path.startsWith('/'))throw new Error('An absolute path is required.');await this.system.mkdir(path);return{path}},success:result=>`Created folder ${result.path}.` });
-    this.#register({ name:'files_move_to_trash',appId:'files',operation:'move_to_trash',risk:'high',label:'Move file to Trash',description:'Move a file or folder to the Aeris Trash. Requires user approval.',parameters:object({path:Type.String()}),approval:params=>`Move “${params.path}” to Trash?`,execute:async({path})=>({path:await this.system.trash(path)}),success:result=>`Moved the item to ${result.path}.` });
+    this.#register({ name:'files_list',appId:'files',operation:'list',label:'List files',description:'List files and folders in /home/aeris or /mnt/aeris.',parameters:object({path:Type.String()}),execute:async({path})=>this.system.list(aerisPath(path),{fresh:true,priority:true,timeout:20000}),success:items=>JSON.stringify(items) });
+    this.#register({ name:'files_read',appId:'files',operation:'read_file',label:'Read file',description:'Read a UTF-8 text file from the Aeris filesystem.',parameters:object({path:Type.String()}),execute:async({path})=>{path=aerisPath(path);const content=await this.system.read(path,{priority:true});return{path,content:String(content).slice(0,12000),truncated:String(content).length>12000}},success:result=>`${result.content}${result.truncated?'\n\n[Output truncated]':''}` });
+    this.#register({ name:'files_write',appId:'files',operation:'write_file',risk:'high',label:'Write file',description:'Create or replace a UTF-8 text file in the Aeris filesystem. Requires approval because an existing file may be overwritten.',parameters:object({path:Type.String(),content:Type.String()}),approval:params=>`Create or replace “${params.path}”?`,execute:async({path,content})=>{path=mutableAerisPath(path);await this.system.writeChunked(path,content,{priority:true});return{path,bytes:new TextEncoder().encode(content).length}},success:result=>`Saved ${result.path} (${result.bytes} bytes).` });
+    this.#register({ name:'files_create_folder',appId:'files',operation:'create_folder',label:'Create folder',description:'Create a folder inside /home/aeris or /mnt/aeris.',parameters:object({path:Type.String()}),execute:async({path})=>{path=mutableAerisPath(path);await this.system.mkdir(path,{priority:true});return{path}},success:result=>`Created folder ${result.path}.` });
+    this.#register({ name:'files_rename',appId:'files',operation:'rename',label:'Rename item',description:'Rename a file or folder without moving it to another directory.',parameters:object({path:Type.String(),name:Type.String()}),execute:async({path,name})=>{path=mutableAerisPath(path);const target=await this.system.rename(path,aerisName(name),{priority:true});return{path:target}},success:result=>`Renamed the item to ${result.path}.` });
+    this.#register({ name:'files_copy',appId:'files',operation:'copy',label:'Duplicate item',description:'Duplicate a file or folder beside the original and choose a non-conflicting name.',parameters:object({path:Type.String()}),execute:async({path})=>({path:await this.system.copy(mutableAerisPath(path),{priority:true})}),success:result=>`Created ${result.path}.` });
+    this.#register({ name:'files_move',appId:'files',operation:'move',label:'Move item',description:'Move a file or folder into another Aeris directory.',parameters:object({path:Type.String(),destination:Type.String()}),execute:async({path,destination})=>({path:await this.system.move(mutableAerisPath(path),aerisPath(destination),{priority:true})}),success:result=>`Moved the item to ${result.path}.` });
+    this.#register({ name:'files_delete',appId:'files',operation:'delete',risk:'high',label:'Delete item',description:'Delete a file or folder by moving it to the Aeris Trash. Requires user approval.',parameters:object({path:Type.String()}),approval:params=>`Move “${params.path}” to Trash?`,execute:async({path})=>({path:await this.system.trash(mutableAerisPath(path),{priority:true})}),success:result=>`Moved the item to ${result.path}.` });
     this.#register({ name:'textedit_create_document',appId:'textedit',operation:'create_document',label:'Create text document',description:'Create or replace a text document in Desktop or Documents.',parameters:object({path:Type.String(),content:Type.String()}),execute:async({path,content})=>{if(!/^\/home\/aeris\/(Desktop|Documents)\//.test(path))throw new Error('Documents must be saved in Desktop or Documents.');await this.system.writeChunked(path,content);return{path}},success:result=>`Saved document ${result.path}.` });
     this.#register({ name:'preview_read_text',appId:'preview',operation:'read_text',label:'Read text file',description:'Read a text file from the Aeris Linux filesystem for inspection.',parameters:object({path:Type.String()}),execute:async({path})=>{if(!path.startsWith('/'))throw new Error('An absolute path is required.');const content=await this.system.read(path);return{path,content:String(content).slice(0,12000),truncated:String(content).length>12000}},success:result=>`${result.content}${result.truncated?'\n\n[Output truncated]':''}` });
     this.#register({ name:'photos_list',appId:'photos',operation:'list',label:'List photos',description:'List images in the Aeris Pictures folder.',parameters:object({}),execute:async()=>this.system.list('/home/aeris/Pictures',{fresh:true}),success:items=>items.length?JSON.stringify(items):'The photo library is empty.' });
