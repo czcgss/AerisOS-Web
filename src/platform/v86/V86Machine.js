@@ -44,6 +44,10 @@ export class V86Machine {
       filesystem: {}, autostart: false,
       network_relay_url: 'fetch', net_device: { type: 'virtio' },
       uart1: true, uart2: true, uart3: true,
+      // Aeris does not expose guest audio yet. Leaving v86's host speaker
+      // adapter enabled can restore a latched PC-speaker oscillator from a
+      // snapshot, producing a continuous tone until the page is closed.
+      disable_speaker: true,
     };
     if (!snapshot) machineOptions.cdrom = { url: `${base}/alpine.iso` };
     this.emulator = new V86(machineOptions);
