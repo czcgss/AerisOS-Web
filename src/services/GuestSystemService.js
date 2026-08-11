@@ -40,7 +40,7 @@ export class GuestSystemService {
       throw error;
     }
   }
-  async execChecked(command, timeout) { const result=await this.exec(command,timeout);if(result.code!==0)throw new Error(result.output||`Linux command failed (${result.code})`);return result; }
+  async execChecked(command, timeout, { priority = false } = {}) { const result=priority?await this.execInteractive(command,timeout):await this.exec(command,timeout);if(result.code!==0)throw new Error(result.output||`Linux command failed (${result.code})`);return result; }
   terminalPorts(){return this.machine.terminalPorts()}
   terminalReplay(port){return this.machine.terminalReplay(port)}
   writeTerminal(data,port=1){this.machine.terminalWrite(port,data)}
@@ -90,43 +90,43 @@ export class GuestSystemService {
     throw lastError;
   }
 
-  async read(path) {
+  async read(path, { priority = false } = {}) {
     const shared=this.#sharedPath(path);if(shared!==null)try{return await this.machine.readShared(shared)}catch{}
     // Keep the control channel ASCII-only and decode file bytes explicitly.
     // This works on both the serial and VGA recovery transports.
-    const {output}=await this.execChecked(`base64 < ${quote(path)} | tr -d '\n'`,30000),encoded=output.replace(/\s+/g,'');
+    const {output}=await this.execChecked(`base64 < ${quote(path)} | tr -d '\n'`,30000,{priority}),encoded=output.replace(/\s+/g,'');
     const binary=atob(encoded),bytes=new Uint8Array(binary.length);
     for(let index=0;index<binary.length;index++)bytes[index]=binary.charCodeAt(index);
     return new TextDecoder().decode(bytes);
   }
-  async write(path, content) { const result=await this.execChecked(`mkdir -p ${quote(path.split('/').slice(0,-1).join('/')||'/')}; printf %s ${quote(content)} > ${quote(path)}`);this.#changed(path);return result; }
-  async writeChunked(path, content, chunkSize = 6000) {
+  async write(path, content, { priority = true } = {}) { const result=await this.execChecked(`mkdir -p ${quote(path.split('/').slice(0,-1).join('/')||'/')}; printf %s ${quote(content)} > ${quote(path)}`,12000,{priority});this.#changed(path);return result; }
+  async writeChunked(path, content, { chunkSize = 6000, priority = true } = {}) {
     const directory=path.split('/').slice(0,-1).join('/')||'/',temporary=`${path}.aeris-writing`,encodedPath=`${temporary}.b64`;
     const bytes=new TextEncoder().encode(String(content));let binary='';
     for(let offset=0;offset<bytes.length;offset+=32768)binary+=String.fromCharCode(...bytes.subarray(offset,offset+32768));
     const encoded=btoa(binary);
-    await this.execChecked(`mkdir -p ${quote(directory)}; : > ${quote(encodedPath)}`,20000);
+    await this.execChecked(`mkdir -p ${quote(directory)}; : > ${quote(encodedPath)}`,20000,{priority});
     try {
-      for(let offset=0;offset<encoded.length;offset+=chunkSize)await this.execChecked(`printf %s ${quote(encoded.slice(offset,offset+chunkSize))} >> ${quote(encodedPath)}`,20000);
-      const result=await this.execChecked(`base64 -d ${quote(encodedPath)} > ${quote(temporary)} && mv ${quote(temporary)} ${quote(path)} && rm -f ${quote(encodedPath)}`,30000);
+      for(let offset=0;offset<encoded.length;offset+=chunkSize)await this.execChecked(`printf %s ${quote(encoded.slice(offset,offset+chunkSize))} >> ${quote(encodedPath)}`,20000,{priority});
+      const result=await this.execChecked(`base64 -d ${quote(encodedPath)} > ${quote(temporary)} && mv ${quote(temporary)} ${quote(path)} && rm -f ${quote(encodedPath)}`,30000,{priority});
       this.#changed(path);return result;
     } catch(error) {
-      this.exec(`rm -f ${quote(temporary)} ${quote(encodedPath)}`,5000).catch(()=>{});
+      (priority?this.execInteractive(`rm -f ${quote(temporary)} ${quote(encodedPath)}`,5000):this.exec(`rm -f ${quote(temporary)} ${quote(encodedPath)}`,5000)).catch(()=>{});
       throw error;
     }
   }
-  async mkdir(path) { const result=await this.execChecked(`mkdir -p ${quote(path)}`);this.#changed(path);return result; }
-  async rename(path, name) { const parent=path.split('/').slice(0,-1).join('/')||'/';const target=`${parent}/${name}`;const result=await this.execChecked(`[ ! -e ${quote(target)} ] && mv ${quote(path)} ${quote(target)}`);this.#changed(target);return target; }
-  async copy(path) { const parent=path.split('/').slice(0,-1).join('/')||'/',name=path.split('/').at(-1),stem=name.replace(/(\.[^.]*)$/,''),ext=name.slice(stem.length);let target=`${parent}/${stem} copy${ext}`,index=2;while((await this.exec(`[ -e ${quote(target)} ]`)).code===0)target=`${parent}/${stem} copy ${index++}${ext}`;await this.execChecked(`cp -a ${quote(path)} ${quote(target)}`);this.#changed(target);return target; }
-  async move(path, directory) { const target=`${directory}/${path.split('/').at(-1)}`;await this.execChecked(`[ ! -e ${quote(target)} ] && mv ${quote(path)} ${quote(target)}`);this.#changed(path);this.#changed(target);return target; }
-  async copyTo(path,directory){let name=path.split('/').at(-1),target=`${directory}/${name}`,index=2;while((await this.exec(`[ -e ${quote(target)} ]`)).code===0){const dot=name.lastIndexOf('.'),stem=dot>0?name.slice(0,dot):name,ext=dot>0?name.slice(dot):'';target=`${directory}/${stem} ${index++}${ext}`}await this.execChecked(`mkdir -p ${quote(directory)}; cp -a ${quote(path)} ${quote(target)}`);this.#changed(target);return target}
+  async mkdir(path, { priority = true } = {}) { const result=await this.execChecked(`mkdir -p ${quote(path)}`,12000,{priority});this.#changed(path);return result; }
+  async rename(path, name, { priority = true } = {}) { const parent=path.split('/').slice(0,-1).join('/')||'/';const target=`${parent}/${name}`;const result=await this.execChecked(`[ ! -e ${quote(target)} ] && mv ${quote(path)} ${quote(target)}`,12000,{priority});this.#changed(path);this.#changed(target);return target; }
+  async copy(path, { priority = true } = {}) { const parent=path.split('/').slice(0,-1).join('/')||'/',name=path.split('/').at(-1),stem=name.replace(/(\.[^.]*)$/,''),ext=name.slice(stem.length);let target=`${parent}/${stem} copy${ext}`,index=2;while((await (priority?this.execInteractive(`[ -e ${quote(target)} ]`):this.exec(`[ -e ${quote(target)} ]`))).code===0)target=`${parent}/${stem} copy ${index++}${ext}`;await this.execChecked(`cp -a ${quote(path)} ${quote(target)}`,20000,{priority});this.#changed(target);return target; }
+  async move(path, directory, { priority = true } = {}) { const target=`${directory}/${path.split('/').at(-1)}`;await this.execChecked(`[ -d ${quote(directory)} ] && [ ! -e ${quote(target)} ] && mv ${quote(path)} ${quote(target)}`,20000,{priority});this.#changed(path);this.#changed(target);return target; }
+  async copyTo(path,directory,{priority=true}={}){let name=path.split('/').at(-1),target=`${directory}/${name}`,index=2;while((await (priority?this.execInteractive(`[ -e ${quote(target)} ]`):this.exec(`[ -e ${quote(target)} ]`))).code===0){const dot=name.lastIndexOf('.'),stem=dot>0?name.slice(0,dot):name,ext=dot>0?name.slice(dot):'';target=`${directory}/${stem} ${index++}${ext}`}await this.execChecked(`mkdir -p ${quote(directory)}; cp -a ${quote(path)} ${quote(target)}`,20000,{priority});this.#changed(target);return target}
   #trashOrigins(){try{return JSON.parse(localStorage.getItem('aeris.trash.origins')||'{}')}catch{return{}}}
   #saveTrashOrigins(value){localStorage.setItem('aeris.trash.origins',JSON.stringify(value))}
   trashOrigin(name){return this.#trashOrigins()[name]||''}
-  async trash(path) { const trash='/home/aeris/.local/share/Trash/files',name=path.split('/').at(-1);let target=`${trash}/${name}`,index=2;while((await this.exec(`[ -e ${quote(target)} ]`)).code===0)target=`${trash}/${name} ${index++}`;await this.execChecked(`mkdir -p ${quote(trash)}; mv ${quote(path)} ${quote(target)} && [ ! -e ${quote(path)} ] && [ -e ${quote(target)} ]`);const origins=this.#trashOrigins();origins[target.split('/').at(-1)]=path;this.#saveTrashOrigins(origins);this.#changed(path);this.#changed(target);return target; }
+  async trash(path, { priority = true } = {}) { const trash='/home/aeris/.local/share/Trash/files',name=path.split('/').at(-1);let target=`${trash}/${name}`,index=2;while((await (priority?this.execInteractive(`[ -e ${quote(target)} ]`):this.exec(`[ -e ${quote(target)} ]`))).code===0)target=`${trash}/${name} ${index++}`;await this.execChecked(`mkdir -p ${quote(trash)}; mv ${quote(path)} ${quote(target)} && [ ! -e ${quote(path)} ] && [ -e ${quote(target)} ]`,20000,{priority});const origins=this.#trashOrigins();origins[target.split('/').at(-1)]=path;this.#saveTrashOrigins(origins);this.#changed(path);this.#changed(target);return target; }
   async restoreTrash(path){const name=path.split('/').at(-1),origins=this.#trashOrigins(),original=origins[name]||`/home/aeris/Desktop/${name}`,parent=original.split('/').slice(0,-1).join('/')||'/';let target=original,index=2;while((await this.exec(`[ -e ${quote(target)} ]`)).code===0)target=`${parent}/${name} restored ${index++}`;await this.execChecked(`mkdir -p ${quote(parent)}; mv ${quote(path)} ${quote(target)}`);delete origins[name];this.#saveTrashOrigins(origins);this.#changed(path);this.#changed(target);return target}
   async emptyTrash(){const trash='/home/aeris/.local/share/Trash/files';await this.execChecked(`find ${quote(trash)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`);this.#saveTrashOrigins({});this.#changed(`${trash}/item`)}
-  async remove(path) { const result=await this.execChecked(`rm -rf ${quote(path)}`);this.#changed(path);return result; }
+  async remove(path, { priority = true } = {}) { const result=await this.execChecked(`rm -rf ${quote(path)}`,20000,{priority});this.#changed(path);return result; }
   #sharedPath(path){const value=String(path);if(value==='/mnt/aeris')return'/';if(value.startsWith('/mnt/aeris/'))return value.slice('/mnt/aeris'.length);return null}
   #changed(path){const parent=path.split('/').slice(0,-1).join('/')||'/';this.directoryRevision.set(parent,(this.directoryRevision.get(parent)||0)+1);this.#invalidateDirectory(parent);this.kernel.bus.emit('filesystem:changed',{path:parent});}
 
