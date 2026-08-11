@@ -26,6 +26,7 @@ const paths = {
   minus: '<path d="M6 12h12"/>',
   maximize: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
   panelRight: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  focus: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/>',
   chevron: '<path d="m9 18 6-6-6-6"/>',
   back: '<path d="m15 18-6-6 6-6"/>',
   refresh: '<path d="M20 6v5h-5M4 18v-5h5"/><path d="M6.1 8a7 7 0 0 1 11.6-2L20 11M4 13l2.3 5a7 7 0 0 0 11.6-2"/>',

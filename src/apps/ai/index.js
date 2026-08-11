@@ -20,9 +20,10 @@ const readWorkspacePrefs = () => {
       open: Boolean(stored.open),
       width: Math.max(MIN_WORKSPACE_WIDTH, Math.min(MAX_WORKSPACE_WIDTH, Number(stored.width) || DEFAULT_WORKSPACE_WIDTH)),
       activityExpanded: stored.activityExpanded !== false,
+      view: ['app','context'].includes(stored.view) ? stored.view : 'app',
     };
   } catch {
-    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, activityExpanded: true };
+    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, activityExpanded: true, view: 'app' };
   }
 };
 
@@ -33,10 +34,10 @@ export default {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
     let workspaceSelectedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
-    let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, activityExpanded = workspacePrefs.activityExpanded;
+    let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, activityExpanded = workspacePrefs.activityExpanded, workspaceView = workspacePrefs.view;
 
     const persistWorkspacePrefs = () => {
-      try { localStorage.setItem(WORKSPACE_PREFS_KEY, JSON.stringify({ open: workspaceOpen, width: workspaceWidth, activityExpanded })); } catch {}
+      try { localStorage.setItem(WORKSPACE_PREFS_KEY, JSON.stringify({ open: workspaceOpen, width: workspaceWidth, activityExpanded, view: workspaceView })); } catch {}
     };
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
@@ -112,7 +113,8 @@ export default {
       if(workspaceActivity)workspaceSelectedId=workspaceActivity.id;
       displayedActivities=activities;
       const workspaceVisible=workspaceOpen;
-      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),signature=workspaceActivity?workspaceSignature(workspaceActivity,`${localeSignature}:${historySignature}`):`empty:${localeSignature}`,reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
+      const workspaceContext=agentContext.snapshot(),contextWindows=shell.windowManager.contextWindows();
+      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):'',signature=workspaceSignature(workspaceActivity,`${localeSignature}:${workspaceView}:${historySignature}:${contextSignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
       if(reuseWorkspace)previousWorkspace.remove();
       root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
         <aside class="ai-sidebar">
@@ -140,7 +142,7 @@ export default {
           ${settingsOpen ? settingsMarkup() : ''}
           ${notificationOpen ? notificationMarkup() : ''}
         </section>
-        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,session,activityExpanded}):''}
+        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,session,activityExpanded,view:workspaceView,context:workspaceContext,windows:contextWindows}):''}
       </div>`;
       if(reuseWorkspace)root.querySelector('.ai-system-app')?.append(previousWorkspace);
       bind();
@@ -231,9 +233,9 @@ export default {
       root.querySelector('[data-ai-close-notifications]')?.addEventListener('click',()=>{notificationOpen=false;render({preserveComposer:true})});
       root.querySelector('[data-ai-context-selector]')?.addEventListener('click',()=>{contextMenuOpen=!contextMenuOpen;render({preserveComposer:true,focusComposer:false})});
       root.querySelector('[data-ai-close-context]')?.addEventListener('click',()=>{contextMenuOpen=false;render({preserveComposer:true,focusComposer:false})});
-      root.querySelector('[data-ai-context-desktop]')?.addEventListener('click',()=>{contextMenuOpen=false;agentContext.focusDesktop()});
+      root.querySelectorAll('[data-ai-context-desktop]').forEach(button=>button.onclick=()=>{contextMenuOpen=false;agentContext.focusDesktop()});
       root.querySelectorAll('[data-ai-context-window]').forEach(button=>button.onclick=()=>{const target=shell.windowManager.contextWindows().find(item=>item.id===button.dataset.aiContextWindow);contextMenuOpen=false;if(target)agentContext.focusWindow(target)});
-      root.querySelector('[data-ai-clear-context]')?.addEventListener('click',()=>{contextMenuOpen=false;agentContext.clear()});
+      root.querySelectorAll('[data-ai-clear-context]').forEach(button=>button.onclick=()=>{contextMenuOpen=false;agentContext.clear()});
       root.querySelector('[data-ai-deny-approval]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiDenyApproval,false)});
       root.querySelector('[data-ai-approve]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiApprove,true)});
       root.querySelector('[data-ai-clear-notifications]')?.addEventListener('click',()=>notifications.clear());
@@ -246,11 +248,13 @@ export default {
       root.querySelector('[data-ai-reveal]')?.addEventListener('click', event => event.currentTarget.closest('.ai-secret-field').classList.toggle('revealed'));
       root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
       root.querySelectorAll('[data-ai-suggestion]').forEach(button => button.onclick = () => { const input = root.querySelector('[data-ai-composer]'); input.value = button.dataset.aiSuggestion; input.focus(); });
-      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true});}));
-      root.querySelectorAll('[data-ai-workspace-activity]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceActivity;render({preserveComposer:true,preserveConversation:true,focusComposer:false});});
+      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceView='app';workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true});}));
+      root.querySelectorAll('[data-ai-workspace-activity]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceActivity;workspaceView='app';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false});});
       root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
+      root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelector('[data-ai-toggle-activity-history]')?.addEventListener('click',event=>{activityExpanded=!activityExpanded;persistWorkspacePrefs();const history=event.currentTarget.closest('[data-ai-activity-history]');history?.classList.toggle('is-expanded',activityExpanded);history?.classList.toggle('is-collapsed',!activityExpanded);event.currentTarget.setAttribute('aria-expanded',String(activityExpanded));event.currentTarget.title=i18n.t(activityExpanded?'collapseActivityHistory':'expandActivityHistory')});
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
+      root.querySelectorAll('[data-ai-open-context-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenContextApp));
       const setWorkspaceOpen=open=>{workspaceOpen=open;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
       root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
       root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));
