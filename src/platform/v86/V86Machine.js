@@ -373,10 +373,18 @@ export class V86Machine {
     const tty=Number(port),bridge=this.terminals.get(tty);
     if(this.terminalResets.has(tty))return this.terminalResets.get(tty);
     bridge?.suspend();
-    if(!this.serial||!this.guestReady){bridge?.resume();return Promise.resolve()}
-    const command=`terminal_device=/dev/ttyS${tty}; for terminal_fd in /proc/[0-9]*/fd/0; do [ "$(readlink "$terminal_fd" 2>/dev/null)" = "$terminal_device" ] || continue; terminal_pid=$(printf %s "$terminal_fd" | cut -d/ -f3); kill -KILL "$terminal_pid" 2>/dev/null || true; done; terminal_ready=; for terminal_attempt in $(seq 1 40); do for terminal_fd in /proc/[0-9]*/fd/0; do [ "$(readlink "$terminal_fd" 2>/dev/null)" = "$terminal_device" ] || continue; terminal_pid=$(printf %s "$terminal_fd" | cut -d/ -f3); if [ "$(readlink "/proc/$terminal_pid/cwd" 2>/dev/null)" = /home/aeris ]; then terminal_ready=1; break; fi; done; [ "$terminal_ready" = 1 ] && break; sleep 0.1; done; [ "$terminal_ready" = 1 ]`;
-    const task=this.serial.execute(command,10000,true)
-      .catch(()=>{}).finally(()=>{bridge?.resume();if(this.terminalResets.get(tty)===task)this.terminalResets.delete(tty)});
+    if(!bridge||!this.guestReady){bridge?.resume();return Promise.resolve()}
+    // Reset the interactive shell on its own TTY. The previous implementation
+    // used the system control queue and polled /proc for up to four seconds,
+    // which made a newly opened Terminal appear blank whenever that queue was
+    // busy. Ctrl+C followed by exit gives init a clean, normal shell teardown
+    // without coupling Terminal startup to filesystem or monitoring commands.
+    const task=(async()=>{
+      bridge.write('\u0003');
+      await new Promise(resolve=>setTimeout(resolve,70));
+      bridge.write('exit\r');
+      await new Promise(resolve=>setTimeout(resolve,360));
+    })().finally(()=>{bridge.resume();if(this.terminalResets.get(tty)===task)this.terminalResets.delete(tty)});
     this.terminalResets.set(tty,task);
     return task;
   }

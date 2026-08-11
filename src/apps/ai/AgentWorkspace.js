@@ -145,7 +145,7 @@ const contactSurface = activity => {
 const fileSurface = (activity, i18n) => {
   const values = Array.isArray(activity.result) ? activity.result : [];
   const path = activity.params.path || activity.result?.path || (activity.appId === 'photos' ? '/home/aeris/Pictures' : activity.appId === 'trash' ? '/home/aeris/.local/share/Trash' : '/home/aeris');
-  return `<div class="agent-file-surface"><header>${icon('folder', 16)}<span>${esc(path)}</span></header><div>${values.length ? values.slice(0, 8).map(item => `<article>${icon(item.type === 'directory' ? 'folder' : 'file', 16)}<span><strong>${esc(item.name || item.path || displayValue(item))}</strong><small>${esc(item.type || '')}</small></span></article>`).join('') : `<div class="agent-file-operation">${icon(activity.operation === 'move_to_trash' ? 'delete' : 'folder', 30)}<strong>${esc(activity.label)}</strong><small>${esc(path)}</small></div>`}</div><footer>${values.length} ${i18n.t('items')}</footer></div>`;
+  return `<div class="agent-file-surface"><header>${icon('folder', 16)}<span>${esc(path)}</span></header><div>${values.length ? values.slice(0, 8).map(item => `<article>${icon(item.type === 'directory' ? 'folder' : 'file', 16)}<span><strong>${esc(item.name || item.path || displayValue(item))}</strong><small>${esc(item.type || '')}</small></span></article>`).join('') : `<div class="agent-file-operation">${icon(activity.operation === 'delete' ? 'delete' : activity.operation === 'read_file' || activity.operation === 'write_file' ? 'document' : 'folder', 30)}<strong>${esc(activity.label)}</strong><small>${esc(path)}</small></div>`}</div><footer>${values.length} ${i18n.t('items')}</footer></div>`;
 };
 
 const weatherSurface = (activity, i18n) => {
