@@ -19,9 +19,10 @@ const readWorkspacePrefs = () => {
     return {
       open: Boolean(stored.open),
       width: Math.max(MIN_WORKSPACE_WIDTH, Math.min(MAX_WORKSPACE_WIDTH, Number(stored.width) || DEFAULT_WORKSPACE_WIDTH)),
+      activityExpanded: stored.activityExpanded !== false,
     };
   } catch {
-    return { open: false, width: DEFAULT_WORKSPACE_WIDTH };
+    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, activityExpanded: true };
   }
 };
 
@@ -31,11 +32,11 @@ export default {
   mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, agentTasks }) {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
-    let workspaceSelectedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '';
-    let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width;
+    let workspaceSelectedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
+    let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, activityExpanded = workspacePrefs.activityExpanded;
 
     const persistWorkspacePrefs = () => {
-      try { localStorage.setItem(WORKSPACE_PREFS_KEY, JSON.stringify({ open: workspaceOpen, width: workspaceWidth })); } catch {}
+      try { localStorage.setItem(WORKSPACE_PREFS_KEY, JSON.stringify({ open: workspaceOpen, width: workspaceWidth, activityExpanded })); } catch {}
     };
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
@@ -97,8 +98,9 @@ export default {
       </section>`;
     };
 
-    const render = ({ preserveComposer = false, focusSearch = false, focusComposer = preserveComposer } = {}) => {
+    const render = ({ preserveComposer = false, preserveConversation = false, focusSearch = false, focusComposer = preserveComposer } = {}) => {
       const draft = preserveComposer ? root.querySelector('[data-ai-composer]')?.value ?? composerDraft : composerDraft;composerDraft=draft;
+      const previousConversation=root.querySelector('[data-ai-conversation]'),previousConversationScroll=previousConversation?.scrollTop||0;
       const previousWorkspace=root.querySelector('[data-ai-app-workspace]');
       const state = aiAgent.snapshot(), session = current(), configured = Boolean(aiAgent.config().apiKey);
       const turns=session?.turns||[];displayedTurns=turns;
@@ -110,7 +112,7 @@ export default {
       if(workspaceActivity)workspaceSelectedId=workspaceActivity.id;
       displayedActivities=activities;
       const workspaceVisible=workspaceOpen;
-      const localeSignature=i18n.t('dateFormat'),signature=workspaceActivity?workspaceSignature(workspaceActivity,localeSignature):`empty:${localeSignature}`,reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
+      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),signature=workspaceActivity?workspaceSignature(workspaceActivity,`${localeSignature}:${historySignature}`):`empty:${localeSignature}`,reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
       if(reuseWorkspace)previousWorkspace.remove();
       root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
         <aside class="ai-sidebar">
@@ -138,13 +140,15 @@ export default {
           ${settingsOpen ? settingsMarkup() : ''}
           ${notificationOpen ? notificationMarkup() : ''}
         </section>
-        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature}):''}
+        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,session,activityExpanded}):''}
       </div>`;
       if(reuseWorkspace)root.querySelector('.ai-system-app')?.append(previousWorkspace);
       bind();
       requestAnimationFrame(() => {
         const conversation = root.querySelector('[data-ai-conversation]');
-        if (conversation) conversation.scrollTop = conversation.scrollHeight;
+        if (conversation) conversation.scrollTop = preserveConversation ? previousConversationScroll : conversation.scrollHeight;
+        const selectedActivity=root.querySelector('.ai-activity-item.selected'),activityScroller=selectedActivity?.closest('.ai-activity-groups');
+        if(activityScroller&&selectedActivity){const itemTop=selectedActivity.offsetTop,itemBottom=itemTop+selectedActivity.offsetHeight;if(itemTop<activityScroller.scrollTop)activityScroller.scrollTop=itemTop-8;else if(itemBottom>activityScroller.scrollTop+activityScroller.clientHeight)activityScroller.scrollTop=itemBottom-activityScroller.clientHeight+8}
         if (focusSearch) { const search = root.querySelector('[data-ai-search]'); search?.focus(); search?.setSelectionRange(search.value.length, search.value.length); }
         else if (focusComposer) { const input = root.querySelector('[data-ai-composer]'); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }
       });
@@ -242,10 +246,12 @@ export default {
       root.querySelector('[data-ai-reveal]')?.addEventListener('click', event => event.currentTarget.closest('.ai-secret-field').classList.toggle('revealed'));
       root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
       root.querySelectorAll('[data-ai-suggestion]').forEach(button => button.onclick = () => { const input = root.querySelector('[data-ai-composer]'); input.value = button.dataset.aiSuggestion; input.focus(); });
-      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true});}));
-      root.querySelectorAll('[data-ai-workspace-tool]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceTool;render({preserveComposer:true});});
+      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true});}));
+      root.querySelectorAll('[data-ai-workspace-activity]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceActivity;render({preserveComposer:true,preserveConversation:true,focusComposer:false});});
+      root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
+      root.querySelector('[data-ai-toggle-activity-history]')?.addEventListener('click',event=>{activityExpanded=!activityExpanded;persistWorkspacePrefs();const history=event.currentTarget.closest('[data-ai-activity-history]');history?.classList.toggle('is-expanded',activityExpanded);history?.classList.toggle('is-collapsed',!activityExpanded);event.currentTarget.setAttribute('aria-expanded',String(activityExpanded));event.currentTarget.title=i18n.t(activityExpanded?'collapseActivityHistory':'expandActivityHistory')});
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
-      const setWorkspaceOpen=open=>{workspaceOpen=open;persistWorkspacePrefs();render({preserveComposer:true,focusComposer:false})};
+      const setWorkspaceOpen=open=>{workspaceOpen=open;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
       root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
       root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));
       const resizeHandle=root.querySelector('[data-ai-workspace-resize]');
@@ -283,6 +289,6 @@ export default {
     root.addEventListener('click',closeContextOnClick);root.addEventListener('keydown',closeContextOnEscape,true);
     ensureSession().then(() => { activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
     render();
-    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offTasks(); offEntry(); offLocale(); };
+    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offTasks(); offEntry(); offLocale(); };
   },
 };
