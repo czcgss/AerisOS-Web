@@ -22,6 +22,18 @@ const now = () => Date.now();
 const hasAssistantContent = message => message?.role === 'assistant' && (typeof message.content === 'string'
   ? Boolean(message.content.trim())
   : (message.content || []).some(block => block?.type === 'toolCall' || (block?.type === 'text' && String(block.text || '').trim())));
+const turnResponseMessages = messages => (messages || []).filter(message => ['assistant', 'toolResult'].includes(message?.role));
+const reconcileTurnResponses = (recorded, completedRun) => {
+  const previous = recorded || [], canonical = turnResponseMessages(completedRun);
+  if (!canonical.length) return previous.map(clone);
+  return canonical.map((message, index) => {
+    const fallback = previous[index];
+    if (message.role === 'assistant' && !hasAssistantContent(message) && hasAssistantContent(fallback)) {
+      return { ...clone(message), content: clone(fallback.content) };
+    }
+    return clone(message);
+  });
+};
 const repairUtf8String = value => {
   if (typeof value !== 'string' || !value || [...value].some(character => character.charCodeAt(0) > 255)) return value;
   try {
@@ -37,12 +49,11 @@ const repairUtf8Tree = value => {
 };
 
 export class AiAgentService {
-  constructor(system, toolService = null, storage = globalThis.localStorage, agentContext = null, agentTasks = null) {
+  constructor(system, toolService = null, storage = globalThis.localStorage, agentContext = null) {
     this.system = system;
     this.toolService = toolService;
     this.storage = storage;
     this.agentContext = agentContext;
-    this.agentTasks = agentTasks;
     this.ready = false;
     this.loading = false;
     this.error = '';
@@ -71,19 +82,25 @@ export class AiAgentService {
     this.syncError = '';
     try {
       await this.system.mkdir(AI_DATA_DIRECTORY);
-      const cached=this.#loadRecovery();let saved=null,readError=null,missing=false,recoveredFromPrevious=false;
+      const cachedAtStart=this.#loadRecovery();let saved=null,readError=null,missing=false,recoveredFromPrevious=false;
       try{saved=await this.#readState(AI_STATE_PATH)}catch(error){
         readError=error;
         try{saved=await this.#readState(AI_PREVIOUS_STATE_PATH);recoveredFromPrevious=true}catch(previousError){missing=this.#isMissing(error)&&this.#isMissing(previousError)}
       }
       if(saved){
-        const repaired=repairUtf8Tree(saved),guestState=this.#normalise(repaired);
-        this.state=cached?this.#mergeStates(cached,guestState):guestState;
+        const repaired=repairUtf8Tree(saved),guestState=this.#normalise(repaired),latestRecovery=this.#loadRecovery(),liveState=this.#normalise(this.state);
+        // Guest reads can take seconds. During that wait the user may create a
+        // session or start another turn, so the recovery snapshot captured at
+        // the beginning of load is no longer safe to install. Merge the guest
+        // file with the latest in-memory and recovery states at commit time.
+        const browserState=latestRecovery?this.#mergeStates(liveState,latestRecovery):liveState;
+        this.state=this.#mergeStates(browserState,guestState);
         this.#saveRecovery();
-        if(cached||recoveredFromPrevious||JSON.stringify(saved)!==JSON.stringify(repaired))await this.persist(true);
+        if(cachedAtStart||recoveredFromPrevious||JSON.stringify(saved)!==JSON.stringify(repaired))await this.persist(true);
         if(recoveredFromPrevious)this.#emit('ai:recovered',{source:'guest-previous'});
-      }else if(cached){
-        this.state=cached;this.#saveRecovery();
+      }else if(cachedAtStart){
+        const latestRecovery=this.#loadRecovery(),liveState=this.#normalise(this.state);
+        this.state=latestRecovery?this.#mergeStates(liveState,latestRecovery):liveState;this.#saveRecovery();
         await this.persist(true);
         this.#emit('ai:recovered',{source:'browser-recovery'});
       }else if(missing){
@@ -227,13 +244,12 @@ export class AiAgentService {
     // A turn cannot remain running without an active Pi run. This can happen
     // after a provider failure, hot reload, or an interrupted older build.
     for(const stale of session.turns.filter(item=>item.status==='running')){
-      stale.status='stopped';stale.error='';stale.updatedAt=now();this.agentTasks?.finish(stale.id,'cancelled');
+      stale.status='stopped';stale.error='';stale.updatedAt=now();
     }
     this.activeTurns.delete(id);
     const timestamp=now(),context=this.agentContext?.snapshot()||null,contextBlock=this.agentContext?.promptBlock()||'';
     const visibleUserMessage={role:'user',content:prompt,timestamp},userMessage={...visibleUserMessage,content:contextBlock?`${prompt}\n\n${contextBlock}`:prompt};
     const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:'running',user:clone(visibleUserMessage),responses:[],messageIndex:null,error:''};
-    const task=this.agentTasks?.begin({sessionId:id,turnId:turn.id,title:prompt,context});if(task)turn.taskId=task.id;
     session.turns.push(turn);session.updatedAt=userMessage.timestamp;
     this.activeTurns.set(id,turn.id);
     this.#saveRecovery();
@@ -243,7 +259,6 @@ export class AiAgentService {
     } catch (error) {
       turn.status='failed';turn.error=error.message||String(error);turn.updatedAt=now();
       if(this.activeTurns.get(id)===turn.id)this.activeTurns.delete(id);
-      this.agentTasks?.finish(turn.id,'failed',error.message||String(error));
       this.#saveRecovery();
       this.#emit('ai:agent-event',{sessionId:id,turnId:turn.id,event:{type:'turn_failed',error:turn.error}});
       throw error;
@@ -279,7 +294,7 @@ export class AiAgentService {
   abort(id) {
     const session=this.state.sessions.find(item=>item.id===id),activeId=this.activeTurns.get(id);
     if(session){
-      const active=session.turns.find(turn=>turn.id===activeId);if(active){active.status='stopped';active.updatedAt=now();this.agentTasks?.finish(active.id,'cancelled')}
+      const active=session.turns.find(turn=>turn.id===activeId);if(active){active.status='stopped';active.updatedAt=now()}
     }
     this.activeTurns.delete(id);this.streamingAssistantMessages.delete(id);this.sessionRuns.delete(id);this.settlingSessions.delete(id);this.#saveRecovery();
     this.agents.get(id)?.clearAllQueues();
@@ -362,7 +377,7 @@ export class AiAgentService {
       let publishedEvent=event;
       if(event.type==='message_start'&&event.message?.role==='user'){
         let turn=session.turns.find(item=>item.user?.timestamp===event.message.timestamp);
-        const previous=session.turns.find(item=>item.id===this.activeTurns.get(id));if(previous&&previous!==turn&&previous.status==='running'){previous.status='completed';previous.updatedAt=now();this.agentTasks?.finish(previous.id,'completed')}
+        const previous=session.turns.find(item=>item.id===this.activeTurns.get(id));if(previous&&previous!==turn&&previous.status==='running'){previous.status='completed';previous.updatedAt=now()}
         if(!turn){turn={id:crypto.randomUUID(),createdAt:event.message.timestamp||now(),updatedAt:now(),status:'running',user:clone(event.message),responses:[],messageIndex:null,error:''};session.turns.push(turn)}
         turn.status='running';turn.updatedAt=now();this.activeTurns.set(id,turn.id);
       }
@@ -388,7 +403,14 @@ export class AiAgentService {
       }
       if (event.type === 'agent_end') {
         this.settlingSessions.add(id);
-        const turn=session.turns.find(item=>item.id===this.activeTurns.get(id));if(turn){turn.status=agent.state.errorMessage?'failed':'completed';turn.error=agent.state.errorMessage||'';turn.updatedAt=now();this.agentTasks?.finish(turn.id,turn.status,turn.error)}
+        const turn=session.turns.find(item=>item.id===this.activeTurns.get(id));if(turn){
+          // Pi exposes the complete protocol transcript for this run here. Use
+          // it as the source of truth so tool transitions cannot leave the
+          // visible turn with a partial or cleared assistant response. A
+          // streamed non-empty message wins over an empty provider end frame.
+          turn.responses=reconcileTurnResponses(turn.responses,event.messages);
+          turn.status=agent.state.errorMessage?'failed':'completed';turn.error=agent.state.errorMessage||'';turn.updatedAt=now();
+        }
         this.activeTurns.delete(id);
         this.streamingAssistantMessages.delete(id);
         session.messages = clone(agent.state.messages);
