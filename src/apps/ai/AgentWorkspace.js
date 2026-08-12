@@ -286,19 +286,140 @@ const contextViewMarkup = (context, windows, tools, i18n) => {
   </section>`;
 };
 
+const resultValue = activity => Array.isArray(activity.result) ? activity.result : [activity.result].filter(value => value !== null && value !== undefined);
+const resultPath = activity => activity.result?.path || activity.params?.path || '';
+const resultTitle = (activity, i18n) => {
+  const value=resultValue(activity)[0]||{},count=Array.isArray(activity.result)?activity.result.length:0;
+  if(Array.isArray(activity.result)&&count!==1)return i18n.t('resultItemCount').replace('{count}',count);
+  if(activity.appId==='weather')return value.location?.name||activity.params.location||i18n.t('weather');
+  if(activity.appId==='terminal')return activity.params.command||activity.label;
+  if(activity.appId==='calculator')return value.expression||activity.params.expression||activity.label;
+  if(activity.appId==='settings')return i18n.t('settingChanged').replace('{name}',value.key||activity.params.key||'');
+  if(['files','textedit','preview'].includes(activity.appId)){const path=activity.operation==='delete'?activity.params.path:value.path||activity.params.path;return path?.split('/').filter(Boolean).at(-1)||activity.label}
+  return value.title||value.name||value.path||activity.params.title||activity.label;
+};
+const resultSummary = (activity, i18n) => {
+  const value=resultValue(activity)[0]||{},values=resultValue(activity);
+  if(Array.isArray(activity.result))return values.slice(0,3).map(item=>item?.title||item?.name||item?.path||displayValue(item)).join(' · ')||i18n.t('emptyResult');
+  if(activity.appId==='calendar')return [value.start,value.location].filter(Boolean).join(' · ');
+  if(activity.appId==='reminders')return [value.due,value.dueTime].filter(Boolean).join(' · ')||i18n.t(value.done?'completed':'noDueDate');
+  if(activity.appId==='notes')return shortText(value.content||activity.params.content,150);
+  if(activity.appId==='contacts')return [value.email,value.phone].filter(Boolean).join(' · ');
+  if(activity.appId==='files')return activity.operation==='read_file'?shortText(value.content,180):value.bytes?i18n.t('resultBytes').replace('{count}',value.bytes):'';
+  if(activity.appId==='preview')return shortText(value.content,180);
+  if(['textedit','trash'].includes(activity.appId))return '';
+  if(activity.appId==='weather'){const current=value.data?.current||value.current||{};return [current.temperature_2m??current.temperature,current.wind_speed_10m??current.windSpeed].filter(item=>item!==undefined).join(' · ')}
+  if(activity.appId==='terminal')return shortText(value.output||activity.output,180)||i18n.t('commandCompleted');
+  if(activity.appId==='calculator')return String(value.value??activity.output??'');
+  return shortText(typeof activity.result==='object'?displayValue(activity.result):activity.result||activity.output,180);
+};
+const resultIcon = activity => ({calendar:'calendar',reminders:'reminder',notes:'note',contacts:'contacts',files:'folder',textedit:'document',preview:'preview',photos:'image',trash:'delete',weather:'sun',terminal:'terminal',calculator:'calc',settings:'settings'}[activity.appId]||'sparkles');
+const resultOperationKind = operation => ({app_capability:'used',create:'created',create_event:'created',create_folder:'created',create_document:'created',write_file:'written',delete:'deleted',delete_event:'deleted',empty:'emptied',list:'listed',list_events:'listed',list_volumes:'inspected',read_file:'read',read_text:'read',read_metrics:'inspected',current:'checked',current_time:'checked',copy:'copied',move:'moved',rename:'renamed',complete:'completed',search:'searched',update:'updated',run_command:'executed',restart:'restarted',calculate:'calculated'}[operation]||'completed');
+const resultOperationIcon = kind => ({used:'wrench',created:'plus',written:'document',deleted:'delete',emptied:'delete',listed:'list',read:'eye',inspected:'info',checked:'check',copied:'copy',moved:'upload',renamed:'textedit',completed:'check',searched:'search',updated:'settings',executed:'terminal',restarted:'refresh',calculated:'calc'}[kind]||'check');
+const resultOperationCopy = (activity, i18n) => i18n.t(`resultOperation_${resultOperationKind(activity.operation)}`);
+const resultTone = activity => ['deleted','emptied'].includes(resultOperationKind(activity.operation))?'removed':['created','written','copied'].includes(resultOperationKind(activity.operation))?'created':'neutral';
+const resultBoolean = (value, i18n) => i18n.t(value?'resultYes':'resultNo');
+const resultFacts = (activity, i18n) => {
+  const params=activity.params||{},raw=activity.result,value=resultValue(activity)[0]||{},facts=[],add=(label,item)=>{if(item!==''&&item!==null&&item!==undefined)facts.push({label:i18n.t(label),value:String(item)})},count=Array.isArray(raw)?raw.length:null;
+  if(count!==null)add('resultFieldItems',count);
+  if(activity.appId==='calendar'){
+    if(params.date)add('date',params.date);
+    if(!Array.isArray(raw)){add('resultFieldStart',value.start||params.start);add('resultFieldEnd',value.end||params.end);add('resultFieldCalendar',value.calendarId||params.calendarId);add('location',value.location||params.location);add('resultFieldAlert',value.alert||params.alert);if(value.allDay||params.allDay)add('resultFieldAllDay',resultBoolean(true,i18n))}
+  }else if(activity.appId==='reminders'){
+    if(Array.isArray(raw))add('resultFieldIncludeCompleted',resultBoolean(!!params.includeCompleted,i18n));
+    else{const due=value.due||params.due||'';add('dueDate',due||i18n.t('noDueDate'));add('time',value.dueTime||params.dueTime);add('resultFieldState',i18n.t(value.done?'completed':'resultStateActive'));add('priority',resultBoolean(!!(value.priority??params.priority),i18n));if(due)add('notifications',resultBoolean((value.notify??params.notify)!==false,i18n))}
+  }else if(activity.appId==='notes'){
+    add('resultFieldQuery',params.query);if(!Array.isArray(raw)){add('pinned',resultBoolean(!!(value.pinned??params.pinned),i18n));if(value.updatedAt)add('updated',new Intl.DateTimeFormat(i18n.t('dateFormat'),{dateStyle:'medium',timeStyle:'short'}).format(new Date(value.updatedAt)))}
+  }else if(activity.appId==='contacts'){
+    add('resultFieldQuery',params.query);if(!Array.isArray(raw)){add('email',value.email||params.email);add('phone',value.phone||params.phone)}
+  }else if(activity.appId==='files'){
+    if(activity.operation==='rename'){add('resultFieldSource',params.path);add('resultFieldName',params.name);add('resultFieldResultPath',value.path)}
+    else if(activity.operation==='move'){add('resultFieldSource',params.path);add('resultFieldDestination',params.destination);add('resultFieldResultPath',value.path)}
+    else if(activity.operation==='copy'){add('resultFieldSource',params.path);add('resultFieldResultPath',value.path)}
+    else if(activity.operation==='delete'){add('resultFieldSource',params.path);add('resultFieldTrashPath',value.path)}
+    else{add('resultFieldPath',value.path||params.path);add('resultFieldBytes',value.bytes);if(activity.operation==='read_file')add('resultFieldTruncated',resultBoolean(!!value.truncated,i18n))}
+  }else if(activity.appId==='textedit'){add('resultFieldPath',value.path||params.path);add('resultFieldCharacters',String(params.content||'').length)}
+  else if(activity.appId==='preview'){add('resultFieldPath',value.path||params.path);add('resultFieldTruncated',resultBoolean(!!value.truncated,i18n))}
+  else if(activity.appId==='photos'){add('resultFieldLibrary','/home/aeris/Pictures')}
+  else if(activity.appId==='weather'){
+    const data=value.data||value,current=data?.current||value.current||{},units=data?.current_units||{};add('location',[value.location?.name,value.location?.admin1,value.location?.country].filter(Boolean).join(', ')||params.location);add('resultFieldTemperature',current.temperature_2m!==undefined?`${current.temperature_2m}${units.temperature_2m||'°C'}`:current.temperature);add('resultFieldFeelsLike',current.apparent_temperature!==undefined?`${current.apparent_temperature}${units.apparent_temperature||'°C'}`:null);add('resultFieldHumidity',current.relative_humidity_2m!==undefined?`${current.relative_humidity_2m}${units.relative_humidity_2m||'%'}`:null);add('resultFieldWind',current.wind_speed_10m!==undefined?`${current.wind_speed_10m} ${units.wind_speed_10m||'km/h'}`:current.windSpeed)
+  }else if(activity.appId==='terminal'){add('resultFieldExitCode',value.exitCode);add('resultFieldCommand',params.command)}
+  else if(activity.appId==='calculator'){add('resultFieldExpression',value.expression||params.expression);add('toolResult',value.value)}
+  else if(activity.appId==='settings'){add('resultFieldSetting',value.key||params.key);add('resultFieldValue',value.value??params.value)}
+  else if(activity.appId==='clock'){add('time',value.local);add('timezone',value.timezone)}
+  else if(activity.appId==='monitor'){add('resultFieldMemory',value.percent!==undefined?`${value.percent}%`:null);add('resultFieldLoad',value.loadAverage);if(value.uptimeSeconds!==undefined)add('resultFieldUptime',i18n.t('resultMinutes').replace('{count}',Math.floor(value.uptimeSeconds/60)))}
+  else if(activity.appId==='diskutility'){add('resultFieldScope',i18n.t('resultMountedVolumes'))}
+  else if(activity.appId==='machine'){add('resultFieldState',value.restarted?i18n.t('resultStateRestarting'):phaseCopy(activity,i18n))}
+  else if(activity.appId==='trash'){add('resultFieldState',value.emptied?i18n.t('resultStateTrashEmptied'):phaseCopy(activity,i18n))}
+  if(!facts.length)for(const [key,item] of Object.entries(params).slice(0,4))if(item!==''&&item!==null&&item!==undefined)facts.push({label:key.replace(/([A-Z])/g,' $1').replace(/_/g,' '),value:displayValue(item)});
+  return facts.slice(0,6);
+};
+const resultFactsMarkup = (activity, i18n, limit = 6) => {
+  const facts=resultFacts(activity,i18n).slice(0,limit);if(!facts.length)return'';
+  return `<dl class="ai-result-facts">${facts.map(fact=>`<div><dt>${esc(fact.label)}</dt><dd title="${esc(fact.value)}" data-copyable>${esc(fact.value)}</dd></div>`).join('')}</dl>`;
+};
+const resultBodyMarkup = (activity, i18n) => {
+  const value=resultValue(activity)[0]||{},summary=resultSummary(activity,i18n),path=resultPath(activity);
+  if(Array.isArray(activity.result))return `<div class="ai-result-summary">${icon('list',14)}<p data-copyable>${esc(summary)}</p></div>`;
+  if(activity.appId==='calendar'){
+    const date=new Date(value.start||activity.params.start||''),valid=!Number.isNaN(date.getTime());
+    return `<div class="ai-result-calendar"><time><small>${valid?esc(new Intl.DateTimeFormat(i18n.t('dateFormat'),{month:'short'}).format(date)):'—'}</small><strong>${valid?date.getDate():'—'}</strong></time><div><strong>${esc(value.title||activity.params.title||activity.label)}</strong><small>${esc(summary)}</small></div></div>`;
+  }
+  if(activity.appId==='reminders')return `<div class="ai-result-reminder"><i class="${value.done?'done':''}">${value.done?icon('check',10):''}</i><div><strong>${esc(value.title||activity.params.title||activity.label)}</strong><small>${esc(summary)}</small></div></div>`;
+  if(activity.appId==='notes')return `<div class="ai-result-note"><i></i><p data-copyable>${esc(summary||i18n.t('emptyNote'))}</p></div>`;
+  if(activity.appId==='contacts'){const name=value.name||activity.params.name||activity.label;return `<div class="ai-result-contact"><span>${esc(String(name).split(/\s+/).map(part=>part[0]).slice(0,2).join('').toUpperCase())}</span><div><strong>${esc(name)}</strong><small>${esc(summary)}</small></div></div>`}
+  if(activity.appId==='weather'){
+    const current=value.data?.current||value.current||{},temperature=current.temperature_2m??current.temperature??'—';
+    return `<div class="ai-result-weather">${icon('sun',25)}<div><strong>${esc(temperature)}${temperature==='—'?'':'°'}</strong><small>${esc(value.location?.name||activity.params.location||i18n.t('weather'))}</small></div></div>`;
+  }
+  if(activity.appId==='terminal')return `<div class="ai-result-terminal"><code>❯ ${esc(activity.params.command||'')}</code>${summary?`<pre data-copyable>${esc(summary)}</pre>`:''}</div>`;
+  if(activity.appId==='calculator')return `<div class="ai-result-calculation"><small>${esc(value.expression||activity.params.expression||'')}</small><strong>${esc(value.value??activity.output??'')}</strong></div>`;
+  if(path)return `<div class="ai-result-file"><span>${icon(activity.operation==='create_folder'?'folder':'document',19)}</span><div><strong>${esc(path.split('/').filter(Boolean).at(-1)||path)}</strong>${summary?`<small>${esc(summary)}</small>`:''}<code data-copyable>${esc(path)}</code></div></div>`;
+  return summary?`<div class="ai-result-summary">${icon(resultIcon(activity),14)}<p data-copyable>${esc(summary)}</p></div>`:'';
+};
+const resultOpenTarget = activity => {
+  const path=resultPath(activity);
+  if(activity.appId==='textedit')return{appId:'textedit',path};
+  if(activity.appId==='preview')return{appId:'preview',path};
+  if(activity.appId==='files'&&activity.operation==='delete')return{appId:'trash',path:''};
+  if(activity.appId==='files'&&['read_file','write_file'].includes(activity.operation))return{appId:/\.(png|jpe?g|gif|webp|svg|pdf)$/i.test(path)?'preview':'textedit',path};
+  if(activity.appId==='files')return{appId:'files',path:activity.operation==='create_folder'?path:path.split('/').slice(0,-1).join('/')||'/home/aeris'};
+  if(activity.appId==='trash')return{appId:'trash',path:''};
+  return{appId:activity.appId,path:''};
+};
+
+const resultsViewMarkup = (activities, tools, i18n) => {
+  const results=activities.filter(activity=>activity.phase==='completed'&&(activity.result!==null&&activity.result!==undefined));
+  return `<section class="ai-results-workspace">
+    <header><div><strong>${esc(i18n.t('workspaceResults'))}</strong><small>${esc(i18n.t('workspaceResultsCopy'))}</small></div><em>${results.length}</em></header>
+    <div class="ai-results-scroll">${results.length?[...results].reverse().map(activity=>{
+      const app=tools.registry.get(activity.appId),target=resultOpenTarget(activity),path=resultPath(activity),time=activity.finishedAt?new Intl.DateTimeFormat(i18n.t('dateFormat'),{hour:'2-digit',minute:'2-digit'}).format(new Date(activity.finishedAt)):'',duration=durationCopy(activity),meta=[app?i18n.t(app.title):i18n.t('systemTool'),i18n.t('completed'),activity.risk==='high'?i18n.t('resultApproved'):'',time,duration].filter(Boolean).join(' · ');
+      const operationKind=resultOperationKind(activity.operation);
+      return `<article class="ai-result-card tone-${resultTone(activity)} operation-${esc(operationKind)}">
+        <header><span class="app-icon app-icon-${esc(app?.color||'blue')}">${icon(app?.icon||resultIcon(activity),17)}</span><div><small>${esc(meta)}</small><strong>${esc(resultTitle(activity,i18n))}</strong></div><b class="ai-result-operation">${icon(resultOperationIcon(operationKind),10)} ${esc(resultOperationCopy(activity,i18n))}</b></header>
+        ${resultBodyMarkup(activity,i18n)}
+        ${resultFactsMarkup(activity,i18n)}
+        <footer><button data-ai-workspace-turn="${esc(activity.turnId)}" title="${esc(i18n.t('locateInConversation'))}">${icon('message',12)}</button>${path?`<button data-ai-reveal-result="${esc(activity.id)}" title="${esc(i18n.t('showInFiles'))}">${icon('folder',12)}</button>`:''}<span></span><button data-ai-copy-result="${esc(activity.id)}">${icon('copy',12)} ${esc(i18n.t('copy'))}</button>${target.appId?`<button class="primary" data-ai-open-result="${esc(activity.id)}" data-result-app="${esc(target.appId)}" data-result-path="${esc(target.path)}">${esc(i18n.t('open'))} ${icon('chevron',11)}</button>`:''}</footer>
+      </article>`;
+    }).join(''):`<div class="ai-results-empty"><span>${icon('sparkles',25)}</span><strong>${esc(i18n.t('noResultsTitle'))}</strong><p>${esc(i18n.t('noResultsCopy'))}</p></div>`}</div>
+  </section>`;
+};
+
 export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '', session = null, activityExpanded = true, view = 'app', context = null, windows = [] } = {}) {
   const resizeHandle = `<div class="ai-workspace-resize" data-ai-workspace-resize role="separator" aria-orientation="vertical" aria-label="${esc(i18n.t('resizeWorkspace'))}" tabindex="0"><i></i></div>`;
   const signature=suppliedSignature||workspaceSignature(activity);
   const history=activityHistoryMarkup(session,activities,activity?.id,tools,i18n,activityExpanded);
   const countCopy=i18n.t('workspaceActivityCount').replace('{count}',activities.length);
   const app=activity?tools.registry.get(activity.appId):null;
-  const detail=activity&&app?`<section class="ai-activity-detail">
-    <header><span class="app-icon app-icon-${esc(app.color)}">${icon(app.icon, 16)}</span><div><strong>${esc(activity.label)}</strong><small><i class="phase-${esc(activity.phase)}"></i>${esc(phaseCopy(activity, i18n))}</small></div><button data-ai-open-workspace-app="${esc(app.id)}" title="${esc(i18n.t('openInApp'))}">${icon('maximize', 14)}</button></header>
+  const detailOperationKind=activity?resultOperationKind(activity.operation):'completed',detailDuration=activity?durationCopy(activity):'',detailRisk=activity?.risk==='high'?i18n.t(activity.phase==='approval'?'approvalRequired':['completed','failed'].includes(activity.phase)?'resultApproved':'highRisk'):'';
+  const detail=activity&&app?`<section class="ai-activity-detail tone-${resultTone(activity)}">
+    <header><span class="app-icon app-icon-${esc(app.color)}">${icon(app.icon, 16)}</span><div><strong>${esc(activity.label)}</strong><small><i class="phase-${esc(activity.phase)}"></i>${esc([phaseCopy(activity,i18n),detailRisk,detailDuration].filter(Boolean).join(' · '))}</small></div><b class="ai-activity-operation">${icon(resultOperationIcon(detailOperationKind),10)} ${esc(resultOperationCopy(activity,i18n))}</b><button data-ai-open-workspace-app="${esc(app.id)}" title="${esc(i18n.t('openInApp'))}">${icon('maximize', 14)}</button></header>
     <div class="agent-app-window">
       <div class="agent-app-chrome"><span></span><span></span><span></span><strong>${esc(i18n.t(app.title))}</strong></div>
       <div class="agent-app-surface">${surfaceFor(activity, i18n)}</div>
       ${activity.phase === 'running' || activity.phase === 'approval' ? `<div class="agent-work-overlay"><span>${icon(activity.phase === 'approval' ? 'lock' : 'sparkles', 18)}</span><strong>${esc(phaseCopy(activity, i18n))}</strong></div>` : ''}
     </div>
+    ${resultFactsMarkup(activity,i18n,4)}
     <details class="ai-activity-inspector"><summary>${esc(i18n.t('activityDetails'))}${icon('chevron', 11)}</summary><div>
       <section><small>${esc(i18n.t('toolParameters'))}</small><pre data-copyable>${esc(displayValue(activity.params))}</pre></section>
       ${activity.result != null || activity.output ? `<section><small>${esc(i18n.t('toolResult'))}</small><pre data-copyable>${esc(displayValue(activity.result ?? activity.output))}</pre></section>` : ''}
@@ -311,11 +432,11 @@ export function workspaceMarkup(activity, activities, tools, i18n, { animate = t
       <div><strong>${esc(i18n.t('agentWorkspace'))}</strong><small>${esc(activities.length?countCopy:i18n.t('workspaceReady'))}</small></div>
       <button data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}">${icon('close', 15)}</button>
     </header>
-    <nav class="ai-workspace-view-switch" aria-label="${esc(i18n.t('agentWorkspace'))}"><button class="${view==='app'?'selected':''}" data-ai-workspace-view="app" aria-pressed="${view==='app'}">${icon('maximize',12)} ${esc(i18n.t('workspaceAppView'))}</button><button class="${view==='context'?'selected':''}" data-ai-workspace-view="context" aria-pressed="${view==='context'}">${icon('focus',12)} ${esc(i18n.t('currentContext'))}</button></nav>
+    <nav class="ai-workspace-view-switch" aria-label="${esc(i18n.t('agentWorkspace'))}"><button class="${view==='app'?'selected':''}" data-ai-workspace-view="app" aria-pressed="${view==='app'}">${icon('maximize',12)} ${esc(i18n.t('workspaceAppView'))}</button><button class="${view==='context'?'selected':''}" data-ai-workspace-view="context" aria-pressed="${view==='context'}">${icon('focus',12)} ${esc(i18n.t('workspaceContextView'))}</button><button class="${view==='results'?'selected':''}" data-ai-workspace-view="results" aria-pressed="${view==='results'}">${icon('sparkles',12)} ${esc(i18n.t('workspaceResults'))}</button></nav>
     <main class="ai-workspace-activity-layout">
-      ${view==='context'?contextViewMarkup(context,windows,tools,i18n):detail}
+      ${view==='context'?contextViewMarkup(context,windows,tools,i18n):view==='results'?resultsViewMarkup(activities,tools,i18n):detail}
       ${history}
     </main>
-    <footer><span>${icon(view==='context'?'lock':'aerisAi',14)} ${esc(i18n.t(view==='context'?'contextManagedByAeris':'agentWorkspace'))}</span>${view==='app'&&app?`<button data-ai-open-workspace-app="${esc(app.id)}">${esc(i18n.t('openInApp'))} ${icon('chevron',12)}</button>`:''}</footer>
+    <footer><span>${icon(view==='context'?'lock':view==='results'?'sparkles':'aerisAi',14)} ${esc(i18n.t(view==='context'?'contextManagedByAeris':view==='results'?'resultsManagedByAeris':'agentWorkspace'))}</span>${view==='app'&&app?`<button data-ai-open-workspace-app="${esc(app.id)}">${esc(i18n.t('openInApp'))} ${icon('chevron',12)}</button>`:''}</footer>
   </aside>`;
 }
