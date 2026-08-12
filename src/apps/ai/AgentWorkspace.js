@@ -363,25 +363,20 @@ const resultsViewMarkup = (activities, tools, i18n) => {
   </section>`;
 };
 
-export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '', view = 'app', context = null, windows = [] } = {}) {
+const activityViewMarkup = (apps, activeAppId, i18n) => {
+  const active=apps.find(app=>app.id===activeAppId)||null;
+  return `<section class="ai-live-activity" data-ai-live-activity data-activity-app-id="${esc(active?.id||'')}">
+    ${apps.length?`<nav class="ai-activity-window-list" aria-label="${esc(i18n.t('activeApps'))}">${apps.map(app=>`<button class="${app.id===active?.id?'selected':''}" data-ai-activity-app="${esc(app.id)}" title="${esc(i18n.t(app.title))}"><span class="app-icon app-icon-${esc(app.color||'grey')}">${icon(app.icon,14)}</span><span>${esc(i18n.t(app.title))}</span><i></i></button>`).join('')}</nav>`:''}
+    <div class="ai-activity-stage ${active?'has-window':''}" data-ai-activity-host>
+      ${active?'':`<div class="ai-activity-empty"><span>${icon('maximize',26)}</span><strong>${esc(i18n.t('noActiveAppTitle'))}</strong><p>${esc(i18n.t('noActiveAppCopy'))}</p></div>`}
+    </div>
+  </section>`;
+};
+
+export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '', view = 'activity', context = null, windows = [], activityApps = [], activityAppId = '' } = {}) {
   const resizeHandle = `<div class="ai-workspace-resize" data-ai-workspace-resize role="separator" aria-orientation="vertical" aria-label="${esc(i18n.t('resizeWorkspace'))}" tabindex="0"><i></i></div>`;
   const signature=suppliedSignature||workspaceSignature(activity);
   const countCopy=i18n.t('workspaceToolCallCount').replace('{count}',activities.length);
-  const app=activity?tools.registry.get(activity.appId):null;
-  const detailOperationKind=activity?resultOperationKind(activity.operation):'completed',detailDuration=activity?durationCopy(activity):'',detailRisk=activity?.risk==='high'?i18n.t(activity.phase==='approval'?'approvalRequired':['completed','failed'].includes(activity.phase)?'resultApproved':'highRisk'):'';
-  const detail=activity&&app?`<section class="ai-activity-detail tone-${resultTone(activity)}">
-    <header><span class="app-icon app-icon-${esc(app.color)}">${icon(app.icon, 16)}</span><div><strong>${esc(activity.label)}</strong><small><i class="phase-${esc(activity.phase)}"></i>${esc([phaseCopy(activity,i18n),detailRisk,detailDuration].filter(Boolean).join(' · '))}</small></div><b class="ai-activity-operation">${icon(resultOperationIcon(detailOperationKind),10)} ${esc(resultOperationCopy(activity,i18n))}</b><button data-ai-open-workspace-app="${esc(app.id)}" title="${esc(i18n.t('openInApp'))}">${icon('maximize', 14)}</button></header>
-    <div class="agent-app-window">
-      <div class="agent-app-chrome"><span></span><span></span><span></span><strong>${esc(i18n.t(app.title))}</strong></div>
-      <div class="agent-app-surface">${surfaceFor(activity, i18n)}</div>
-      ${activity.phase === 'running' || activity.phase === 'approval' ? `<div class="agent-work-overlay"><span>${icon(activity.phase === 'approval' ? 'lock' : 'sparkles', 18)}</span><strong>${esc(phaseCopy(activity, i18n))}</strong></div>` : ''}
-    </div>
-    ${resultFactsMarkup(activity,i18n,4)}
-    <details class="ai-activity-inspector"><summary>${esc(i18n.t('activityDetails'))}${icon('chevron', 11)}</summary><div>
-      <section><small>${esc(i18n.t('toolParameters'))}</small><pre data-copyable>${esc(displayValue(activity.params))}</pre></section>
-      ${activity.result != null || activity.output ? `<section><small>${esc(i18n.t('toolResult'))}</small><pre data-copyable>${esc(displayValue(activity.result ?? activity.output))}</pre></section>` : ''}
-    </div></details>
-  </section>`:`<section class="ai-workspace-empty-state"><span>${icon('panelRight',27)}</span><strong>${esc(i18n.t('workspaceEmptyTitle'))}</strong><p>${esc(i18n.t('workspaceEmptyCopy'))}</p></section>`;
   return `<aside class="ai-app-workspace ${activity?`ai-app-workspace-${esc(activity.phase)}`:'ai-app-workspace-empty'} ${animate?'':'ai-app-workspace-stable'}" data-ai-app-workspace data-workspace-tool-id="${esc(activity?.id||'')}" data-workspace-signature="${esc(signature||'empty')}">
     ${resizeHandle}
     <header>
@@ -389,10 +384,10 @@ export function workspaceMarkup(activity, activities, tools, i18n, { animate = t
       <div><strong>${esc(i18n.t('agentWorkspace'))}</strong><small>${esc(activities.length?countCopy:i18n.t('workspaceReady'))}</small></div>
       <button data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}">${icon('close', 15)}</button>
     </header>
-    <nav class="ai-workspace-view-switch" aria-label="${esc(i18n.t('agentWorkspace'))}"><button class="${view==='app'?'selected':''}" data-ai-workspace-view="app" aria-pressed="${view==='app'}">${icon('maximize',12)} ${esc(i18n.t('workspaceAppView'))}</button><button class="${view==='context'?'selected':''}" data-ai-workspace-view="context" aria-pressed="${view==='context'}">${icon('focus',12)} ${esc(i18n.t('workspaceContextView'))}</button><button class="${view==='results'?'selected':''}" data-ai-workspace-view="results" aria-pressed="${view==='results'}">${icon('sparkles',12)} ${esc(i18n.t('workspaceResults'))}</button></nav>
+    <nav class="ai-workspace-view-switch" aria-label="${esc(i18n.t('agentWorkspace'))}"><button class="${view==='activity'?'selected':''}" data-ai-workspace-view="activity" aria-pressed="${view==='activity'}">${icon('maximize',12)} ${esc(i18n.t('workspaceActivity'))}</button><button class="${view==='context'?'selected':''}" data-ai-workspace-view="context" aria-pressed="${view==='context'}">${icon('focus',12)} ${esc(i18n.t('workspaceContextView'))}</button><button class="${view==='results'?'selected':''}" data-ai-workspace-view="results" aria-pressed="${view==='results'}">${icon('sparkles',12)} ${esc(i18n.t('workspaceResults'))}</button></nav>
     <main class="ai-workspace-content-layout">
-      ${view==='context'?contextViewMarkup(context,windows,tools,i18n):view==='results'?resultsViewMarkup(activities,tools,i18n):detail}
+      ${view==='activity'?activityViewMarkup(activityApps,activityAppId,i18n):view==='context'?contextViewMarkup(context,windows,tools,i18n):resultsViewMarkup(activities,tools,i18n)}
     </main>
-    <footer><span>${icon(view==='context'?'lock':view==='results'?'sparkles':'aerisAi',14)} ${esc(i18n.t(view==='context'?'contextManagedByAeris':view==='results'?'resultsManagedByAeris':'agentWorkspace'))}</span>${view==='app'&&app?`<button data-ai-open-workspace-app="${esc(app.id)}">${esc(i18n.t('openInApp'))} ${icon('chevron',12)}</button>`:''}</footer>
+    <footer><span>${icon(view==='context'?'lock':view==='results'?'sparkles':'maximize',14)} ${esc(i18n.t(view==='context'?'contextManagedByAeris':view==='results'?'resultsManagedByAeris':'activityManagedByAeris'))}</span></footer>
   </aside>`;
 }
