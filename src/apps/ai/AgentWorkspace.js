@@ -117,55 +117,12 @@ const phaseCopy = (activity, i18n) => ({
   cancelled: i18n.t('toolStatus_cancelled'),
 }[activity.phase] || i18n.t(`toolStatus_${activity.phase}`));
 
-const phaseIcon = phase => phase === 'completed'
-  ? 'check'
-  : ['failed', 'denied', 'cancelled'].includes(phase)
-    ? 'warning'
-    : phase === 'approval' ? 'lock' : 'refresh';
-
 const durationCopy = activity => {
   if (!activity.startedAt || !activity.finishedAt || activity.finishedAt < activity.startedAt) return '';
   const milliseconds = activity.finishedAt - activity.startedAt;
   if (milliseconds < 1000) return '<1s';
   if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(milliseconds < 10_000 ? 1 : 0)}s`;
   return `${Math.floor(milliseconds / 60_000)}m ${Math.round((milliseconds % 60_000) / 1000)}s`;
-};
-
-const activityGroups = (session, activities) => {
-  const byTurn = new Map();
-  for (const activity of activities) {
-    if (!byTurn.has(activity.turnId)) byTurn.set(activity.turnId, []);
-    byTurn.get(activity.turnId).push(activity);
-  }
-  return (session?.turns || []).map(turn => ({
-    id: turn.id,
-    prompt: shortText(messageText(turn.user)) || '—',
-    createdAt: turn.createdAt,
-    activities: byTurn.get(turn.id) || [],
-  })).filter(group => group.activities.length).reverse();
-};
-
-const activityHistoryMarkup = (session, activities, selectedId, tools, i18n, expanded = true) => {
-  const groups = activityGroups(session, activities);
-  if (!groups.length) return '';
-  return `<section class="ai-activity-history ${expanded ? 'is-expanded' : 'is-collapsed'}" data-ai-activity-history>
-    <header><button data-ai-toggle-activity-history aria-expanded="${expanded}" title="${esc(i18n.t(expanded ? 'collapseActivityHistory' : 'expandActivityHistory'))}"><div><strong>${esc(i18n.t('activityHistory'))}</strong><small>${esc(i18n.t('workspaceActivityCount').replace('{count}', activities.length))}</small></div>${icon('chevron', 12)}</button></header>
-    <div class="ai-activity-groups">${groups.map(group => {
-      const time = group.createdAt ? new Intl.DateTimeFormat(i18n.t('dateFormat'), { hour: '2-digit', minute: '2-digit' }).format(new Date(group.createdAt)) : '';
-      return `<article class="ai-activity-group">
-        <header><div><small>${esc(i18n.t('workspaceRequest'))}${time ? ` · ${esc(time)}` : ''}</small><strong title="${esc(group.prompt)}">${esc(group.prompt)}</strong></div><button data-ai-workspace-turn="${esc(group.id)}" title="${esc(i18n.t('locateInConversation'))}">${icon('message', 13)}</button></header>
-        <div>${group.activities.map(activity => {
-          const app = tools.registry.get(activity.appId);
-          const duration = durationCopy(activity);
-          return `<button class="ai-activity-item phase-${esc(activity.phase)} ${activity.id === selectedId ? 'selected' : ''}" data-ai-workspace-activity="${esc(activity.id)}">
-            <span class="app-icon app-icon-${esc(app?.color || 'grey')}">${icon(app?.icon || 'wrench', 14)}</span>
-            <span><strong>${esc(activity.label)}</strong><small>${esc(app ? i18n.t(app.title) : i18n.t('systemTool'))}${duration ? ` · ${esc(duration)}` : ''}</small></span>
-            <em title="${esc(phaseCopy(activity, i18n))}">${icon(phaseIcon(activity.phase), 11)}</em>
-          </button>`;
-        }).join('')}</div>
-      </article>`;
-    }).join('')}</div>
-  </section>`;
 };
 
 const rows = (values, limit = 6) => Object.entries(values || {}).slice(0, limit).map(([key, value]) => `
@@ -259,7 +216,7 @@ const resourceIcon = resource => resource?.kind === 'desktop'
       : resource?.kind?.includes('calendar') ? 'calendar'
         : resource?.kind === 'reminder' ? 'reminder' : 'maximize';
 
-const contextViewMarkup = (context, windows, tools, i18n) => {
+export const contextViewMarkup = (context, windows, tools, i18n) => {
   const app=context?.appId?tools.registry.get(context.appId):null,resource=context?.resource||null,selection=context?.selection||null;
   const label=resource?.name||resource?.path||resource?.date||context?.label||i18n.t('desktop');
   const metadata=resource?.metadata&&typeof resource.metadata==='object'?Object.fromEntries(Object.entries(resource.metadata).filter(([key,value])=>key!=='content'&&value!==''&&value!==null&&value!==undefined)):{};
@@ -389,27 +346,27 @@ const resultOpenTarget = activity => {
 };
 
 const resultsViewMarkup = (activities, tools, i18n) => {
-  const results=activities.filter(activity=>activity.phase==='completed'&&(activity.result!==null&&activity.result!==undefined));
+  const results=activities;
   return `<section class="ai-results-workspace">
     <header><div><strong>${esc(i18n.t('workspaceResults'))}</strong><small>${esc(i18n.t('workspaceResultsCopy'))}</small></div><em>${results.length}</em></header>
     <div class="ai-results-scroll">${results.length?[...results].reverse().map(activity=>{
-      const app=tools.registry.get(activity.appId),target=resultOpenTarget(activity),path=resultPath(activity),time=activity.finishedAt?new Intl.DateTimeFormat(i18n.t('dateFormat'),{hour:'2-digit',minute:'2-digit'}).format(new Date(activity.finishedAt)):'',duration=durationCopy(activity),meta=[app?i18n.t(app.title):i18n.t('systemTool'),i18n.t('completed'),activity.risk==='high'?i18n.t('resultApproved'):'',time,duration].filter(Boolean).join(' · ');
+      const app=tools.registry.get(activity.appId),target=resultOpenTarget(activity),path=resultPath(activity),time=(activity.finishedAt||activity.startedAt)?new Intl.DateTimeFormat(i18n.t('dateFormat'),{hour:'2-digit',minute:'2-digit'}).format(new Date(activity.finishedAt||activity.startedAt)):'',duration=durationCopy(activity),meta=[app?i18n.t(app.title):i18n.t('systemTool'),phaseCopy(activity,i18n),activity.risk==='high'&&['completed','failed'].includes(activity.phase)?i18n.t('resultApproved'):'',time,duration].filter(Boolean).join(' · ');
       const operationKind=resultOperationKind(activity.operation);
-      return `<article class="ai-result-card tone-${resultTone(activity)} operation-${esc(operationKind)}">
+      return `<article class="ai-result-card tone-${resultTone(activity)} operation-${esc(operationKind)} phase-${esc(activity.phase)}">
         <header><span class="app-icon app-icon-${esc(app?.color||'blue')}">${icon(app?.icon||resultIcon(activity),17)}</span><div><small>${esc(meta)}</small><strong>${esc(resultTitle(activity,i18n))}</strong></div><b class="ai-result-operation">${icon(resultOperationIcon(operationKind),10)} ${esc(resultOperationCopy(activity,i18n))}</b></header>
         ${resultBodyMarkup(activity,i18n)}
         ${resultFactsMarkup(activity,i18n)}
+        <details class="ai-activity-inspector ai-result-inspector"><summary>${esc(i18n.t('toolCallDetails'))}${icon('chevron',11)}</summary><div><section><small>${esc(i18n.t('toolParameters'))}</small><pre data-copyable>${esc(displayValue(activity.params))}</pre></section>${activity.result!=null||activity.output?`<section><small>${esc(i18n.t('toolResult'))}</small><pre data-copyable>${esc(displayValue(activity.result??activity.output))}</pre></section>`:''}</div></details>
         <footer><button data-ai-workspace-turn="${esc(activity.turnId)}" title="${esc(i18n.t('locateInConversation'))}">${icon('message',12)}</button>${path?`<button data-ai-reveal-result="${esc(activity.id)}" title="${esc(i18n.t('showInFiles'))}">${icon('folder',12)}</button>`:''}<span></span><button data-ai-copy-result="${esc(activity.id)}">${icon('copy',12)} ${esc(i18n.t('copy'))}</button>${target.appId?`<button class="primary" data-ai-open-result="${esc(activity.id)}" data-result-app="${esc(target.appId)}" data-result-path="${esc(target.path)}">${esc(i18n.t('open'))} ${icon('chevron',11)}</button>`:''}</footer>
       </article>`;
     }).join(''):`<div class="ai-results-empty"><span>${icon('sparkles',25)}</span><strong>${esc(i18n.t('noResultsTitle'))}</strong><p>${esc(i18n.t('noResultsCopy'))}</p></div>`}</div>
   </section>`;
 };
 
-export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '', session = null, activityExpanded = true, view = 'app', context = null, windows = [] } = {}) {
+export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '', view = 'app', context = null, windows = [] } = {}) {
   const resizeHandle = `<div class="ai-workspace-resize" data-ai-workspace-resize role="separator" aria-orientation="vertical" aria-label="${esc(i18n.t('resizeWorkspace'))}" tabindex="0"><i></i></div>`;
   const signature=suppliedSignature||workspaceSignature(activity);
-  const history=activityHistoryMarkup(session,activities,activity?.id,tools,i18n,activityExpanded);
-  const countCopy=i18n.t('workspaceActivityCount').replace('{count}',activities.length);
+  const countCopy=i18n.t('workspaceToolCallCount').replace('{count}',activities.length);
   const app=activity?tools.registry.get(activity.appId):null;
   const detailOperationKind=activity?resultOperationKind(activity.operation):'completed',detailDuration=activity?durationCopy(activity):'',detailRisk=activity?.risk==='high'?i18n.t(activity.phase==='approval'?'approvalRequired':['completed','failed'].includes(activity.phase)?'resultApproved':'highRisk'):'';
   const detail=activity&&app?`<section class="ai-activity-detail tone-${resultTone(activity)}">
@@ -433,9 +390,8 @@ export function workspaceMarkup(activity, activities, tools, i18n, { animate = t
       <button data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}">${icon('close', 15)}</button>
     </header>
     <nav class="ai-workspace-view-switch" aria-label="${esc(i18n.t('agentWorkspace'))}"><button class="${view==='app'?'selected':''}" data-ai-workspace-view="app" aria-pressed="${view==='app'}">${icon('maximize',12)} ${esc(i18n.t('workspaceAppView'))}</button><button class="${view==='context'?'selected':''}" data-ai-workspace-view="context" aria-pressed="${view==='context'}">${icon('focus',12)} ${esc(i18n.t('workspaceContextView'))}</button><button class="${view==='results'?'selected':''}" data-ai-workspace-view="results" aria-pressed="${view==='results'}">${icon('sparkles',12)} ${esc(i18n.t('workspaceResults'))}</button></nav>
-    <main class="ai-workspace-activity-layout">
+    <main class="ai-workspace-content-layout">
       ${view==='context'?contextViewMarkup(context,windows,tools,i18n):view==='results'?resultsViewMarkup(activities,tools,i18n):detail}
-      ${history}
     </main>
     <footer><span>${icon(view==='context'?'lock':view==='results'?'sparkles':'aerisAi',14)} ${esc(i18n.t(view==='context'?'contextManagedByAeris':view==='results'?'resultsManagedByAeris':'agentWorkspace'))}</span>${view==='app'&&app?`<button data-ai-open-workspace-app="${esc(app.id)}">${esc(i18n.t('openInApp'))} ${icon('chevron',12)}</button>`:''}</footer>
   </aside>`;

@@ -1,6 +1,6 @@
 import { icon } from '../../icons.js';
 import { AI_STATE_PATH } from '../../services/AiAgentService.js';
-import { collectToolActivities, workspaceMarkup, workspaceSignature } from './AgentWorkspace.js';
+import { collectToolActivities, contextViewMarkup, workspaceMarkup, workspaceSignature } from './AgentWorkspace.js';
 import { renderMarkdown } from './MarkdownRenderer.js';
 
 const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -12,6 +12,7 @@ const WORKSPACE_PREFS_KEY = 'aeris.ai.workspace';
 const DEFAULT_WORKSPACE_WIDTH = 390;
 const MIN_WORKSPACE_WIDTH = 310;
 const MAX_WORKSPACE_WIDTH = 560;
+const conversationSignature=session=>`${session?.activeTurnId||''}:${session?.streaming?'1':'0'}:${(session?.turns||[]).map(turn=>`${turn.id}:${turn.status}:${turn.responses?.length||0}`).join('|')}`;
 
 const readWorkspacePrefs = () => {
   try {
@@ -19,31 +20,30 @@ const readWorkspacePrefs = () => {
     return {
       open: Boolean(stored.open),
       width: Math.max(MIN_WORKSPACE_WIDTH, Math.min(MAX_WORKSPACE_WIDTH, Number(stored.width) || DEFAULT_WORKSPACE_WIDTH)),
-      activityExpanded: stored.activityExpanded !== false,
       view: ['app','context','results'].includes(stored.view) ? stored.view : 'app',
     };
   } catch {
-    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, activityExpanded: true, view: 'app' };
+    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, view: 'app' };
   }
 };
 
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
-  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, agentTasks }) {
+  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry }) {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
     let workspaceSelectedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
-    let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, activityExpanded = workspacePrefs.activityExpanded, workspaceView = workspacePrefs.view;
+    let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, workspaceView = workspacePrefs.view;
 
     const persistWorkspacePrefs = () => {
-      try { localStorage.setItem(WORKSPACE_PREFS_KEY, JSON.stringify({ open: workspaceOpen, width: workspaceWidth, activityExpanded, view: workspaceView })); } catch {}
+      try { localStorage.setItem(WORKSPACE_PREFS_KEY, JSON.stringify({ open: workspaceOpen, width: workspaceWidth, view: workspaceView })); } catch {}
     };
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
     const current = () => activeId ? aiAgent.sessionState(activeId) : null;
     const friendlyError = error => /guest command|mkdir -p|__aeris_/i.test(error?.message || '') ? i18n.t('conversationSaveFailed') : (error?.message || String(error));
-    const ensureSession = async () => {
+    const ensureSession = () => {
       if (!aiAgent.ready || activeId) return;
       activeId = aiAgent.snapshot().sessions[0]?.id || null;
     };
@@ -51,17 +51,8 @@ export default {
     const contextMarkup=()=>{
       const context=agentContext.snapshot(),windows=shell.windowManager.contextWindows();
       const app=tools.registry.get(context?.appId),resource=context?.resource,label=resource?.name||resource?.path||resource?.date||context?.label||i18n.t('chooseContext'),desktop=resource?.kind==='desktop';
-      const picker=contextMenuOpen?`<section class="ai-context-picker"><header><span><strong>${i18n.t('chooseContext')}</strong><small>${i18n.t('chooseContextCopy')}</small></span><button data-ai-close-context aria-label="${i18n.t('close')}">${icon('close',11)}</button></header><button data-ai-context-desktop class="${desktop?'selected':''}"><span class="app-icon app-icon-blue">${icon('desktop',14)}</span><span><strong>${i18n.t('desktop')}</strong><small>${i18n.t('desktopContext')}</small></span>${desktop?icon('check',11):''}</button>${windows.map(item=>`<button data-ai-context-window="${esc(item.id)}" class="${context?.windowId===item.id?'selected':''}"><span class="app-icon app-icon-${item.color}">${icon(item.icon,14)}</span><span><strong>${esc(item.title)}</strong><small>${esc(item.path||i18n.t(item.minimized?'minimizedWindow':'openWindow'))}</small></span>${context?.windowId===item.id?icon('check',11):''}</button>`).join('')}</section>`:'';
+      const picker=`<section class="ai-context-picker" ${contextMenuOpen?'':'hidden'}><header><span><strong>${i18n.t('chooseContext')}</strong><small>${i18n.t('chooseContextCopy')}</small></span><button data-ai-close-context aria-label="${i18n.t('close')}">${icon('close',11)}</button></header><button data-ai-context-desktop class="${desktop?'selected':''}"><span class="app-icon app-icon-blue">${icon('desktop',14)}</span><span><strong>${i18n.t('desktop')}</strong><small>${i18n.t('desktopContext')}</small></span>${desktop?icon('check',11):''}</button>${windows.map(item=>`<button data-ai-context-window="${esc(item.id)}" class="${context?.windowId===item.id?'selected':''}"><span class="app-icon app-icon-${item.color}">${icon(item.icon,14)}</span><span><strong>${esc(item.title)}</strong><small>${esc(item.path||i18n.t(item.minimized?'minimizedWindow':'openWindow'))}</small></span>${context?.windowId===item.id?icon('check',11):''}</button>`).join('')}</section>`;
       return`<div class="ai-composer-context ai-native-context-wrap"><button data-ai-context-selector aria-expanded="${contextMenuOpen}" title="${i18n.t('chooseContext')}"><span class="app-icon app-icon-${app?.color||'blue'}">${icon(app?.icon||(desktop?'desktop':'maximize'),12)}</span><strong>${esc(context?label:i18n.t('chooseContext'))}</strong>${context?.selection?.text?`<em>${i18n.t('selectedText')}</em>`:''}${icon('chevron',9)}</button>${picker}</div>`;
-    };
-    const taskMarkup=()=>{
-      const session=current(),tasks=activeId?agentTasks.forSession(activeId):[];
-      const task=(session?.activeTurnId&&tasks.find(item=>item.turnId===session.activeTurnId))||tasks.find(item=>item.status==='running'&&item.steps.length)||tasks.find(item=>!item.dismissed&&['failed','cancelled'].includes(item.status)&&item.steps.length);
-      // A system task is useful only while an app tool is active or needs
-      // attention. The completed tool call already lives in the conversation.
-      if(!task||task.dismissed||!task.steps.length||task.status==='completed')return'';
-      const statusKey=task.status==='running'?'agentTaskRunning':task.status==='failed'?'agentTaskFailed':'agentTaskCancelled';
-      return`<section class="ai-native-task ${task.status}" data-ai-task="${esc(task.id)}"><header><span>${icon('aerisAi',14)}</span><div><small>${i18n.t('systemTask')}</small><strong>${esc(task.title)}</strong></div><em>${i18n.t(statusKey)}</em>${task.status!=='running'?`<button data-ai-dismiss-task="${esc(task.id)}" title="${i18n.t('dismiss')}">${icon('close',10)}</button>`:''}</header><div>${task.steps.map(step=>{const app=tools.registry.get(step.appId),warning=['failed','denied','cancelled'].includes(step.phase);return`<span class="phase-${esc(step.phase)}"><i class="app-icon app-icon-${app?.color||'grey'}">${icon(app?.icon||'wrench',11)}</i><b>${esc(step.label||step.operation)}</b>${icon(step.phase==='completed'?'check':warning?'warning':'chevron',10)}</span>`}).join('')}</div></section>`;
     };
     const approvalMarkup=()=>{const request=liveExecution?.phase==='approval'?liveExecution:tools.pendingApproval();if(!request)return'';const app=tools.registry.get(request.appId);return`<section class="ai-inline-approval" data-ai-approval="${esc(request.toolCallId)}"><span class="ai-tool-app-icon app-icon app-icon-${app?.color||'grey'}">${icon(app?.icon||'lock',16)}<i>${icon('lock',8)}</i></span><div><small>${i18n.t('approvalRequired')}</small><strong>${esc(request.label||i18n.t('approveAgentAction'))}</strong><p>${esc(request.approvalMessage||'')}</p></div><footer><button data-ai-deny-approval="${esc(request.toolCallId)}">${i18n.t('deny')}</button><button class="ai-approval-primary" data-ai-approve="${esc(request.toolCallId)}">${icon('check',12)}${i18n.t('approve')}</button></footer></section>`};
 
@@ -98,6 +89,13 @@ export default {
         ${showAnswer?`<article class="ai-message ai-message-assistant" data-ai-turn-answer="${esc(turn.id)}"><span class="ai-message-avatar">${icon('aerisAi',17)}</span><div class="ai-message-body"><header>${i18n.t('aerisAI')}</header><div class="ai-turn-response">${answer}</div><footer class="ai-message-actions"><button data-ai-copy-turn="${esc(turn.id)}" data-ai-copy-role="assistant" title="${i18n.t('copyMessage')}">${icon('copy',14)}</button></footer></div></article>`:''}
       </section>`;
     };
+    const conversationMarkup=(state,session,configured)=>{
+      const turns=session?.turns||[];displayedTurns=turns;
+      if(!state.ready)return`<div class="ai-center-state"><span class="ai-orb waiting">${icon('aerisAi',30)}</span><h2>${i18n.t('preparingAI')}</h2>${state.error?errorMarkup(state.error,'ai-center-error'):`<p>${i18n.t('waitingForLinuxAI')}</p>`}</div>`;
+      if(!configured)return`<div class="ai-center-state"><span class="ai-orb">${icon('aerisAi',30)}</span><h2>${i18n.t('meetAerisAI')}</h2><p>${i18n.t('configureAICopy')}</p><button data-ai-settings class="ai-primary">${i18n.t('configureAI')}</button></div>`;
+      if(!turns.length)return`<div class="ai-welcome"><span class="ai-orb">${icon('aerisAi',31)}</span><h1>${i18n.t('howCanIHelp')}</h1><p>${i18n.t('aiWelcomeCopy')}</p><div class="ai-suggestions">${['aiSuggestionOne','aiSuggestionTwo','aiSuggestionThree'].map(key=>`<button data-ai-suggestion="${esc(i18n.t(key))}">${icon('sparkles',14)}<span>${i18n.t(key)}</span>${icon('chevron',13)}</button>`).join('')}</div></div>`;
+      return`<div class="ai-message-stack">${turns.map((turn,index)=>turnMarkup(turn,index,turns.length-1,session)).join('')}${session.error?errorMarkup(session.error):''}</div>`;
+    };
 
     const render = ({ preserveComposer = false, preserveConversation = false, focusSearch = false, focusComposer = preserveComposer } = {}) => {
       const draft = preserveComposer ? root.querySelector('[data-ai-composer]')?.value ?? composerDraft : composerDraft;composerDraft=draft;
@@ -105,6 +103,7 @@ export default {
       const previousWorkspace=root.querySelector('[data-ai-app-workspace]');
       const state = aiAgent.snapshot(), session = current(), configured = Boolean(aiAgent.config().apiKey);
       const turns=session?.turns||[];displayedTurns=turns;
+      const currentConversationSignature=conversationSignature(session),reuseConversation=Boolean(preserveConversation&&previousConversation&&previousConversation.dataset.aiConversationSignature===currentConversationSignature);
       const sessions = visibleSessions();
       const currentLive=session?.streaming&&session.activeTurnId===liveExecutionTurnId?liveExecution:null;
       const activities=collectToolActivities(session,tools,currentLive),latestActivity=activities.at(-1)||null,activeActivity=[...activities].reverse().find(activity=>activity.phase==='running'||activity.phase==='approval')||null,foregroundActivity=activeActivity||latestActivity;
@@ -115,6 +114,7 @@ export default {
       const workspaceVisible=workspaceOpen;
       const workspaceContext=agentContext.snapshot(),contextWindows=shell.windowManager.contextWindows();
       const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):'',signature=workspaceSignature(workspaceActivity,`${localeSignature}:${workspaceView}:${historySignature}:${contextSignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
+      if(reuseConversation)previousConversation.remove();
       if(reuseWorkspace)previousWorkspace.remove();
       root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
         <aside class="ai-sidebar">
@@ -126,15 +126,11 @@ export default {
         </aside>
         <section class="ai-workspace">
           <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-workspace-toggle ${workspaceVisible?'selected':''}" data-ai-toggle-workspace aria-pressed="${workspaceVisible}" title="${i18n.t(workspaceVisible?'closeWorkspace':'openWorkspace')}">${icon('panelRight', 17)}</button><button class="ai-notification-button ${notificationOpen?'selected':''}" data-ai-notifications title="${i18n.t('notifications')}">${icon('bell', 17)}<i class="${notifications.snapshot().unread?'visible':''}" data-ai-notification-dot></i></button><button data-ai-settings title="${i18n.t('aiSettings')}">${icon('settings', 17)}</button></header>
-          <main class="ai-conversation" data-ai-conversation>
-            ${!state.ready ? `<div class="ai-center-state"><span class="ai-orb waiting">${icon('aerisAi', 30)}</span><h2>${i18n.t('preparingAI')}</h2>${state.error?errorMarkup(state.error,'ai-center-error'):`<p>${i18n.t('waitingForLinuxAI')}</p>`}</div>`
-              : !configured ? `<div class="ai-center-state"><span class="ai-orb">${icon('aerisAi', 30)}</span><h2>${i18n.t('meetAerisAI')}</h2><p>${i18n.t('configureAICopy')}</p><button data-ai-settings class="ai-primary">${i18n.t('configureAI')}</button></div>`
-              : !turns.length ? `<div class="ai-welcome"><span class="ai-orb">${icon('aerisAi', 31)}</span><h1>${i18n.t('howCanIHelp')}</h1><p>${i18n.t('aiWelcomeCopy')}</p><div class="ai-suggestions">${['aiSuggestionOne','aiSuggestionTwo','aiSuggestionThree'].map(key => `<button data-ai-suggestion="${esc(i18n.t(key))}">${icon('sparkles', 14)}<span>${i18n.t(key)}</span>${icon('chevron', 13)}</button>`).join('')}</div></div>`
-              : `<div class="ai-message-stack">${turns.map((turn,index)=>turnMarkup(turn,index,turns.length-1,session)).join('')}${session.error ? errorMarkup(session.error) : ''}</div>`}
+          <main class="ai-conversation" data-ai-conversation data-ai-conversation-signature="${esc(currentConversationSignature)}">
+            ${conversationMarkup(state,session,configured)}
           </main>
           <footer class="ai-composer-area">
             ${localError ? errorMarkup(localError,'ai-composer-error') : ''}
-            <div class="ai-native-task-slot" data-ai-task-slot>${taskMarkup()}</div>
             ${approvalMarkup()}
             <div class="ai-composer-shell ${session?.streaming ? 'streaming' : ''}"><textarea data-ai-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready || !configured || editingTurnId !== null || session?.streaming ? 'disabled' : ''}>${esc(draft)}</textarea><div class="ai-composer-toolbar">${contextMarkup()}<label class="ai-composer-model" title="${i18n.t('aiModel')}">${icon('sparkles',12)}<select data-ai-composer-model ${session?.streaming?'disabled':''}>${aiAgent.modelOptions().map(model=>`<option value="${esc(model)}" ${model===aiAgent.config().model?'selected':''}>${esc(model)}</option>`).join('')}<option value="__settings__">${i18n.t('modelSettings')}…</option></select>${icon('chevron',9)}</label><span></span><button data-ai-send ${!state.ready || !configured || editingTurnId !== null ? 'disabled' : ''} aria-label="${i18n.t(session?.streaming ? 'stopGenerating' : 'send')}">${icon(session?.streaming ? 'stopSquare' : 'arrowUp', 17)}</button></div></div>
             <small>${i18n.t('aiMayMakeMistakes')}</small>
@@ -142,15 +138,14 @@ export default {
           ${settingsOpen ? settingsMarkup() : ''}
           ${notificationOpen ? notificationMarkup() : ''}
         </section>
-        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,session,activityExpanded,view:workspaceView,context:workspaceContext,windows:contextWindows}):''}
+        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,view:workspaceView,context:workspaceContext,windows:contextWindows}):''}
       </div>`;
+      if(reuseConversation)root.querySelector('[data-ai-conversation]')?.replaceWith(previousConversation);
       if(reuseWorkspace)root.querySelector('.ai-system-app')?.append(previousWorkspace);
       bind();
       requestAnimationFrame(() => {
         const conversation = root.querySelector('[data-ai-conversation]');
         if (conversation) conversation.scrollTop = preserveConversation ? previousConversationScroll : conversation.scrollHeight;
-        const selectedActivity=root.querySelector('.ai-activity-item.selected'),activityScroller=selectedActivity?.closest('.ai-activity-groups');
-        if(activityScroller&&selectedActivity){const itemTop=selectedActivity.offsetTop,itemBottom=itemTop+selectedActivity.offsetHeight;if(itemTop<activityScroller.scrollTop)activityScroller.scrollTop=itemTop-8;else if(itemBottom>activityScroller.scrollTop+activityScroller.clientHeight)activityScroller.scrollTop=itemBottom-activityScroller.clientHeight+8}
         if (focusSearch) { const search = root.querySelector('[data-ai-search]'); search?.focus(); search?.setSelectionRange(search.value.length, search.value.length); }
         else if (focusComposer) { const input = root.querySelector('[data-ai-composer]'); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }
       });
@@ -162,7 +157,8 @@ export default {
       streamingFrame=requestAnimationFrame(()=>{
         streamingFrame=0;
         const session=current(),message=session?.streamingMessage;
-        if(message?.role!=='assistant'||(message.content||[]).some?.(block=>block.type==='toolCall'))return render({preserveComposer:true});
+        if(message?.role!=='assistant')return;
+        if((message.content||[]).some?.(block=>block.type==='toolCall'))return refreshActiveAnswer();
         const answer=[...root.querySelectorAll('[data-ai-turn-answer]')].find(node=>node.dataset.aiTurnAnswer===session.activeTurnId),target=answer?.querySelector('[data-ai-turn-stream]'),conversation=root.querySelector('[data-ai-conversation]');
         if(!target||!conversation)return render({preserveComposer:true});
         const text=messageText(message);
@@ -204,38 +200,64 @@ export default {
       aiAgent.editAndResend(activeId, turnId, text).catch(error => { localError = friendlyError(error); render(); });
     };
 
-    const bindTaskCard=()=>root.querySelector('[data-ai-dismiss-task]')?.addEventListener('click',event=>agentTasks.dismiss(event.currentTarget.dataset.aiDismissTask));
-    const updateTaskCard=()=>{
-      const slot=root.querySelector('[data-ai-task-slot]');
-      if(!slot)return;
-      const markup=taskMarkup();
-      if(slot.innerHTML===markup)return;
-      slot.innerHTML=markup;
-      bindTaskCard();
-    };
-
-    const bind = () => {
-      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = async () => { activeId = await aiAgent.createSession(); localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); });
-      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
-      root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
-      root.querySelectorAll('[data-ai-copy-turn]').forEach(button => button.onclick = async () => { const turn=displayedTurns.find(item=>item.id===button.dataset.aiCopyTurn),text=button.dataset.aiCopyRole==='user'?messageText(turn?.user):assistantText(turn||{responses:[]});if(text&&await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard')); });
-      root.querySelectorAll('[data-ai-copy-error]').forEach(button=>button.onclick=async event=>{event.stopPropagation();const text=button.closest('.ai-copyable-error')?.querySelector('.ai-error-text')?.textContent||'';if(await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard'));});
-      bindTaskCard();
-      root.querySelectorAll('[data-ai-edit-turn]').forEach(button => button.onclick = () => { editingTurnId=button.dataset.aiEditTurn;editDraft=messageText(displayedTurns.find(turn=>turn.id===editingTurnId)?.user);localError='';render();requestAnimationFrame(()=>{const editor=root.querySelector('[data-ai-inline-edit]');editor?.focus();editor?.setSelectionRange(editor.value.length,editor.value.length);editor?.style.setProperty('height',`${editor.scrollHeight}px`);}); });
-      root.querySelector('[data-ai-cancel-inline-edit]')?.addEventListener('click', () => { editingTurnId = null; editDraft = ''; render(); });
-      root.querySelector('[data-ai-submit-inline-edit]')?.addEventListener('click', submitInlineEdit);
-      const inlineEditor = root.querySelector('[data-ai-inline-edit]');
-      if (inlineEditor) { inlineEditor.oninput = () => { editDraft = inlineEditor.value; inlineEditor.style.height = 'auto'; inlineEditor.style.height = `${inlineEditor.scrollHeight}px`; }; inlineEditor.onkeydown = event => { if (event.key === 'Escape') { event.preventDefault(); editingTurnId = null; editDraft = ''; render(); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submitInlineEdit(); } }; }
-      const search = root.querySelector('[data-ai-search]');
-      if (search) search.oninput = event => { query = event.target.value; render({ preserveComposer: true, focusSearch: true }); };
-      root.querySelectorAll('[data-ai-settings]').forEach(button => button.onclick = () => { settingsOpen = true;notificationOpen=false;render({ preserveComposer: true,focusComposer:false }); });
-      root.querySelector('[data-ai-notifications]')?.addEventListener('click',async()=>{notificationOpen=!notificationOpen;settingsOpen=false;render({preserveComposer:true,focusComposer:false});if(notificationOpen)await notifications.markAllRead()});
-      root.querySelector('[data-ai-close-notifications]')?.addEventListener('click',()=>{notificationOpen=false;render({preserveComposer:true})});
-      root.querySelector('[data-ai-context-selector]')?.addEventListener('click',()=>{contextMenuOpen=!contextMenuOpen;render({preserveComposer:true,focusComposer:false})});
-      root.querySelector('[data-ai-close-context]')?.addEventListener('click',()=>{contextMenuOpen=false;render({preserveComposer:true,focusComposer:false})});
+    const bindToolCards=(scope=root)=>scope.querySelectorAll('[data-tool-call]').forEach(card=>{const header=card.querySelector('header');if(header)header.onclick=()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceView='app';workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})}});
+    const setContextMenuOpen=open=>{contextMenuOpen=open;const wrap=root.querySelector('.ai-native-context-wrap'),selector=wrap?.querySelector('[data-ai-context-selector]'),picker=wrap?.querySelector('.ai-context-picker');selector?.setAttribute('aria-expanded',String(open));if(picker)picker.hidden=!open};
+    const bindContextControls=()=>{
+      const close=root.querySelector('[data-ai-close-context]');if(close)close.onclick=()=>setContextMenuOpen(false);
       root.querySelectorAll('[data-ai-context-desktop]').forEach(button=>button.onclick=()=>{contextMenuOpen=false;agentContext.focusDesktop()});
       root.querySelectorAll('[data-ai-context-window]').forEach(button=>button.onclick=()=>{const target=shell.windowManager.contextWindows().find(item=>item.id===button.dataset.aiContextWindow);contextMenuOpen=false;if(target)agentContext.focusWindow(target)});
       root.querySelectorAll('[data-ai-clear-context]').forEach(button=>button.onclick=()=>{contextMenuOpen=false;agentContext.clear()});
+      root.querySelectorAll('[data-ai-open-context-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenContextApp));
+    };
+    const replaceElement=(element,markup)=>{if(!element)return null;const template=document.createElement('template');template.innerHTML=markup.trim();const next=template.content.firstElementChild;element.replaceWith(next);return next};
+    const updateContextUi=()=>{
+      replaceElement(root.querySelector('.ai-native-context-wrap'),contextMarkup());
+      const workspaceContext=root.querySelector('.ai-context-workspace');
+      if(workspaceContext){const context=agentContext.snapshot(),windows=shell.windowManager.contextWindows();replaceElement(workspaceContext,contextViewMarkup(context,windows,tools,i18n))}
+      bindContextControls();
+    };
+    const bindConversationControls=(scope=root)=>{
+      scope.querySelectorAll('[data-ai-copy-turn]').forEach(button=>button.onclick=async()=>{const turn=displayedTurns.find(item=>item.id===button.dataset.aiCopyTurn),text=button.dataset.aiCopyRole==='user'?messageText(turn?.user):assistantText(turn||{responses:[]});if(text&&await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard'))});
+      scope.querySelectorAll('[data-ai-copy-error]').forEach(button=>button.onclick=async event=>{event.stopPropagation();const text=button.closest('.ai-copyable-error')?.querySelector('.ai-error-text')?.textContent||'';if(await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard'))});
+      scope.querySelectorAll('[data-ai-edit-turn]').forEach(button=>button.onclick=()=>{editingTurnId=button.dataset.aiEditTurn;editDraft=messageText(displayedTurns.find(turn=>turn.id===editingTurnId)?.user);localError='';render();requestAnimationFrame(()=>{const editor=root.querySelector('[data-ai-inline-edit]');editor?.focus();editor?.setSelectionRange(editor.value.length,editor.value.length);editor?.style.setProperty('height',`${editor.scrollHeight}px`);})});
+      const cancelEdit=scope.querySelector('[data-ai-cancel-inline-edit]');if(cancelEdit)cancelEdit.onclick=()=>{editingTurnId=null;editDraft='';render()};
+      const submitEdit=scope.querySelector('[data-ai-submit-inline-edit]');if(submitEdit)submitEdit.onclick=submitInlineEdit;
+      const inlineEditor=scope.querySelector('[data-ai-inline-edit]');
+      if(inlineEditor){inlineEditor.oninput=()=>{editDraft=inlineEditor.value;inlineEditor.style.height='auto';inlineEditor.style.height=`${inlineEditor.scrollHeight}px`};inlineEditor.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();editingTurnId=null;editDraft='';render()}else if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();submitInlineEdit()}}}
+      scope.querySelectorAll('[data-ai-settings]').forEach(button=>button.onclick=()=>{settingsOpen=true;notificationOpen=false;render({preserveComposer:true,focusComposer:false})});
+      scope.querySelectorAll('[data-ai-suggestion]').forEach(button=>button.onclick=()=>{const input=root.querySelector('[data-ai-composer]');input.value=button.dataset.aiSuggestion;input.focus()});
+      bindToolCards(scope);
+    };
+    const syncConversation=({forceBottom=false}={})=>{
+      const conversation=root.querySelector('[data-ai-conversation]');if(!conversation)return render({preserveComposer:true,focusComposer:false});
+      const nearBottom=forceBottom||conversation.scrollHeight-conversation.scrollTop-conversation.clientHeight<90,state=aiAgent.snapshot(),session=current(),configured=Boolean(aiAgent.config().apiKey);
+      conversation.dataset.aiConversationSignature=conversationSignature(session);conversation.innerHTML=conversationMarkup(state,session,configured);bindConversationControls(conversation);
+      if(nearBottom)conversation.scrollTop=conversation.scrollHeight;
+    };
+    const refreshActiveAnswer=()=>{
+      const session=current(),turnId=session?.activeTurnId,turn=(session?.turns||[]).find(item=>item.id===turnId);if(!turn)return;
+      const answer=[...root.querySelectorAll('[data-ai-turn-answer]')].find(node=>node.dataset.aiTurnAnswer===turnId),body=answer?.querySelector('.ai-turn-response');
+      if(!body)return render({preserveComposer:true,focusComposer:false});
+      const conversation=root.querySelector('[data-ai-conversation]'),nearBottom=conversation&&conversation.scrollHeight-conversation.scrollTop-conversation.clientHeight<90;
+      body.innerHTML=answerMarkup(turn,session);bindToolCards(body);displayedTurns=session.turns||[];
+      if(nearBottom)conversation.scrollTop=conversation.scrollHeight;
+    };
+    const updateToolExecution=detail=>{
+      const card=[...root.querySelectorAll('[data-tool-call]')].find(node=>node.dataset.toolCall===detail.toolCallId);if(!card)return;
+      [...card.classList].filter(name=>name.startsWith('ai-tool-')&&name!=='ai-tool-call').forEach(name=>card.classList.remove(name));card.classList.add(`ai-tool-${detail.phase||'running'}`);
+      const status=card.querySelector('header>em');if(status)status.textContent=i18n.t(`toolStatus_${detail.phase||'running'}`);
+    };
+
+    const bind = () => {
+      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession(); localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); });
+      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
+      root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
+      bindConversationControls();
+      const search = root.querySelector('[data-ai-search]');
+      if (search) search.oninput = event => { query = event.target.value; render({ preserveComposer: true, focusSearch: true }); };
+      root.querySelector('[data-ai-notifications]')?.addEventListener('click',async()=>{notificationOpen=!notificationOpen;settingsOpen=false;render({preserveComposer:true,focusComposer:false});if(notificationOpen)await notifications.markAllRead()});
+      root.querySelector('[data-ai-close-notifications]')?.addEventListener('click',()=>{notificationOpen=false;render({preserveComposer:true})});
+      bindContextControls();
       root.querySelector('[data-ai-deny-approval]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiDenyApproval,false)});
       root.querySelector('[data-ai-approve]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiApprove,true)});
       root.querySelector('[data-ai-clear-notifications]')?.addEventListener('click',()=>notifications.clear());
@@ -247,17 +269,12 @@ export default {
       root.querySelectorAll('[data-ai-close-settings]').forEach(button => button.onclick = () => { settingsOpen = false; render({ preserveComposer: true }); });
       root.querySelector('[data-ai-reveal]')?.addEventListener('click', event => event.currentTarget.closest('.ai-secret-field').classList.toggle('revealed'));
       root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
-      root.querySelectorAll('[data-ai-suggestion]').forEach(button => button.onclick = () => { const input = root.querySelector('[data-ai-composer]'); input.value = button.dataset.aiSuggestion; input.focus(); });
-      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceView='app';workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true});}));
-      root.querySelectorAll('[data-ai-workspace-activity]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceActivity;workspaceView='app';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false});});
       root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
       root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
-      root.querySelector('[data-ai-toggle-activity-history]')?.addEventListener('click',event=>{activityExpanded=!activityExpanded;persistWorkspacePrefs();const history=event.currentTarget.closest('[data-ai-activity-history]');history?.classList.toggle('is-expanded',activityExpanded);history?.classList.toggle('is-collapsed',!activityExpanded);event.currentTarget.setAttribute('aria-expanded',String(activityExpanded));event.currentTarget.title=i18n.t(activityExpanded?'collapseActivityHistory':'expandActivityHistory')});
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
-      root.querySelectorAll('[data-ai-open-context-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenContextApp));
       root.querySelectorAll('[data-ai-open-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiOpenResult);if(!activity)return;shell.open(button.dataset.resultApp,button.dataset.resultPath||undefined);kernel.bus.emit('agent:open-result',{appId:activity.appId,operation:activity.operation,result:structuredClone(activity.result),params:structuredClone(activity.params),path:button.dataset.resultPath||''})});
       root.querySelectorAll('[data-ai-reveal-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiRevealResult),path=activity?.result?.path||activity?.params?.path;if(!path)return;const parent=path.split('/').slice(0,-1).join('/')||'/home/aeris';shell.open('files',parent)});
-      root.querySelectorAll('[data-ai-copy-result]').forEach(button=>button.onclick=async()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiCopyResult);if(!activity)return;const value=activity.result??activity.output;if(await clipboard.copyText(typeof value==='object'?JSON.stringify(value,null,2):String(value??''))){button.innerHTML=`${icon('check',12)} ${i18n.t('copiedToClipboard')}`}});
+      root.querySelectorAll('[data-ai-copy-result]').forEach(button=>button.onclick=async()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiCopyResult);if(!activity)return;const value=activity.result??activity.output??activity.params;if(await clipboard.copyText(typeof value==='object'?JSON.stringify(value,null,2):String(value??''))){button.innerHTML=`${icon('check',12)} ${i18n.t('copiedToClipboard')}`}});
       const setWorkspaceOpen=open=>{workspaceOpen=open;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
       root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
       root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));
@@ -279,23 +296,47 @@ export default {
       root.querySelector('[data-ai-send]')?.addEventListener('click', () => {if(current()?.streaming){liveExecution=null;liveExecutionTurnId=null;aiAgent.abort(activeId)}else send()});
     };
 
-    const offReady = kernel.bus.on('ai:ready', async () => { await ensureSession(); activeId ||= aiAgent.snapshot().sessions[0]?.id || null; render(); });
-    const offChanged = kernel.bus.on('ai:changed', () => { if (activeId && !aiAgent.snapshot().sessions.some(item => item.id === activeId)) activeId = aiAgent.snapshot().sessions[0]?.id || null; render({ preserveComposer: true }); });
-    const offAgent = kernel.bus.on('ai:agent-event', detail => { if(detail.sessionId!==activeId||settingsOpen)return;const event=detail.event;if(event?.type==='message_update')return updateStreamingMessage();if(event?.type==='message_start'&&event.message?.role==='assistant'){const session=current(),answer=[...root.querySelectorAll('[data-ai-turn-answer]')].find(node=>node.dataset.aiTurnAnswer===session?.activeTurnId);if(answer?.querySelector('[data-ai-turn-stream]'))return}render({preserveComposer:true}); });
-    const offCapability = kernel.bus.on('capability:execution', detail => { const session=current();if(session?.streaming){liveExecution=detail;liveExecutionTurnId=session.activeTurnId}if (!settingsOpen) render({ preserveComposer: true }); });
+    const offReady = kernel.bus.on('ai:ready', () => { ensureSession();activeId||=aiAgent.snapshot().sessions[0]?.id||null;syncConversation(); });
+    const offChanged = kernel.bus.on('ai:changed', detail => {
+      const sessions=aiAgent.snapshot().sessions,activeStillExists=activeId&&sessions.some(item=>item.id===activeId);
+      if(activeId&&!activeStillExists)activeId=sessions[0]?.id||null;
+      if(detail?.sessionId===activeId&&current()?.streaming)return;
+      // Finishing a slow guest-state read must not replace the composer while
+      // the user is typing. The service has already merged that state into the
+      // active session, so only the conversation needs reconciliation here.
+      if(detail?.guestSynced&&activeStillExists)return syncConversation();
+      render({preserveComposer:true});
+    });
+    const offAgent = kernel.bus.on('ai:agent-event', detail => {
+      if(detail.sessionId!==activeId||settingsOpen)return;
+      const event=detail.event;
+      if(event?.type==='message_update')return updateStreamingMessage();
+      if(event?.type==='agent_idle'){
+        // Settle the composer and sidebar once Pi has cleared its streaming
+        // state. The conversation is rebuilt from the persisted turn below.
+        return render({preserveComposer:true,focusComposer:true});
+      }
+      if(['turn_start','turn_end','tool_execution_start','tool_execution_update','tool_execution_end'].includes(event?.type))return;
+      // Provider implementations differ in whether the first useful frame is
+      // agent_start, message_start, message_end, or agent_end. Reconcile the
+      // visible turn from service state at every lifecycle boundary instead of
+      // depending on one provider-specific event order.
+      syncConversation({forceBottom:event?.type==='turn_created'||event?.type==='agent_start'});
+    });
+    const offCapability = kernel.bus.on('capability:execution', detail => {
+      const session=current();if(session?.streaming){liveExecution=detail;liveExecutionTurnId=session.activeTurnId}updateToolExecution(detail);
+      // Execution phases update the workspace and approval controls, but the
+      // conversation itself remains the same DOM node throughout the tool run.
+      if(!settingsOpen)render({preserveComposer:true,preserveConversation:true,focusComposer:false})
+    });
     const offNotifications = kernel.bus.on('notification:changed', state => {if(notificationOpen)render({preserveComposer:true,focusComposer:false});else root.querySelector('[data-ai-notification-dot]')?.classList.toggle('visible',state.unread>0)});
-    const offContext = kernel.bus.on('agent:context-changed',()=>render({preserveComposer:true,focusComposer:false}));
-    // Task progress can change several times during a single tool call. Updating
-    // only its slot avoids rebuilding the streaming answer at intermediate
-    // agent states and prevents the conversation from flashing or disappearing.
-    const offTasks = kernel.bus.on('agent:tasks-changed',updateTaskCard);
-    const offEntry = kernel.bus.on('ai:entry',async detail=>{if(!activeId||current()?.turns?.length)activeId=await aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=false;notificationOpen=false;render({focusComposer:true});if(detail.autoSend&&composerDraft)send()});
+    const offContext = kernel.bus.on('agent:context-changed',updateContextUi);
+    const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=false;notificationOpen=false;render({focusComposer:true});if(detail.autoSend&&composerDraft)send()});
     const offLocale = kernel.bus.on('settings:change', ({ key }) => { if (key === 'locale') render({ preserveComposer: true }); });
-    const closeContextOnClick=event=>{if(contextMenuOpen&&!event.target.closest('.ai-native-context-wrap')){contextMenuOpen=false;render({preserveComposer:true,focusComposer:false})}};
-    const closeContextOnEscape=event=>{if(contextMenuOpen&&event.key==='Escape'){event.stopPropagation();contextMenuOpen=false;render({preserveComposer:true,focusComposer:false})}};
+    const closeContextOnClick=event=>{const selector=event.target.closest('[data-ai-context-selector]');if(selector){event.preventDefault();setContextMenuOpen(selector.getAttribute('aria-expanded')!=='true');return}const active=root.querySelector('[data-ai-context-selector]');if(active?.getAttribute('aria-expanded')==='true'&&!event.target.closest('.ai-native-context-wrap'))setContextMenuOpen(false)};
+    const closeContextOnEscape=event=>{const selector=root.querySelector('[data-ai-context-selector]');if(selector?.getAttribute('aria-expanded')==='true'&&event.key==='Escape'){event.stopPropagation();setContextMenuOpen(false)}};
     root.addEventListener('click',closeContextOnClick);root.addEventListener('keydown',closeContextOnEscape,true);
-    ensureSession().then(() => { activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
-    render();
-    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offTasks(); offEntry(); offLocale(); };
+    ensureSession();render();
+    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offEntry(); offLocale(); };
   },
 };
