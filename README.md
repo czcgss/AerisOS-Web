@@ -38,7 +38,7 @@ Using a real Linux guest means these ideas can be evaluated against processes, f
 | Linux runtime | Real Alpine Linux x86 guest running locally through v86/WebAssembly |
 | Files and terminal | Linux-backed filesystem applications and independent interactive TTY sessions |
 | Built-in applications | Eighteen modular system Apps, including Files, Calendar, Notes, Terminal, Weather, and system utilities |
-| AI integration | Persistent conversations, App tools, context selection, approvals, activity history, App execution view, and result cards |
+| AI integration | Persistent conversations, App tools, context selection, approvals, interactive App workspace, and reusable result cards |
 | Localization | English, Simplified Chinese, and importable JSON language packs |
 | Maturity | Experimental; APIs and stored data can change without migration guarantees |
 | Security | Research-grade only; not a hardened sandbox or secret-management environment |
@@ -56,7 +56,7 @@ Do not evaluate AerisOS with irreplaceable files, production credentials, or sen
 - Native Aeris dialogs, menus, clipboard behavior, notifications, and window interactions
 - English and Simplified Chinese, with fallback-based external language packs
 - Aeris AI using OpenAI-compatible providers and persistent Pi Agent sessions
-- Per-App tool registration, structured arguments, high-risk approval, live App activity, visible context, and reusable task results
+- Per-App tool registration, structured arguments, high-risk approval, interactive App activity, visible context, and reusable task results
 
 ## How it works
 
@@ -137,8 +137,9 @@ The Agent is integrated with operating-system concepts rather than presented onl
 - Apps register validated tools that can be enabled or disabled by the user.
 - The selected window, resource, file, date, or text can become explicit Agent context.
 - High-risk actions, including terminal commands and destructive file operations, require Aeris approval.
-- App View shows the active application, operation, state, risk, parameters, and result details.
-- Activity groups tool calls by the user request that caused them.
+- The Activity workspace hosts live, task-focused App surfaces that the user and Agent can operate together.
+- Active Apps can be opened, switched, closed, or continued in their full desktop window.
+- Tool cards show the application, action, state, risk, parameters, and output without replacing the conversation.
 - Results preserve created, queried, modified, moved, or deleted resources with App-specific actions.
 - Conversations and Agent state persist locally and recover after refresh.
 
