@@ -20,20 +20,20 @@ const readWorkspacePrefs = () => {
     return {
       open: Boolean(stored.open),
       width: Math.max(MIN_WORKSPACE_WIDTH, Math.min(MAX_WORKSPACE_WIDTH, Number(stored.width) || DEFAULT_WORKSPACE_WIDTH)),
-      view: ['app','context','results'].includes(stored.view) ? stored.view : 'app',
+      view: ['activity','context','results'].includes(stored.view) ? stored.view : 'activity',
     };
   } catch {
-    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, view: 'app' };
+    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, view: 'activity' };
   }
 };
 
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
-  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry }) {
+  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, userdata, system, settings, weather, metrics, machine }) {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
-    let workspaceSelectedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
+    let workspaceSelectedId = null, activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
     let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, workspaceView = workspacePrefs.view;
 
     const persistWorkspacePrefs = () => {
@@ -42,6 +42,31 @@ export default {
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
     const current = () => activeId ? aiAgent.sessionState(activeId) : null;
+    const activityApp=()=>activityAppId?tools.registry.get(activityAppId):null;
+    const unmountActivitySurface=()=>{if(!activitySurface)return;try{activitySurface.cleanup?.()}catch(error){kernel.bus.emit('app:cleanup-error',{appId:activitySurface.appId,error})}activitySurface=null};
+    const mountActivitySurface=()=>{
+      if(!workspaceOpen||workspaceView!=='activity')return;
+      const app=activityApp(),host=root.querySelector('[data-ai-activity-host]');
+      if(!app||!host||!app.activity?.mount)return;
+      if(activitySurface?.appId===app.id&&activitySurface.host===host)return;
+      unmountActivitySurface();
+      const context={app,i18n,kernel,dialog,shell,clipboard,tools,notifications,agentContext,agentEntry,userdata,system,settings,weather,metrics,machine,openFullApp:(appId,path='')=>shell.open(appId,path||undefined)};
+      activitySurface={appId:app.id,host,cleanup:app.activity.mount(host,context,activityTarget||{})||null};
+    };
+    const selectActivityApp=(id,target=null)=>{
+      if(!id||id==='ai')return null;
+      if(activityAppId!==id)unmountActivitySurface();
+      activityAppId=id;activityTarget=target;
+      activityAppIds=[id,...activityAppIds.filter(value=>value!==id)].slice(0,8);
+      return tools.registry.get(id);
+    };
+    const activateApp=(appId,path='',target=null)=>{
+      const app=selectActivityApp(appId,target||{path});
+      if(!app)return null;
+      activityAppsOpen=false;workspaceOpen=true;workspaceView='activity';persistWorkspacePrefs();
+      return app;
+    };
+    const closeActivityApp=id=>{const wasActive=activityAppId===id;if(wasActive)unmountActivitySurface();activityAppIds=activityAppIds.filter(value=>value!==id);if(wasActive){activityAppId=activityAppIds[0]||null;activityTarget=null}};
     const friendlyError = error => /guest command|mkdir -p|__aeris_/i.test(error?.message || '') ? i18n.t('conversationSaveFailed') : (error?.message || String(error));
     const ensureSession = () => {
       if (!aiAgent.ready || activeId) return;
@@ -113,9 +138,12 @@ export default {
       displayedActivities=activities;
       const workspaceVisible=workspaceOpen;
       const workspaceContext=agentContext.snapshot(),contextWindows=shell.windowManager.contextWindows();
-      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):'',signature=workspaceSignature(workspaceActivity,`${localeSignature}:${workspaceView}:${historySignature}:${contextSignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
+      if(workspaceView==='activity'&&!activityAppIds.includes(activityAppId))activityAppId=activityAppIds[0]||null;
+      const activityApps=activityAppIds.map(id=>tools.registry.get(id)).filter(Boolean);
+      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):workspaceView==='activity'?JSON.stringify({activityAppId,activityAppIds,target:activityTarget?.id||activityTarget?.result?.id||activityTarget?.path||''}):'',signature=workspaceSignature(workspaceActivity,`${localeSignature}:${workspaceView}:${historySignature}:${contextSignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
       if(reuseConversation)previousConversation.remove();
       if(reuseWorkspace)previousWorkspace.remove();
+      else unmountActivitySurface();
       root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
         <aside class="ai-sidebar">
           <header><span class="ai-brand-icon">${icon('aerisAi', 21)}</span><strong>${i18n.t('aerisAI')}</strong><button data-ai-new title="${i18n.t('newChat')}">${icon('plus', 17)}</button></header>
@@ -125,7 +153,7 @@ export default {
           <footer><button data-ai-settings>${icon('settings', 16)}<span><strong>${i18n.t('aiSettings')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('setupRequired')}</small></span></button></footer>
         </aside>
         <section class="ai-workspace">
-          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-workspace-toggle ${workspaceVisible?'selected':''}" data-ai-toggle-workspace aria-pressed="${workspaceVisible}" title="${i18n.t(workspaceVisible?'closeWorkspace':'openWorkspace')}">${icon('panelRight', 17)}</button><button class="ai-notification-button ${notificationOpen?'selected':''}" data-ai-notifications title="${i18n.t('notifications')}">${icon('bell', 17)}<i class="${notifications.snapshot().unread?'visible':''}" data-ai-notification-dot></i></button><button data-ai-settings title="${i18n.t('aiSettings')}">${icon('settings', 17)}</button></header>
+          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-workspace-toggle ${workspaceVisible?'selected':''}" data-ai-toggle-workspace aria-pressed="${workspaceVisible}" title="${i18n.t(workspaceVisible?'closeWorkspace':'openWorkspace')}">${icon('panelRight', 17)}</button><button class="ai-applications-button ${activityAppsOpen?'selected':''}" data-ai-applications aria-pressed="${activityAppsOpen}" title="${i18n.t('openApplication')}">${icon('grid', 17)}</button><button class="ai-notification-button ${notificationOpen?'selected':''}" data-ai-notifications title="${i18n.t('notifications')}">${icon('bell', 17)}<i class="${notifications.snapshot().unread?'visible':''}" data-ai-notification-dot></i></button><button data-ai-settings title="${i18n.t('aiSettings')}">${icon('settings', 17)}</button></header>
           <main class="ai-conversation" data-ai-conversation data-ai-conversation-signature="${esc(currentConversationSignature)}">
             ${conversationMarkup(state,session,configured)}
           </main>
@@ -136,13 +164,15 @@ export default {
             <small>${i18n.t('aiMayMakeMistakes')}</small>
           </footer>
           ${settingsOpen ? settingsMarkup() : ''}
+          ${activityAppsOpen ? applicationsMarkup() : ''}
           ${notificationOpen ? notificationMarkup() : ''}
         </section>
-        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,view:workspaceView,context:workspaceContext,windows:contextWindows}):''}
+        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,view:workspaceView,context:workspaceContext,windows:contextWindows,activityApps,activityAppId}):''}
       </div>`;
       if(reuseConversation)root.querySelector('[data-ai-conversation]')?.replaceWith(previousConversation);
       if(reuseWorkspace)root.querySelector('.ai-system-app')?.append(previousWorkspace);
       bind();
+      mountActivitySurface();
       requestAnimationFrame(() => {
         const conversation = root.querySelector('[data-ai-conversation]');
         if (conversation) conversation.scrollTop = preserveConversation ? previousConversationScroll : conversation.scrollHeight;
@@ -183,6 +213,14 @@ export default {
       </section>`;
     };
 
+    const applicationsMarkup=()=>{
+      const apps=tools.registry.list().filter(app=>app.id!=='ai');
+      return `<div class="ai-settings-backdrop" data-ai-close-applications></div><section class="ai-settings-panel ai-applications-panel">
+        <header><div><span>${icon('grid',20)}</span><div><h2>${i18n.t('applications')}</h2><p>${i18n.t('workspaceActivityCopy')}</p></div></div><button data-ai-close-applications aria-label="${i18n.t('close')}">${icon('close',16)}</button></header>
+        <main><div class="ai-applications-grid">${apps.map(app=>`<button data-ai-activity-open-app="${esc(app.id)}"><span class="app-icon app-icon-${esc(app.color||'grey')}">${icon(app.icon,22)}</span><span><strong>${esc(i18n.t(app.title))}</strong><small>${activityAppIds.includes(app.id)?i18n.t('activityActive'):shell.windowManager.isOpen(app.id)?i18n.t('running'):i18n.t('openApplication')}</small></span>${icon('chevron',11)}</button>`).join('')}</div></main>
+      </section>`;
+    };
+
     const send = async () => {
       const input = root.querySelector('[data-ai-composer]'), text = input?.value.trim();
       if (!text) return;
@@ -200,7 +238,7 @@ export default {
       aiAgent.editAndResend(activeId, turnId, text).catch(error => { localError = friendlyError(error); render(); });
     };
 
-    const bindToolCards=(scope=root)=>scope.querySelectorAll('[data-tool-call]').forEach(card=>{const header=card.querySelector('header');if(header)header.onclick=()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceView='app';workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})}});
+    const bindToolCards=(scope=root)=>scope.querySelectorAll('[data-tool-call]').forEach(card=>{const header=card.querySelector('header');if(header)header.onclick=()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;activateApp(activity.appId);render({preserveComposer:true,preserveConversation:true,focusComposer:false})}});
     const setContextMenuOpen=open=>{contextMenuOpen=open;const wrap=root.querySelector('.ai-native-context-wrap'),selector=wrap?.querySelector('[data-ai-context-selector]'),picker=wrap?.querySelector('.ai-context-picker');selector?.setAttribute('aria-expanded',String(open));if(picker)picker.hidden=!open};
     const bindContextControls=()=>{
       const close=root.querySelector('[data-ai-close-context]');if(close)close.onclick=()=>setContextMenuOpen(false);
@@ -249,8 +287,8 @@ export default {
     };
 
     const bind = () => {
-      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession(); localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); });
-      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
+      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession(); localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;unmountActivitySurface();render(); });
+      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;unmountActivitySurface();render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
       root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
       bindConversationControls();
       const search = root.querySelector('[data-ai-search]');
@@ -271,12 +309,17 @@ export default {
       root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
       root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
       root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      root.querySelectorAll('[data-ai-activity-app]').forEach(button=>button.onclick=()=>{selectActivityApp(button.dataset.aiActivityApp);workspaceView='activity';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      root.querySelectorAll('[data-ai-close-activity-app]').forEach(button=>button.onclick=event=>{event.stopPropagation();closeActivityApp(button.dataset.aiCloseActivityApp);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      root.querySelectorAll('[data-ai-activity-open-app]').forEach(button=>button.onclick=()=>{activityAppsOpen=false;activateApp(button.dataset.aiActivityOpenApp);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      root.querySelectorAll('[data-ai-close-applications]').forEach(button=>button.onclick=()=>{activityAppsOpen=false;render({preserveComposer:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
       root.querySelectorAll('[data-ai-open-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiOpenResult);if(!activity)return;shell.open(button.dataset.resultApp,button.dataset.resultPath||undefined);kernel.bus.emit('agent:open-result',{appId:activity.appId,operation:activity.operation,result:structuredClone(activity.result),params:structuredClone(activity.params),path:button.dataset.resultPath||''})});
       root.querySelectorAll('[data-ai-reveal-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiRevealResult),path=activity?.result?.path||activity?.params?.path;if(!path)return;const parent=path.split('/').slice(0,-1).join('/')||'/home/aeris';shell.open('files',parent)});
       root.querySelectorAll('[data-ai-copy-result]').forEach(button=>button.onclick=async()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiCopyResult);if(!activity)return;const value=activity.result??activity.output??activity.params;if(await clipboard.copyText(typeof value==='object'?JSON.stringify(value,null,2):String(value??''))){button.innerHTML=`${icon('check',12)} ${i18n.t('copiedToClipboard')}`}});
-      const setWorkspaceOpen=open=>{workspaceOpen=open;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
+      const setWorkspaceOpen=open=>{workspaceOpen=open;if(!open)unmountActivitySurface();persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
       root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
+      root.querySelector('[data-ai-applications]')?.addEventListener('click',()=>{activityAppsOpen=!activityAppsOpen;notificationOpen=false;settingsOpen=false;render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));
       const resizeHandle=root.querySelector('[data-ai-workspace-resize]');
       if(resizeHandle){
@@ -325,6 +368,7 @@ export default {
     });
     const offCapability = kernel.bus.on('capability:execution', detail => {
       const session=current();if(session?.streaming){liveExecution=detail;liveExecutionTurnId=session.activeTurnId}updateToolExecution(detail);
+      if(detail?.operation!=='open'&&detail?.appId&&detail.appId!=='ai')activateApp(detail.appId,'',detail);
       // Execution phases update the workspace and approval controls, but the
       // conversation itself remains the same DOM node throughout the tool run.
       if(!settingsOpen)render({preserveComposer:true,preserveConversation:true,focusComposer:false})
@@ -332,11 +376,12 @@ export default {
     const offNotifications = kernel.bus.on('notification:changed', state => {if(notificationOpen)render({preserveComposer:true,focusComposer:false});else root.querySelector('[data-ai-notification-dot]')?.classList.toggle('visible',state.unread>0)});
     const offContext = kernel.bus.on('agent:context-changed',updateContextUi);
     const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=false;notificationOpen=false;render({focusComposer:true});if(detail.autoSend&&composerDraft)send()});
+    const offOpenApp = kernel.bus.on('agent:open-app',detail=>{activateApp(detail?.appId,detail?.path,detail);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offLocale = kernel.bus.on('settings:change', ({ key }) => { if (key === 'locale') render({ preserveComposer: true }); });
     const closeContextOnClick=event=>{const selector=event.target.closest('[data-ai-context-selector]');if(selector){event.preventDefault();setContextMenuOpen(selector.getAttribute('aria-expanded')!=='true');return}const active=root.querySelector('[data-ai-context-selector]');if(active?.getAttribute('aria-expanded')==='true'&&!event.target.closest('.ai-native-context-wrap'))setContextMenuOpen(false)};
     const closeContextOnEscape=event=>{const selector=root.querySelector('[data-ai-context-selector]');if(selector?.getAttribute('aria-expanded')==='true'&&event.key==='Escape'){event.stopPropagation();setContextMenuOpen(false)}};
     root.addEventListener('click',closeContextOnClick);root.addEventListener('keydown',closeContextOnEscape,true);
     ensureSession();render();
-    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offEntry(); offLocale(); };
+    return () => { unmountActivitySurface();if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offEntry(); offOpenApp();offLocale(); };
   },
 };

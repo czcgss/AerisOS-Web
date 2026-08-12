@@ -167,5 +167,20 @@ export class SystemToolService {
     this.#register({ name:'trash_empty',appId:'trash',operation:'empty',risk:'high',label:'Empty Trash',description:'Permanently delete every item in Trash. Requires user approval.',parameters:object({}),approval:()=> 'Permanently delete every item in Trash? This cannot be undone.',execute:async()=>{await this.system.emptyTrash();return{emptied:true}},success:()=> 'Trash was emptied.' });
 
     this.#register({ name:'calculator_calculate',appId:'calculator',operation:'calculate',label:'Calculate expression',description:'Evaluate a basic arithmetic expression containing numbers and + - * / % parentheses.',parameters:object({expression:Type.String()}),execute:async({expression})=>{if(!/^[\d\s+\-*/%().]+$/.test(expression))throw new Error('Unsupported calculator expression.');const value=Function(`"use strict";return (${expression})`)();if(!Number.isFinite(value))throw new Error('The result is not finite.');return{expression,value}},success:result=>`${result.expression} = ${result.value}` });
+
+    for(const app of this.registry.list().filter(item=>item.id!=='ai'))this.#register({
+      name:`${app.id}_open_app`,
+      appId:app.id,
+      operation:'open',
+      label:`Open ${this.i18n.t(app.title)}`,
+      description:`Open the real Aeris ${this.i18n.t(app.title)} application in the Agent Activity workspace. Use this when the user asks to open, show, or work directly in the application.`,
+      parameters:object({path:optionalString('Optional Aeris file or folder path the app should open')}),
+      execute:async({path})=>{
+        const detail={appId:app.id,path:String(path||'')};
+        this.kernel?.bus.emit('agent:open-app',detail);
+        return detail;
+      },
+      success:()=>`Opened ${this.i18n.t(app.title)} in the Agent Activity workspace.`,
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import {acquireTerminalPort,releaseTerminalPort} from './session.js';
 
 const theme={
   background:'#0f181f',foreground:'#d9e2e8',cursor:'#67c58b',cursorAccent:'#0f181f',selectionBackground:'#356b7eaa',
@@ -60,13 +61,13 @@ export default{
       return true
     };
     function createSession(){
-      const used=new Set(sessions.map(session=>session.port)),port=system.terminalPorts().find(candidate=>!used.has(candidate));
+      const owner=Symbol('terminal-tab'),port=acquireTerminalPort(system,owner);
       if(!port){shell.toast(i18n.t('terminalSessionLimit'));return}
       const id=nextId++,pane=document.createElement('section');
       pane.className='terminal-native-pane';pane.dataset.terminalPane=id;host.appendChild(pane);
       const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:'"Ubuntu Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:0,theme});
       const fit=new FitAddon();terminal.loadAddon(fit);terminal.open(pane);
-      const session={id,port,pane,terminal,fit,disposables:[]};sessions.push(session);
+      const session={id,port,owner,pane,terminal,fit,disposables:[]};sessions.push(session);
       session.disposables.push(terminal.onData(data=>system.writeTerminal(data,port)));
       session.disposables.push(terminal.onTitleChange(title=>{session.title=title;drawTabs()}));
       session.disposables.push(kernel.bus.on('terminal:data',detail=>{if(detail.port===port)terminal.write(detail.data)}));
@@ -79,7 +80,7 @@ export default{
     function closeSession(id){
       const session=sessions.find(item=>item.id===id);if(!session)return;
       session.disposables.forEach(dispose);
-      session.terminal.dispose();session.pane.remove();system.resetTerminal(session.port);
+      session.terminal.dispose();session.pane.remove();releaseTerminalPort(session.port,session.owner);system.resetTerminal(session.port);
       sessions=sessions.filter(item=>item.id!==id);
       if(!sessions.length)return createSession();
       show(sessions.at(-1).id)
@@ -92,6 +93,6 @@ export default{
     const offDataReady=kernel.bus.on('guest:ready',()=>{setStatus();sessions.forEach(session=>{session.terminal.reset();const replay=system.terminalReplay(session.port);if(replay)session.terminal.write(replay);system.writeTerminal('\r',session.port)});resize()});
     const offStatus=kernel.bus.on('machine:status',setStatus);
     createSession();setStatus();
-    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();const resets=sessions.map(session=>{session.disposables.forEach(dispose);session.terminal.dispose();return system.resetTerminal(session.port)});sessions=[];return Promise.allSettled(resets)}
+    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();const resets=sessions.map(session=>{session.disposables.forEach(dispose);session.terminal.dispose();releaseTerminalPort(session.port,session.owner);return system.resetTerminal(session.port)});sessions=[];return Promise.allSettled(resets)}
   }
 };
