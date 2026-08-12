@@ -8,13 +8,37 @@ const messageText = message => typeof message?.content === 'string'
   ? message.content
   : (message?.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
 const renderText = renderMarkdown;
+const WORKSPACE_PREFS_KEY = 'aeris.ai.workspace';
+const DEFAULT_WORKSPACE_WIDTH = 390;
+const MIN_WORKSPACE_WIDTH = 310;
+const MAX_WORKSPACE_WIDTH = 560;
+
+const readWorkspacePrefs = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(WORKSPACE_PREFS_KEY) || '{}');
+    return {
+      open: Boolean(stored.open),
+      width: Math.max(MIN_WORKSPACE_WIDTH, Math.min(MAX_WORKSPACE_WIDTH, Number(stored.width) || DEFAULT_WORKSPACE_WIDTH)),
+      activityExpanded: stored.activityExpanded !== false,
+      view: ['app','context','results'].includes(stored.view) ? stored.view : 'app',
+    };
+  } catch {
+    return { open: false, width: DEFAULT_WORKSPACE_WIDTH, activityExpanded: true, view: 'app' };
+  }
+};
 
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
   mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, agentTasks }) {
+    const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
-    let workspaceSelectedId = null, workspaceDismissedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '';
+    let workspaceSelectedId = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
+    let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, activityExpanded = workspacePrefs.activityExpanded, workspaceView = workspacePrefs.view;
+
+    const persistWorkspacePrefs = () => {
+      try { localStorage.setItem(WORKSPACE_PREFS_KEY, JSON.stringify({ open: workspaceOpen, width: workspaceWidth, activityExpanded, view: workspaceView })); } catch {}
+    };
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
     const current = () => activeId ? aiAgent.sessionState(activeId) : null;
@@ -75,22 +99,24 @@ export default {
       </section>`;
     };
 
-    const render = ({ preserveComposer = false, focusSearch = false, focusComposer = preserveComposer } = {}) => {
+    const render = ({ preserveComposer = false, preserveConversation = false, focusSearch = false, focusComposer = preserveComposer } = {}) => {
       const draft = preserveComposer ? root.querySelector('[data-ai-composer]')?.value ?? composerDraft : composerDraft;composerDraft=draft;
+      const previousConversation=root.querySelector('[data-ai-conversation]'),previousConversationScroll=previousConversation?.scrollTop||0;
       const previousWorkspace=root.querySelector('[data-ai-app-workspace]');
       const state = aiAgent.snapshot(), session = current(), configured = Boolean(aiAgent.config().apiKey);
       const turns=session?.turns||[];displayedTurns=turns;
       const sessions = visibleSessions();
       const currentLive=session?.streaming&&session.activeTurnId===liveExecutionTurnId?liveExecution:null;
-      const activities=collectToolActivities(session,tools,currentLive),latestActivity=activities.at(-1)||null,foregroundActivity=[...activities].reverse().find(activity=>activity.phase==='running'||activity.phase==='approval')||latestActivity;
-      if(foregroundActivity&&foregroundActivity.id!==lastObservedToolId){lastObservedToolId=foregroundActivity.id;workspaceSelectedId=foregroundActivity.id;workspaceDismissedId=null}
+      const activities=collectToolActivities(session,tools,currentLive),latestActivity=activities.at(-1)||null,activeActivity=[...activities].reverse().find(activity=>activity.phase==='running'||activity.phase==='approval')||null,foregroundActivity=activeActivity||latestActivity;
+      if(activeActivity&&activeActivity.id!==lastObservedToolId){lastObservedToolId=activeActivity.id;workspaceSelectedId=activeActivity.id;workspaceOpen=true;persistWorkspacePrefs()}
       let workspaceActivity=activities.find(activity=>activity.id===workspaceSelectedId)||foregroundActivity;
       if(workspaceActivity)workspaceSelectedId=workspaceActivity.id;
       displayedActivities=activities;
-      const workspaceVisible=Boolean(workspaceActivity&&workspaceDismissedId!==workspaceActivity.id);
-      const signature=workspaceVisible?workspaceSignature(workspaceActivity):'',reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===workspaceActivity.id&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==workspaceActivity?.id;
+      const workspaceVisible=workspaceOpen;
+      const workspaceContext=agentContext.snapshot(),contextWindows=shell.windowManager.contextWindows();
+      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):'',signature=workspaceSignature(workspaceActivity,`${localeSignature}:${workspaceView}:${historySignature}:${contextSignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
       if(reuseWorkspace)previousWorkspace.remove();
-      root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}">
+      root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
         <aside class="ai-sidebar">
           <header><span class="ai-brand-icon">${icon('aerisAi', 21)}</span><strong>${i18n.t('aerisAI')}</strong><button data-ai-new title="${i18n.t('newChat')}">${icon('plus', 17)}</button></header>
           <label class="ai-search">${icon('search', 14)}<input data-ai-search value="${esc(query)}" placeholder="${i18n.t('searchChats')}"></label>
@@ -99,7 +125,7 @@ export default {
           <footer><button data-ai-settings>${icon('settings', 16)}<span><strong>${i18n.t('aiSettings')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('setupRequired')}</small></span></button></footer>
         </aside>
         <section class="ai-workspace">
-          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-notification-button ${notificationOpen?'selected':''}" data-ai-notifications title="${i18n.t('notifications')}">${icon('bell', 17)}<i class="${notifications.snapshot().unread?'visible':''}" data-ai-notification-dot></i></button><button data-ai-settings title="${i18n.t('aiSettings')}">${icon('settings', 17)}</button></header>
+          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-workspace-toggle ${workspaceVisible?'selected':''}" data-ai-toggle-workspace aria-pressed="${workspaceVisible}" title="${i18n.t(workspaceVisible?'closeWorkspace':'openWorkspace')}">${icon('panelRight', 17)}</button><button class="ai-notification-button ${notificationOpen?'selected':''}" data-ai-notifications title="${i18n.t('notifications')}">${icon('bell', 17)}<i class="${notifications.snapshot().unread?'visible':''}" data-ai-notification-dot></i></button><button data-ai-settings title="${i18n.t('aiSettings')}">${icon('settings', 17)}</button></header>
           <main class="ai-conversation" data-ai-conversation>
             ${!state.ready ? `<div class="ai-center-state"><span class="ai-orb waiting">${icon('aerisAi', 30)}</span><h2>${i18n.t('preparingAI')}</h2>${state.error?errorMarkup(state.error,'ai-center-error'):`<p>${i18n.t('waitingForLinuxAI')}</p>`}</div>`
               : !configured ? `<div class="ai-center-state"><span class="ai-orb">${icon('aerisAi', 30)}</span><h2>${i18n.t('meetAerisAI')}</h2><p>${i18n.t('configureAICopy')}</p><button data-ai-settings class="ai-primary">${i18n.t('configureAI')}</button></div>`
@@ -116,13 +142,15 @@ export default {
           ${settingsOpen ? settingsMarkup() : ''}
           ${notificationOpen ? notificationMarkup() : ''}
         </section>
-        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace}):''}
+        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,session,activityExpanded,view:workspaceView,context:workspaceContext,windows:contextWindows}):''}
       </div>`;
       if(reuseWorkspace)root.querySelector('.ai-system-app')?.append(previousWorkspace);
       bind();
       requestAnimationFrame(() => {
         const conversation = root.querySelector('[data-ai-conversation]');
-        if (conversation) conversation.scrollTop = conversation.scrollHeight;
+        if (conversation) conversation.scrollTop = preserveConversation ? previousConversationScroll : conversation.scrollHeight;
+        const selectedActivity=root.querySelector('.ai-activity-item.selected'),activityScroller=selectedActivity?.closest('.ai-activity-groups');
+        if(activityScroller&&selectedActivity){const itemTop=selectedActivity.offsetTop,itemBottom=itemTop+selectedActivity.offsetHeight;if(itemTop<activityScroller.scrollTop)activityScroller.scrollTop=itemTop-8;else if(itemBottom>activityScroller.scrollTop+activityScroller.clientHeight)activityScroller.scrollTop=itemBottom-activityScroller.clientHeight+8}
         if (focusSearch) { const search = root.querySelector('[data-ai-search]'); search?.focus(); search?.setSelectionRange(search.value.length, search.value.length); }
         else if (focusComposer) { const input = root.querySelector('[data-ai-composer]'); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }
       });
@@ -163,7 +191,7 @@ export default {
       const input = root.querySelector('[data-ai-composer]'), text = input?.value.trim();
       if (!text) return;
       if(!activeId)activeId=await aiAgent.createSession();
-      localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceDismissedId=workspaceSelectedId;
+      localError = '';liveExecution=null;liveExecutionTurnId=null;
       input.value = '';composerDraft='';
       render();
       aiAgent.send(activeId, text).catch(error => { localError = friendlyError(error); render(); });
@@ -172,7 +200,7 @@ export default {
     const submitInlineEdit = () => {
       const text = root.querySelector('[data-ai-inline-edit]')?.value.trim(), turnId = editingTurnId;
       if (!text || turnId === null || !activeId) return;
-      editingTurnId = null; editDraft = ''; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceDismissedId=workspaceSelectedId; render();
+      editingTurnId = null; editDraft = ''; localError = '';liveExecution=null;liveExecutionTurnId=null; render();
       aiAgent.editAndResend(activeId, turnId, text).catch(error => { localError = friendlyError(error); render(); });
     };
 
@@ -187,8 +215,8 @@ export default {
     };
 
     const bind = () => {
-      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = async () => { activeId = await aiAgent.createSession(); localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;workspaceDismissedId=null;lastObservedToolId=null; render(); });
-      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;workspaceDismissedId=null;lastObservedToolId=null; render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
+      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = async () => { activeId = await aiAgent.createSession(); localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); });
+      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null; render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
       root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
       root.querySelectorAll('[data-ai-copy-turn]').forEach(button => button.onclick = async () => { const turn=displayedTurns.find(item=>item.id===button.dataset.aiCopyTurn),text=button.dataset.aiCopyRole==='user'?messageText(turn?.user):assistantText(turn||{responses:[]});if(text&&await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard')); });
       root.querySelectorAll('[data-ai-copy-error]').forEach(button=>button.onclick=async event=>{event.stopPropagation();const text=button.closest('.ai-copyable-error')?.querySelector('.ai-error-text')?.textContent||'';if(await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard'));});
@@ -205,9 +233,9 @@ export default {
       root.querySelector('[data-ai-close-notifications]')?.addEventListener('click',()=>{notificationOpen=false;render({preserveComposer:true})});
       root.querySelector('[data-ai-context-selector]')?.addEventListener('click',()=>{contextMenuOpen=!contextMenuOpen;render({preserveComposer:true,focusComposer:false})});
       root.querySelector('[data-ai-close-context]')?.addEventListener('click',()=>{contextMenuOpen=false;render({preserveComposer:true,focusComposer:false})});
-      root.querySelector('[data-ai-context-desktop]')?.addEventListener('click',()=>{contextMenuOpen=false;agentContext.focusDesktop()});
+      root.querySelectorAll('[data-ai-context-desktop]').forEach(button=>button.onclick=()=>{contextMenuOpen=false;agentContext.focusDesktop()});
       root.querySelectorAll('[data-ai-context-window]').forEach(button=>button.onclick=()=>{const target=shell.windowManager.contextWindows().find(item=>item.id===button.dataset.aiContextWindow);contextMenuOpen=false;if(target)agentContext.focusWindow(target)});
-      root.querySelector('[data-ai-clear-context]')?.addEventListener('click',()=>{contextMenuOpen=false;agentContext.clear()});
+      root.querySelectorAll('[data-ai-clear-context]').forEach(button=>button.onclick=()=>{contextMenuOpen=false;agentContext.clear()});
       root.querySelector('[data-ai-deny-approval]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiDenyApproval,false)});
       root.querySelector('[data-ai-approve]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiApprove,true)});
       root.querySelector('[data-ai-clear-notifications]')?.addEventListener('click',()=>notifications.clear());
@@ -220,10 +248,31 @@ export default {
       root.querySelector('[data-ai-reveal]')?.addEventListener('click', event => event.currentTarget.closest('.ai-secret-field').classList.toggle('revealed'));
       root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
       root.querySelectorAll('[data-ai-suggestion]').forEach(button => button.onclick = () => { const input = root.querySelector('[data-ai-composer]'); input.value = button.dataset.aiSuggestion; input.focus(); });
-      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceDismissedId=null;render({preserveComposer:true});}));
-      root.querySelectorAll('[data-ai-workspace-tool]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceTool;workspaceDismissedId=null;render({preserveComposer:true});});
+      root.querySelectorAll('[data-tool-call]').forEach(card=>card.querySelector('header')?.addEventListener('click',()=>{const activity=displayedActivities.find(item=>item.id===card.dataset.toolCall);if(!activity)return;workspaceSelectedId=activity.id;workspaceView='app';workspaceOpen=true;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true});}));
+      root.querySelectorAll('[data-ai-workspace-activity]').forEach(button=>button.onclick=()=>{workspaceSelectedId=button.dataset.aiWorkspaceActivity;workspaceView='app';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false});});
+      root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
+      root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      root.querySelector('[data-ai-toggle-activity-history]')?.addEventListener('click',event=>{activityExpanded=!activityExpanded;persistWorkspacePrefs();const history=event.currentTarget.closest('[data-ai-activity-history]');history?.classList.toggle('is-expanded',activityExpanded);history?.classList.toggle('is-collapsed',!activityExpanded);event.currentTarget.setAttribute('aria-expanded',String(activityExpanded));event.currentTarget.title=i18n.t(activityExpanded?'collapseActivityHistory':'expandActivityHistory')});
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
-      const closeWorkspace=root.querySelector('[data-ai-close-workspace]');if(closeWorkspace)closeWorkspace.onclick=()=>{workspaceDismissedId=workspaceSelectedId;render({preserveComposer:true});};
+      root.querySelectorAll('[data-ai-open-context-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenContextApp));
+      root.querySelectorAll('[data-ai-open-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiOpenResult);if(!activity)return;shell.open(button.dataset.resultApp,button.dataset.resultPath||undefined);kernel.bus.emit('agent:open-result',{appId:activity.appId,operation:activity.operation,result:structuredClone(activity.result),params:structuredClone(activity.params),path:button.dataset.resultPath||''})});
+      root.querySelectorAll('[data-ai-reveal-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiRevealResult),path=activity?.result?.path||activity?.params?.path;if(!path)return;const parent=path.split('/').slice(0,-1).join('/')||'/home/aeris';shell.open('files',parent)});
+      root.querySelectorAll('[data-ai-copy-result]').forEach(button=>button.onclick=async()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiCopyResult);if(!activity)return;const value=activity.result??activity.output;if(await clipboard.copyText(typeof value==='object'?JSON.stringify(value,null,2):String(value??''))){button.innerHTML=`${icon('check',12)} ${i18n.t('copiedToClipboard')}`}});
+      const setWorkspaceOpen=open=>{workspaceOpen=open;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
+      root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
+      root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));
+      const resizeHandle=root.querySelector('[data-ai-workspace-resize]');
+      if(resizeHandle){
+        let resize=null;
+        const clampWidth=value=>{const host=root.querySelector('.ai-system-app'),compact=(host?.clientWidth||0)<=900,room=compact?(host?.clientWidth||MAX_WORKSPACE_WIDTH)-110:(host?.clientWidth||MAX_WORKSPACE_WIDTH)-248-340;return Math.max(MIN_WORKSPACE_WIDTH,Math.min(MAX_WORKSPACE_WIDTH,Math.max(MIN_WORKSPACE_WIDTH,room),value))};
+        const applyWidth=value=>{workspaceWidth=Math.round(clampWidth(value));root.querySelector('.ai-system-app')?.style.setProperty('--agent-workspace-width',`${workspaceWidth}px`)};
+        const finishResize=event=>{if(!resize)return;resize=null;root.querySelector('.ai-system-app')?.classList.remove('is-resizing-workspace');if(event&&resizeHandle.hasPointerCapture(event.pointerId))resizeHandle.releasePointerCapture(event.pointerId);persistWorkspacePrefs()};
+        resizeHandle.onpointerdown=event=>{if(event.button!==0)return;resize={pointerId:event.pointerId,startX:event.clientX,startWidth:workspaceWidth};resizeHandle.setPointerCapture(event.pointerId);root.querySelector('.ai-system-app')?.classList.add('is-resizing-workspace');event.preventDefault()};
+        resizeHandle.onpointermove=event=>{if(!resize||event.pointerId!==resize.pointerId)return;if(!(event.buttons&1))return finishResize(event);applyWidth(resize.startWidth-(event.clientX-resize.startX))};
+        resizeHandle.onpointerup=finishResize;resizeHandle.onpointercancel=finishResize;
+        resizeHandle.ondblclick=()=>{applyWidth(DEFAULT_WORKSPACE_WIDTH);persistWorkspacePrefs()};
+        resizeHandle.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home'].includes(event.key))return;event.preventDefault();applyWidth(event.key==='Home'?DEFAULT_WORKSPACE_WIDTH:workspaceWidth+(event.key==='ArrowLeft'?24:-24));persistWorkspacePrefs()};
+      }
       root.querySelector('[data-ai-composer-model]')?.addEventListener('change',async event=>{const model=event.target.value;if(model==='__settings__'){settingsSection='model';settingsOpen=true;notificationOpen=false;render({preserveComposer:true,focusComposer:false});return}if(!model||model===aiAgent.config().model)return;try{await aiAgent.updateConfig({model});localError='';shell.toast(i18n.t('aiSettingsSaved'))}catch(error){localError=friendlyError(error);render({preserveComposer:true})}});
       const composer = root.querySelector('[data-ai-composer]');
       if (composer) { composer.oninput = () => { composerDraft=composer.value;composer.style.height = 'auto'; composer.style.height = `${Math.min(150, composer.scrollHeight)}px`; }; composer.onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault();if(!current()?.streaming)send(); } }; }
@@ -247,6 +296,6 @@ export default {
     root.addEventListener('click',closeContextOnClick);root.addEventListener('keydown',closeContextOnEscape,true);
     ensureSession().then(() => { activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
     render();
-    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offTasks(); offEntry(); offLocale(); };
+    return () => { if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offTasks(); offEntry(); offLocale(); };
   },
 };
