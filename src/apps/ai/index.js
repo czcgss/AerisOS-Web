@@ -20,7 +20,7 @@ const readWorkspacePrefs = () => {
       open: Boolean(stored.open),
       width: Math.max(MIN_WORKSPACE_WIDTH, Math.min(MAX_WORKSPACE_WIDTH, Number(stored.width) || DEFAULT_WORKSPACE_WIDTH)),
       activityExpanded: stored.activityExpanded !== false,
-      view: ['app','context'].includes(stored.view) ? stored.view : 'app',
+      view: ['app','context','results'].includes(stored.view) ? stored.view : 'app',
     };
   } catch {
     return { open: false, width: DEFAULT_WORKSPACE_WIDTH, activityExpanded: true, view: 'app' };
@@ -255,6 +255,9 @@ export default {
       root.querySelector('[data-ai-toggle-activity-history]')?.addEventListener('click',event=>{activityExpanded=!activityExpanded;persistWorkspacePrefs();const history=event.currentTarget.closest('[data-ai-activity-history]');history?.classList.toggle('is-expanded',activityExpanded);history?.classList.toggle('is-collapsed',!activityExpanded);event.currentTarget.setAttribute('aria-expanded',String(activityExpanded));event.currentTarget.title=i18n.t(activityExpanded?'collapseActivityHistory':'expandActivityHistory')});
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
       root.querySelectorAll('[data-ai-open-context-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenContextApp));
+      root.querySelectorAll('[data-ai-open-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiOpenResult);if(!activity)return;shell.open(button.dataset.resultApp,button.dataset.resultPath||undefined);kernel.bus.emit('agent:open-result',{appId:activity.appId,operation:activity.operation,result:structuredClone(activity.result),params:structuredClone(activity.params),path:button.dataset.resultPath||''})});
+      root.querySelectorAll('[data-ai-reveal-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiRevealResult),path=activity?.result?.path||activity?.params?.path;if(!path)return;const parent=path.split('/').slice(0,-1).join('/')||'/home/aeris';shell.open('files',parent)});
+      root.querySelectorAll('[data-ai-copy-result]').forEach(button=>button.onclick=async()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiCopyResult);if(!activity)return;const value=activity.result??activity.output;if(await clipboard.copyText(typeof value==='object'?JSON.stringify(value,null,2):String(value??''))){button.innerHTML=`${icon('check',12)} ${i18n.t('copiedToClipboard')}`}});
       const setWorkspaceOpen=open=>{workspaceOpen=open;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
       root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
       root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));

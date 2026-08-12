@@ -1,14 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">AerisOS</title>
+  <desc id="desc">Four flowing forms orbit an open intelligent core.</desc>
   <defs>
-    <linearGradient id="a" x1="8" y1="5" x2="56" y2="59" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#8797ea"/>
-      <stop offset=".55" stop-color="#647bd5"/>
-      <stop offset="1" stop-color="#5367b8"/>
+    <linearGradient id="tile" x1="8" y1="5" x2="57" y2="59" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8FD3F4"/>
+      <stop offset=".42" stop-color="#899CF6"/>
+      <stop offset=".72" stop-color="#B58DE4"/>
+      <stop offset="1" stop-color="#F3A9CA"/>
     </linearGradient>
-    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#31458c" flood-opacity=".28"/>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(18 13) rotate(48) scale(52)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".36"/>
+      <stop offset=".56" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#5265B4" flood-opacity=".26"/>
+    </filter>
+    <filter id="markShadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="1.4" stdDeviation="1.4" flood-color="#5C55A4" flood-opacity=".28"/>
     </filter>
   </defs>
-  <rect x="3" y="3" width="58" height="58" rx="17" fill="url(#a)"/>
-  <path d="M32 13c-12.3 0-21.3 9.6-21.3 21.9 0 10.7 7.5 19.7 17.9 21.6V45h-7.2L32 29l10.6 16h-7.2v11.5c10.4-1.6 17.9-10.7 17.9-21.6C53.3 22.6 44.3 13 32 13Z" fill="#fff" filter="url(#s)"/>
+
+  <rect x="3" y="3" width="58" height="58" rx="17" fill="url(#tile)" filter="url(#tileShadow)"/>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#glow)"/>
+  <path d="M9 22.5C11.5 13.7 19.8 7.8 29 7.8c.8 0 1.2 1 .6 1.6-5.1 4.4-7.7 10-7.7 16.3 0 2.4.4 4.7 1.2 6.9.3.8-.6 1.6-1.3 1.1C14.5 29.4 9.9 25.8 9 22.5Z" fill="#fff" filter="url(#markShadow)"/>
+  <path d="M41.5 9c8.8 2.5 14.7 10.8 14.7 20 0 .8-1 1.2-1.6.6-4.4-5.1-10-7.7-16.3-7.7-2.4 0-4.7.4-6.9 1.2-.8.3-1.6-.6-1.1-1.3C34.6 14.5 38.2 9.9 41.5 9Z" fill="#fff" filter="url(#markShadow)"/>
+  <path d="M55 41.5c-2.5 8.8-10.8 14.7-20 14.7-.8 0-1.2-1-.6-1.6 5.1-4.4 7.7-10 7.7-16.3 0-2.4-.4-4.7-1.2-6.9-.3-.8.6-1.6 1.3-1.1 7.3 4.3 11.9 7.9 12.8 11.2Z" fill="#fff" filter="url(#markShadow)"/>
+  <path d="M22.5 55C13.7 52.5 7.8 44.2 7.8 35c0-.8 1-1.2 1.6-.6 4.4 5.1 10 7.7 16.3 7.7 2.4 0 4.7-.4 6.9-1.2.8-.3 1.6.6 1.1 1.3-4.3 7.3-7.9 11.9-11.2 12.8Z" fill="#fff" filter="url(#markShadow)"/>
 </svg>
