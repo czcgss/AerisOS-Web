@@ -1,0 +1,493 @@
+.boot-screen {
+  --boot-accent: var(--accent);
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 72px 24px 58px;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(124, 109, 217, .18), transparent 29%),
+    radial-gradient(circle at 84% 22%, rgba(86, 166, 213, .2), transparent 31%),
+    radial-gradient(circle at 55% 104%, rgba(211, 111, 145, .16), transparent 36%),
+    linear-gradient(145deg, #edf4f7 0%, #dce8ef 52%, #e8eaf4 100%);
+  color: var(--text);
+  transition: opacity .55s, visibility .55s;
+  user-select: none;
+}
+
+.boot-screen[data-mode="restore"] { --boot-accent: #6c73dc; }
+.boot-screen[data-mode="install"] { --boot-accent: #4d91c8; }
+
+.boot-ambient,
+.boot-ambient i {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.boot-ambient:after {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,.42) .7px, transparent .7px);
+  background-size: 18px 18px;
+  content: "";
+  opacity: .22;
+  mask-image: linear-gradient(to bottom, black, transparent 68%);
+}
+
+.boot-ambient i {
+  width: 38vw;
+  height: 38vw;
+  border-radius: 50%;
+  filter: blur(1px);
+  opacity: .72;
+  animation: bootFloat 11s ease-in-out infinite alternate;
+}
+
+.boot-ambient i:nth-child(1) {
+  top: -23vw;
+  left: -13vw;
+  background: radial-gradient(circle at 66% 68%, rgba(255,255,255,.8), rgba(130,178,222,.1) 62%, transparent 70%);
+}
+
+.boot-ambient i:nth-child(2) {
+  top: 2vh;
+  right: -22vw;
+  left: auto;
+  background: radial-gradient(circle at 30% 52%, rgba(173,147,229,.32), transparent 68%);
+  animation-delay: -3s;
+}
+
+.boot-ambient i:nth-child(3) {
+  top: auto;
+  bottom: -28vw;
+  left: 28vw;
+  background: radial-gradient(circle at 50% 30%, rgba(227,147,176,.24), transparent 66%);
+  animation-delay: -7s;
+}
+
+.boot-identity {
+  position: absolute;
+  top: 28px;
+  left: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #465b70;
+}
+
+.boot-identity > span {
+  display: grid;
+  place-items: center;
+  color: var(--boot-accent);
+}
+
+.boot-identity strong {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+}
+
+.boot-identity small {
+  width: auto;
+  margin: 0 0 0 -3px;
+  color: #81909f;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.boot-content {
+  position: relative;
+  z-index: 1;
+  width: min(440px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: bootContentIn .55s cubic-bezier(.2,.8,.2,1);
+}
+
+.boot-mark {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  border: 1px solid rgba(255,255,255,.72);
+  border-radius: 26px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--boot-accent) 84%, #a9d8e9), var(--boot-accent));
+  box-shadow: 0 20px 45px color-mix(in srgb, var(--boot-accent) 28%, transparent), inset 1px 1px rgba(255,255,255,.45);
+  color: #fff;
+}
+
+.boot-mark:before {
+  position: absolute;
+  z-index: -1;
+  inset: -18px;
+  border-radius: 36px;
+  background: color-mix(in srgb, var(--boot-accent) 15%, transparent);
+  content: "";
+  filter: blur(12px);
+  animation: bootGlow 2.7s ease-in-out infinite;
+}
+
+.boot-mark > span { display: grid; place-items: center; }
+
+.boot-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  margin-top: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,.54);
+  border-radius: 999px;
+  background: rgba(255,255,255,.28);
+  color: #65788b;
+  box-shadow: inset 0 1px rgba(255,255,255,.42);
+  backdrop-filter: blur(12px);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.boot-mode i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--boot-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--boot-accent) 13%, transparent);
+}
+
+.boot-content h1 {
+  margin: 12px 0 0;
+  color: #33495e;
+  font-size: clamp(21px, 3vw, 27px);
+  font-weight: 750;
+  letter-spacing: -.75px;
+}
+
+.boot-content > p {
+  min-height: 18px;
+  max-width: 430px;
+  margin: 8px 0 25px;
+  overflow-wrap: anywhere;
+  color: #708397;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.boot-progress-meta {
+  width: min(360px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #75889a;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.boot-progress-meta output {
+  color: var(--boot-accent);
+  font: 600 9px "DM Mono", ui-monospace, monospace;
+}
+
+.boot-content .boot-progress {
+  width: min(360px, 100%);
+  height: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.5);
+  border-radius: 999px;
+  background: rgba(128,151,168,.16);
+  box-shadow: inset 2px 2px 5px rgba(89,112,130,.16), inset -2px -2px 5px rgba(255,255,255,.5);
+}
+
+.boot-content .boot-progress i {
+  position: relative;
+  display: block;
+  min-width: 3%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--boot-accent) 82%, #86cbd8), var(--boot-accent));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--boot-accent) 34%, transparent);
+  transition: width .42s cubic-bezier(.2,.7,.2,1);
+}
+
+.boot-content .boot-progress i:after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
+  content: "";
+  animation: bootShimmer 1.4s ease-in-out infinite;
+}
+
+.boot-content > small {
+  width: min(390px, 100%);
+  min-height: 29px;
+  margin-top: 12px;
+  color: #7e8f9f;
+  font-size: 9px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.boot-content .boot-activity {
+  width: min(400px, 100%);
+  margin-top: 12px;
+  text-align: left;
+}
+
+.boot-content .boot-summary { gap: 3px; }
+
+.boot-content .boot-step {
+  color: #6b7e8f;
+}
+
+.boot-content .boot-step.completed {
+  min-height: 25px;
+  padding: 2px 8px;
+  font: 500 9px/1.4 "DM Mono", ui-monospace, monospace;
+}
+
+.boot-content .boot-step.completed > i {
+  background: rgba(74,164,112,.14);
+  color: #429168;
+}
+
+.boot-content .boot-step.current {
+  min-height: 45px;
+  padding: 5px 8px;
+  border-radius: 12px;
+}
+
+.boot-content .boot-step.current:hover,
+.boot-content .boot-step.current:focus-visible,
+.boot-content .boot-step.current[aria-expanded="true"] {
+  background: rgba(255,255,255,.3);
+}
+
+.boot-content .boot-step.current > i {
+  border-color: color-mix(in srgb, var(--boot-accent) 20%, transparent);
+  border-top-color: var(--boot-accent);
+}
+
+.boot-content .boot-step.current strong {
+  color: #43586b;
+  font: 650 10px/1.35 "DM Mono", ui-monospace, monospace;
+}
+
+.boot-content .boot-step.current em {
+  color: #8494a3;
+  font: 500 8px/1.3 Manrope, sans-serif;
+}
+
+.boot-content .boot-step.current > b {
+  color: #738699;
+}
+
+.boot-details {
+  position: fixed;
+  z-index: 3;
+  right: 24px;
+  bottom: 24px;
+  width: min(410px, calc(100vw - 48px));
+  margin: 0;
+  padding: 15px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.68);
+  border-radius: 18px;
+  background: rgba(235,242,246,.83);
+  box-shadow: -8px -8px 25px rgba(255,255,255,.42), 12px 18px 42px rgba(73,94,112,.22);
+  backdrop-filter: blur(28px) saturate(1.2);
+  animation: bootDetailsIn .22s cubic-bezier(.2,.8,.2,1);
+}
+
+.boot-details[hidden] { display: none; }
+
+.boot-details > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 12px;
+  color: #475b6d;
+}
+
+.boot-details > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.boot-details > header small {
+  width: auto;
+  margin: 0;
+  color: var(--boot-accent);
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.boot-details > header strong { font-size: 11px; }
+
+.boot-details > header button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #718496;
+}
+
+.boot-details > header button:hover { background: rgba(255,255,255,.48); }
+
+.boot-details .boot-log {
+  display: grid;
+  max-height: 176px;
+  gap: 3px;
+  overflow: auto;
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: rgba(201,215,224,.34);
+  box-shadow: inset 2px 2px 6px rgba(90,113,130,.12), inset -2px -2px 6px rgba(255,255,255,.5);
+}
+
+.boot-details .boot-log-row {
+  min-height: 20px;
+  color: #5d7182;
+  font: 500 8px/1.45 "DM Mono", ui-monospace, monospace;
+}
+
+.boot-details .boot-log-row i { background: #63a57e; }
+.boot-details .boot-log-row time { color: #8797a5; }
+
+.boot-security {
+  position: absolute;
+  bottom: 25px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #7c8d9d;
+  font-size: 8px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.boot-error { --boot-accent: #c65f6a; }
+.boot-error .boot-mark { background: linear-gradient(145deg, #dc7880, #b84f5c); }
+.boot-error .boot-mode i { background: #c65f6a; }
+.boot-error .boot-content h1 { color: #a64b56; }
+.boot-error .boot-progress i { background: #c65f6a; }
+.boot-error .boot-content > p {
+  max-height: 74px;
+  overflow: auto;
+  cursor: text;
+  user-select: text;
+}
+
+.boot-error .boot-content > small {
+  width: min(540px, calc(100vw - 48px));
+  min-height: 74px;
+}
+
+.boot-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.boot-recovery-actions button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 11px;
+  background: rgba(255,255,255,.34);
+  box-shadow: 0 5px 12px rgba(78,99,115,.1), inset 0 1px rgba(255,255,255,.5);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.boot-recovery-actions button:hover { background: rgba(255,255,255,.54); }
+.boot-recovery-actions button.copied { color: #3f9163; }
+.boot-recovery-actions .danger { border-color: transparent; background: #bd5b64; color: #fff; }
+
+.boot-screen.boot-stalled { --boot-accent: #c58b55; }
+
+[data-theme="dark"] .boot-screen {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(116, 90, 199, .25), transparent 30%),
+    radial-gradient(circle at 84% 22%, rgba(47, 131, 177, .23), transparent 31%),
+    radial-gradient(circle at 55% 104%, rgba(172, 67, 111, .2), transparent 38%),
+    linear-gradient(145deg, #203442 0%, #172a37 54%, #24273b 100%);
+}
+
+[data-theme="dark"] .boot-identity,
+[data-theme="dark"] .boot-content h1 { color: #dce7ee; }
+[data-theme="dark"] .boot-identity small,
+[data-theme="dark"] .boot-content > p,
+[data-theme="dark"] .boot-content > small,
+[data-theme="dark"] .boot-progress-meta,
+[data-theme="dark"] .boot-security { color: #91a5b2; }
+[data-theme="dark"] .boot-mode { border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.05); color: #a6b6c0; }
+[data-theme="dark"] .boot-content .boot-step.current strong { color: #d2dfe6; }
+[data-theme="dark"] .boot-content .boot-step.current em,
+[data-theme="dark"] .boot-content .boot-step.completed { color: #91a5b2; }
+[data-theme="dark"] .boot-content .boot-step.current:hover,
+[data-theme="dark"] .boot-content .boot-step.current:focus-visible,
+[data-theme="dark"] .boot-content .boot-step.current[aria-expanded="true"] { background: rgba(255,255,255,.05); }
+[data-theme="dark"] .boot-details { border-color: rgba(255,255,255,.1); background: rgba(40,58,70,.9); box-shadow: 0 20px 50px rgba(5,14,20,.38); }
+[data-theme="dark"] .boot-details > header { color: #d7e3e9; }
+[data-theme="dark"] .boot-details .boot-log { background: rgba(16,31,41,.38); box-shadow: inset 2px 2px 6px rgba(3,12,18,.22); }
+[data-theme="dark"] .boot-details .boot-log-row { color: #aebdc6; }
+
+@media (max-width: 640px) {
+  .boot-screen { padding: 68px 20px 60px; }
+  .boot-identity { top: 21px; left: 21px; }
+  .boot-details { right: 12px; bottom: 12px; width: calc(100vw - 24px); }
+  .boot-security { bottom: 18px; }
+}
+
+@media (max-height: 690px) {
+  .boot-screen { padding-top: 56px; }
+  .boot-mark { width: 64px; height: 64px; border-radius: 21px; }
+  .boot-mark svg { width: 32px; height: 32px; }
+  .boot-mode { margin-top: 15px; }
+  .boot-content h1 { margin-top: 8px; font-size: 21px; }
+  .boot-content > p { margin: 5px 0 14px; }
+  .boot-content > small { min-height: 22px; margin-top: 8px; }
+  .boot-content .boot-activity { margin-top: 6px; }
+  .boot-security { display: none; }
+}
+
+@keyframes bootContentIn {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes bootDetailsIn {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes bootGlow {
+  50% { opacity: .58; transform: scale(1.06); }
+}
+
+@keyframes bootFloat {
+  to { transform: translate3d(16px, 12px, 0) scale(1.03); }
+}
