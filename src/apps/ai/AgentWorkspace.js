@@ -366,7 +366,7 @@ const resultsViewMarkup = (activities, tools, i18n) => {
 const activityViewMarkup = (apps, activeAppId, i18n) => {
   const active=apps.find(app=>app.id===activeAppId)||null;
   return `<section class="ai-live-activity" data-ai-live-activity data-activity-app-id="${esc(active?.id||'')}">
-    ${apps.length?`<nav class="ai-activity-window-list" aria-label="${esc(i18n.t('activeApps'))}">${apps.map(app=>`<button class="${app.id===active?.id?'selected':''}" data-ai-activity-app="${esc(app.id)}" title="${esc(i18n.t(app.title))}"><span class="app-icon app-icon-${esc(app.color||'grey')}">${icon(app.icon,14)}</span><span>${esc(i18n.t(app.title))}</span><i></i></button>`).join('')}</nav>`:''}
+    ${apps.length?`<nav class="ai-activity-window-list" aria-label="${esc(i18n.t('activeApps'))}">${apps.map(app=>`<div class="ai-activity-window-item ${app.id===active?.id?'selected':''}"><button data-ai-activity-app="${esc(app.id)}" title="${esc(i18n.t(app.title))}"><span class="app-icon app-icon-${esc(app.color||'grey')}">${icon(app.icon,14)}</span><span>${esc(i18n.t(app.title))}</span><i></i></button><button data-ai-close-activity-app="${esc(app.id)}" aria-label="${esc(i18n.t('close'))}" title="${esc(i18n.t('close'))}">${icon('close',9)}</button></div>`).join('')}</nav>`:''}
     <div class="ai-activity-stage ${active?'has-window':''}" data-ai-activity-host>
       ${active?'':`<div class="ai-activity-empty"><span>${icon('maximize',26)}</span><strong>${esc(i18n.t('noActiveAppTitle'))}</strong><p>${esc(i18n.t('noActiveAppCopy'))}</p></div>`}
     </div>

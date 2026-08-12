@@ -66,6 +66,7 @@ export default {
       activityAppsOpen=false;workspaceOpen=true;workspaceView='activity';persistWorkspacePrefs();
       return app;
     };
+    const closeActivityApp=id=>{const wasActive=activityAppId===id;if(wasActive)unmountActivitySurface();activityAppIds=activityAppIds.filter(value=>value!==id);if(wasActive){activityAppId=activityAppIds[0]||null;activityTarget=null}};
     const friendlyError = error => /guest command|mkdir -p|__aeris_/i.test(error?.message || '') ? i18n.t('conversationSaveFailed') : (error?.message || String(error));
     const ensureSession = () => {
       if (!aiAgent.ready || activeId) return;
@@ -309,6 +310,7 @@ export default {
       root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
       root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-activity-app]').forEach(button=>button.onclick=()=>{selectActivityApp(button.dataset.aiActivityApp);workspaceView='activity';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      root.querySelectorAll('[data-ai-close-activity-app]').forEach(button=>button.onclick=event=>{event.stopPropagation();closeActivityApp(button.dataset.aiCloseActivityApp);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-activity-open-app]').forEach(button=>button.onclick=()=>{activityAppsOpen=false;activateApp(button.dataset.aiActivityOpenApp);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-close-applications]').forEach(button=>button.onclick=()=>{activityAppsOpen=false;render({preserveComposer:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
