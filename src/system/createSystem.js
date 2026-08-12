@@ -33,6 +33,7 @@ import photos from '../apps/photos/index.js';
 import trash from '../apps/trash/index.js';
 import weatherApp from '../apps/weather/index.js';
 import aiAssistant from '../apps/ai/index.js';
+import { attachActivitySurfaces } from '../apps/activity/index.js';
 
 export async function createSystem(root) {
   window.aeris={ phase:'starting' };
@@ -48,7 +49,7 @@ export async function createSystem(root) {
   const clipboard=kernel.register('clipboard',new ClipboardService());
   const weather=kernel.register('weather',new WeatherService(settings));
   const registry=new AppRegistry();
-  [aiAssistant,files,photos,calendar,weatherApp,contacts,reminders,notes,textedit,preview,calculator,clock,diskutility,terminal,machineApp,monitor,settingsApp,trash].forEach(app=>registry.register(app));
+  attachActivitySurfaces([aiAssistant,files,photos,calendar,weatherApp,contacts,reminders,notes,textedit,preview,calculator,clock,diskutility,terminal,machineApp,monitor,settingsApp,trash]).forEach(app=>registry.register(app));
   const agentContext=kernel.register('agentContext',new AgentContextService(registry,i18n));
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
