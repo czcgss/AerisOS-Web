@@ -207,6 +207,7 @@ const surfaceFor = (activity, i18n) => ({
   terminal: terminalSurface,
   calculator: calculatorSurface,
   settings: settingsSurface,
+  music: genericSurface,
 }[activity.appId]?.(activity, i18n) || genericSurface(activity, i18n));
 
 const resourceIcon = resource => resource?.kind === 'desktop'
@@ -271,9 +272,9 @@ const resultSummary = (activity, i18n) => {
   if(activity.appId==='calculator')return String(value.value??activity.output??'');
   return shortText(typeof activity.result==='object'?displayValue(activity.result):activity.result||activity.output,180);
 };
-const resultIcon = activity => ({calendar:'calendar',reminders:'reminder',notes:'note',contacts:'contacts',files:'folder',textedit:'document',preview:'preview',photos:'image',trash:'delete',weather:'sun',terminal:'terminal',calculator:'calc',settings:'settings'}[activity.appId]||'sparkles');
-const resultOperationKind = operation => ({app_capability:'used',create:'created',create_event:'created',create_folder:'created',create_document:'created',write_file:'written',delete:'deleted',delete_event:'deleted',empty:'emptied',list:'listed',list_events:'listed',list_volumes:'inspected',read_file:'read',read_text:'read',read_metrics:'inspected',current:'checked',current_time:'checked',copy:'copied',move:'moved',rename:'renamed',complete:'completed',search:'searched',update:'updated',run_command:'executed',restart:'restarted',calculate:'calculated'}[operation]||'completed');
-const resultOperationIcon = kind => ({used:'wrench',created:'plus',written:'document',deleted:'delete',emptied:'delete',listed:'list',read:'eye',inspected:'info',checked:'check',copied:'copy',moved:'upload',renamed:'textedit',completed:'check',searched:'search',updated:'settings',executed:'terminal',restarted:'refresh',calculated:'calc'}[kind]||'check');
+const resultIcon = activity => ({calendar:'calendar',reminders:'reminder',notes:'note',contacts:'contacts',files:'folder',textedit:'document',preview:'preview',photos:'image',trash:'delete',weather:'sun',terminal:'terminal',calculator:'calc',settings:'settings',music:'music'}[activity.appId]||'sparkles');
+const resultOperationKind = operation => ({app_capability:'used',create:'created',create_event:'created',create_folder:'created',create_document:'created',write_file:'written',delete:'deleted',delete_event:'deleted',empty:'emptied',list:'listed',list_events:'listed',list_volumes:'inspected',read_file:'read',read_text:'read',read_metrics:'inspected',current:'checked',current_time:'checked',copy:'copied',move:'moved',rename:'renamed',complete:'completed',search:'searched',update:'updated',run_command:'executed',restart:'restarted',calculate:'calculated',play:'playing',pause:'paused'}[operation]||'completed');
+const resultOperationIcon = kind => ({used:'wrench',created:'plus',written:'document',deleted:'delete',emptied:'delete',listed:'list',read:'eye',inspected:'info',checked:'check',copied:'copy',moved:'upload',renamed:'textedit',completed:'check',searched:'search',updated:'settings',executed:'terminal',restarted:'refresh',calculated:'calc',playing:'play',paused:'pause'}[kind]||'check');
 const resultOperationCopy = (activity, i18n) => i18n.t(`resultOperation_${resultOperationKind(activity.operation)}`);
 const resultTone = activity => ['deleted','emptied'].includes(resultOperationKind(activity.operation))?'removed':['created','written','copied'].includes(resultOperationKind(activity.operation))?'created':'neutral';
 const resultBoolean = (value, i18n) => i18n.t(value?'resultYes':'resultNo');
@@ -303,6 +304,7 @@ const resultFacts = (activity, i18n) => {
     const data=value.data||value,current=data?.current||value.current||{},units=data?.current_units||{};add('location',[value.location?.name,value.location?.admin1,value.location?.country].filter(Boolean).join(', ')||params.location);add('resultFieldTemperature',current.temperature_2m!==undefined?`${current.temperature_2m}${units.temperature_2m||'°C'}`:current.temperature);add('resultFieldFeelsLike',current.apparent_temperature!==undefined?`${current.apparent_temperature}${units.apparent_temperature||'°C'}`:null);add('resultFieldHumidity',current.relative_humidity_2m!==undefined?`${current.relative_humidity_2m}${units.relative_humidity_2m||'%'}`:null);add('resultFieldWind',current.wind_speed_10m!==undefined?`${current.wind_speed_10m} ${units.wind_speed_10m||'km/h'}`:current.windSpeed)
   }else if(activity.appId==='terminal'){add('resultFieldExitCode',value.exitCode);add('resultFieldCommand',params.command)}
   else if(activity.appId==='calculator'){add('resultFieldExpression',value.expression||params.expression);add('toolResult',value.value)}
+  else if(activity.appId==='music'){add('resultFieldTitle',value.title||params.song);add('resultFieldArtist',value.artist);add('folder',value.category);add('resultFieldPath',value.path)}
   else if(activity.appId==='settings'){add('resultFieldSetting',value.key||params.key);add('resultFieldValue',value.value??params.value)}
   else if(activity.appId==='clock'){add('time',value.local);add('timezone',value.timezone)}
   else if(activity.appId==='monitor'){add('resultFieldMemory',value.percent!==undefined?`${value.percent}%`:null);add('resultFieldLoad',value.loadAverage);if(value.uptimeSeconds!==undefined)add('resultFieldUptime',i18n.t('resultMinutes').replace('{count}',Math.floor(value.uptimeSeconds/60)))}
@@ -332,6 +334,7 @@ const resultBodyMarkup = (activity, i18n) => {
   }
   if(activity.appId==='terminal')return `<div class="ai-result-terminal"><code>❯ ${esc(activity.params.command||'')}</code>${summary?`<pre data-copyable>${esc(summary)}</pre>`:''}</div>`;
   if(activity.appId==='calculator')return `<div class="ai-result-calculation"><small>${esc(value.expression||activity.params.expression||'')}</small><strong>${esc(value.value??activity.output??'')}</strong></div>`;
+  if(activity.appId==='music')return `<div class="ai-result-music"><span>${icon('music',20)}</span><div><strong>${esc(value.title||activity.params.song||i18n.t('music'))}</strong><small>${esc(value.artist||value.category||summary)}</small></div>${activity.operation==='play'?icon('play',14):''}</div>`;
   if(path)return `<div class="ai-result-file"><span>${icon(activity.operation==='create_folder'?'folder':'document',19)}</span><div><strong>${esc(path.split('/').filter(Boolean).at(-1)||path)}</strong>${summary?`<small>${esc(summary)}</small>`:''}<code data-copyable>${esc(path)}</code></div></div>`;
   return summary?`<div class="ai-result-summary">${icon(resultIcon(activity),14)}<p data-copyable>${esc(summary)}</p></div>`:'';
 };

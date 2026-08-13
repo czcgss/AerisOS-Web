@@ -114,7 +114,7 @@ export class V86Machine {
       "mkdir -p /mnt/aeris /home/aeris/Desktop /home/aeris/Documents/Notes /home/aeris/Downloads /home/aeris/Pictures /home/aeris/.local/share/Trash/files",
       "id aeris >/dev/null 2>&1 || adduser -D -h /home/aeris -s /bin/ash aeris; passwd -d aeris >/dev/null 2>&1 || true",
       "printf \"export PS1='aeris@aeris:\\\\w\\\\$ '\\n\" > /home/aeris/.profile; chown -R aeris:aeris /home/aeris /mnt/aeris",
-      "mount -t 9p host9p /mnt/aeris -o trans=virtio,version=9p2000.L 2>/dev/null || true",
+      "mount -t 9p host9p /mnt/aeris -o trans=virtio,version=9p2000.L 2>/dev/null || true; mkdir -p /mnt/aeris/Music; chown aeris:aeris /mnt/aeris/Music",
     ];
     await this.sendUserInput(`${commands.join('; ')}\n`, 3);
     await new Promise(resolve => setTimeout(resolve, 1200));
@@ -436,6 +436,8 @@ export class V86Machine {
   async interruptControlConsole(){await this.activateControlConsole();await this.#interruptConsole()}
   async sendControlInput(text,delay=3){await this.activateControlConsole();await this.sendUserInput(text,delay)}
   listShared(path='/') { const fs=this.emulator?.fs9p;if(!fs)return null;return(fs.read_dir(path)||[]).map(name=>{const target=`${path.replace(/\/$/,'')}/${name}`,found=fs.SearchPath(target),inode=found.id>=0?fs.GetInode(found.id):null;return{name,type:inode&&fs.IsDirectory(found.id)?'directory':'file',size:inode?.size||0,modified:inode?.mtime||0}}); }
+  async writeSharedBytes(path,bytes) { await this.emulator?.create_file(path,bytes instanceof Uint8Array?bytes:new Uint8Array(bytes)); }
+  async readSharedBytes(path) { const data=await this.emulator?.read_file(path);return data?new Uint8Array(data):new Uint8Array(); }
   async readShared(path) { const data=await this.emulator?.read_file(path);return data?new TextDecoder().decode(data):''; }
   #setStatus(status) { this.status=status;this.kernel?.bus.emit('machine:status',status); }
 

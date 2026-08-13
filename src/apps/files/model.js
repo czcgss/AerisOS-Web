@@ -8,6 +8,7 @@ export const LOCATIONS=[
   {key:'documents',path:`${HOME}/Documents`,icon:'document',section:'favorites'},
   {key:'downloads',path:`${HOME}/Downloads`,icon:'download',section:'favorites'},
   {key:'pictures',path:`${HOME}/Pictures`,icon:'image',section:'favorites'},
+  {key:'music',path:`${SHARED}/Music`,icon:'music',section:'favorites'},
   {key:'shared',path:SHARED,icon:'disk',section:'locations'},
   {key:'trash',path:TRASH,icon:'delete',section:'locations'}
 ];
