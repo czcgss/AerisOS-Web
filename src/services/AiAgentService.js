@@ -2,10 +2,7 @@ import { Agent } from '@earendil-works/pi-agent-core';
 import { createModels, createProvider } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 
-export const AI_DATA_DIRECTORY = '/home/aeris/.local/share/aeris-ai';
-export const AI_STATE_PATH = `${AI_DATA_DIRECTORY}/state.json`;
-export const AI_PREVIOUS_STATE_PATH = `${AI_DATA_DIRECTORY}/state.previous.json`;
-export const AI_RECOVERY_KEY = 'aeris.ai.recovery.v1';
+export const AI_STATE_STORAGE_KEY = 'aeris.ai.state.v1';
 
 const PROVIDER_ID = 'aeris-openai-compatible';
 const LEGACY_DEFAULT_MODEL = 'gpt-4o-mini';
@@ -34,23 +31,8 @@ const reconcileTurnResponses = (recorded, completedRun) => {
     return clone(message);
   });
 };
-const repairUtf8String = value => {
-  if (typeof value !== 'string' || !value || [...value].some(character => character.charCodeAt(0) > 255)) return value;
-  try {
-    const bytes=Uint8Array.from([...value],character=>character.charCodeAt(0)),decoded=new TextDecoder('utf-8',{fatal:true}).decode(bytes);
-    return decoded!==value&&(/[\u0080-\u00bfÃÂð]/.test(value)||/[\u3400-\u9fff\u{1f300}-\u{1faff}]/u.test(decoded))?decoded:value;
-  } catch { return value; }
-};
-const repairUtf8Tree = value => {
-  if (typeof value === 'string') return repairUtf8String(value);
-  if (Array.isArray(value)) return value.map(repairUtf8Tree);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,repairUtf8Tree(item)]));
-  return value;
-};
-
 export class AiAgentService {
-  constructor(system, toolService = null, storage = globalThis.localStorage, agentContext = null) {
-    this.system = system;
+  constructor(toolService = null, storage = globalThis.localStorage, agentContext = null) {
     this.toolService = toolService;
     this.storage = storage;
     this.agentContext = agentContext;
@@ -63,61 +45,12 @@ export class AiAgentService {
     this.streamingAssistantMessages = new Map();
     this.sessionRuns = new Map();
     this.settlingSessions = new Set();
-    this.persistChain = Promise.resolve();
-    this.guestSynced = false;
-    this.syncError = '';
   }
 
   start() {
-    const cached=this.#loadRecovery();if(cached)this.state=cached;
+    const saved=this.#loadState();if(saved)this.state=saved;
     this.ready=true;
-    queueMicrotask(()=>this.#emit('ai:ready',{source:cached?'browser-recovery':'local'}));
-    this.kernel.bus.on('system:ready', () => this.load().catch(() => {}));
-    if (this.system.ready) this.load().catch(() => {});
-  }
-
-  async load() {
-    if (this.guestSynced || this.loading || !this.system.ready) return;
-    this.loading = true;
-    this.syncError = '';
-    try {
-      await this.system.mkdir(AI_DATA_DIRECTORY);
-      const cachedAtStart=this.#loadRecovery();let saved=null,readError=null,missing=false,recoveredFromPrevious=false;
-      try{saved=await this.#readState(AI_STATE_PATH)}catch(error){
-        readError=error;
-        try{saved=await this.#readState(AI_PREVIOUS_STATE_PATH);recoveredFromPrevious=true}catch(previousError){missing=this.#isMissing(error)&&this.#isMissing(previousError)}
-      }
-      if(saved){
-        const repaired=repairUtf8Tree(saved),guestState=this.#normalise(repaired),latestRecovery=this.#loadRecovery(),liveState=this.#normalise(this.state);
-        // Guest reads can take seconds. During that wait the user may create a
-        // session or start another turn, so the recovery snapshot captured at
-        // the beginning of load is no longer safe to install. Merge the guest
-        // file with the latest in-memory and recovery states at commit time.
-        const browserState=latestRecovery?this.#mergeStates(liveState,latestRecovery):liveState;
-        this.state=this.#mergeStates(browserState,guestState);
-        this.#saveRecovery();
-        if(cachedAtStart||recoveredFromPrevious||JSON.stringify(saved)!==JSON.stringify(repaired))await this.persist(true);
-        if(recoveredFromPrevious)this.#emit('ai:recovered',{source:'guest-previous'});
-      }else if(cachedAtStart){
-        const latestRecovery=this.#loadRecovery(),liveState=this.#normalise(this.state);
-        this.state=latestRecovery?this.#mergeStates(liveState,latestRecovery):liveState;this.#saveRecovery();
-        await this.persist(true);
-        this.#emit('ai:recovered',{source:'browser-recovery'});
-      }else if(missing){
-        this.state=this.#normalise(null);await this.persist(true);
-      }else{
-        throw readError||new Error('The Aeris AI data service did not return a state file.');
-      }
-      this.guestSynced=true;this.error='';
-      this.#emit('ai:changed',{guestSynced:true});
-    } catch (error) {
-      this.syncError=error.message||String(error);
-      this.#emit('ai:sync-error',{error:this.syncError});
-      clearTimeout(this.retryTimer);this.retryTimer=setTimeout(()=>this.load().catch(()=>{}),2500);
-      throw error;
-    } finally {
-      this.loading = false;
-    }
+    queueMicrotask(()=>this.#emit('ai:ready',{source:saved?'browser':'new'}));
   }
 
   snapshot() {
@@ -125,9 +58,7 @@ export class AiAgentService {
       ready: this.ready,
       loading: this.loading,
       error: this.error,
-      path: AI_STATE_PATH,
-      guestSynced: this.guestSynced,
-      syncError: this.syncError,
+      storageKey: AI_STATE_STORAGE_KEY,
       config: { ...this.state.config, apiKey: this.state.config.apiKey ? '••••••••' : '' },
       sessions: this.state.sessions.map(session => ({
         id: session.id,
@@ -252,14 +183,14 @@ export class AiAgentService {
     const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:'running',user:clone(visibleUserMessage),responses:[],messageIndex:null,error:''};
     session.turns.push(turn);session.updatedAt=userMessage.timestamp;
     this.activeTurns.set(id,turn.id);
-    this.#saveRecovery();
+    this.#saveState();
     this.#emit('ai:agent-event', { sessionId:id, turnId:turn.id, event:{type:'turn_created'} });
     try {
       await agent.prompt(userMessage);
     } catch (error) {
       turn.status='failed';turn.error=error.message||String(error);turn.updatedAt=now();
       if(this.activeTurns.get(id)===turn.id)this.activeTurns.delete(id);
-      this.#saveRecovery();
+      this.#saveState();
       this.#emit('ai:agent-event',{sessionId:id,turnId:turn.id,event:{type:'turn_failed',error:turn.error}});
       throw error;
     } finally {
@@ -296,48 +227,22 @@ export class AiAgentService {
     if(session){
       const active=session.turns.find(turn=>turn.id===activeId);if(active){active.status='stopped';active.updatedAt=now()}
     }
-    this.activeTurns.delete(id);this.streamingAssistantMessages.delete(id);this.sessionRuns.delete(id);this.settlingSessions.delete(id);this.#saveRecovery();
+    this.activeTurns.delete(id);this.streamingAssistantMessages.delete(id);this.sessionRuns.delete(id);this.settlingSessions.delete(id);this.#saveState();
     this.agents.get(id)?.clearAllQueues();
     this.#emit('ai:agent-event', { sessionId: id, event: { type: 'queue_cleared' } });
     return this.agents.get(id)?.abort();
   }
 
-  persist(requireGuest=false) {
+  persist() {
     this.state.updatedAt=now();
-    const payload = JSON.stringify(this.state);
-    this.#saveRecovery();
-    if(!this.system.ready){
-      if(requireGuest)return Promise.reject(new Error('The Linux data service is not ready.'));
-      return Promise.resolve(false);
-    }
-    this.persistChain = this.persistChain.catch(() => {}).then(async()=>{
-      try{await this.system.exec?.(`[ ! -s '${AI_STATE_PATH}' ] || cp '${AI_STATE_PATH}' '${AI_PREVIOUS_STATE_PATH}'`,8000)}catch{}
-      await (this.system.writeChunked?.(AI_STATE_PATH,payload)||this.system.write(AI_STATE_PATH,payload));
-      this.system.machine?.scheduleCheckpoint?.(500);
-      return true;
-    });
-    if(requireGuest)return this.persistChain;
-    return this.persistChain.catch(error=>{this.syncError=error.message||String(error);this.guestSynced=false;clearTimeout(this.retryTimer);this.retryTimer=setTimeout(()=>this.load().catch(()=>{}),2500);this.#emit('ai:sync-error',{error:this.syncError});return false});
+    return Promise.resolve(this.#saveState());
   }
 
-  async #readState(path) {
-    let lastError;
-    for(const delay of [0,350,900]){
-      if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
-      try{return JSON.parse(await this.system.read(path))}catch(error){lastError=error;if(this.#isMissing(error))break}
-    }
-    throw lastError;
-  }
-
-  #isMissing(error){return /no such file|not found|can't open|cannot open/i.test(error?.message||'')}
-  #loadRecovery(){try{const envelope=JSON.parse(this.storage?.getItem(AI_RECOVERY_KEY)||'null');return envelope?.state?this.#normalise(repairUtf8Tree(envelope.state)):null}catch{return null}}
-  #saveRecovery(){try{this.storage?.setItem(AI_RECOVERY_KEY,JSON.stringify({savedAt:Date.now(),state:this.state}))}catch{}}
-  #stateScore(state){return(state?.sessions?.length||0)*10+(state?.config?.apiKey?5:0)+(state?.config?.model?1:0)}
-  #preferRecovery(cached,guest){const cachedAt=Number(cached?.updatedAt)||0,guestAt=Number(guest?.updatedAt)||0;return cachedAt>guestAt||(cachedAt===guestAt&&this.#stateScore(cached)>this.#stateScore(guest))}
-  #mergeStates(cached,guest){
-    const preferred=this.#preferRecovery(cached,guest)?cached:guest,other=preferred===cached?guest:cached,sessions=new Map();
-    for(const session of [...(other.sessions||[]),...(preferred.sessions||[])]){const existing=sessions.get(session.id);if(!existing||(session.updatedAt||0)>=(existing.updatedAt||0))sessions.set(session.id,session)}
-    return{...preferred,version:3,updatedAt:Math.max(Number(cached.updatedAt)||0,Number(guest.updatedAt)||0),sessions:[...sessions.values()].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))};
+  #loadState(){try{const saved=this.storage?.getItem(AI_STATE_STORAGE_KEY);return saved?this.#normalise(JSON.parse(saved)):null}catch{return null}}
+  #saveState(){
+    this.state.updatedAt=now();
+    try{this.storage?.setItem(AI_STATE_STORAGE_KEY,JSON.stringify(this.state));this.error='';return true}
+    catch(error){this.error=error.message||String(error);this.#emit('ai:storage-error',{error:this.error});return false}
   }
 
   #agent(id) {
