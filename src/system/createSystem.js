@@ -11,6 +11,7 @@ import { UserDataService } from '../services/UserDataService.js';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { WeatherService } from '../services/WeatherService.js';
 import { NotificationService } from '../services/NotificationService.js';
+import { MusicService } from '../services/MusicService.js';
 import { AgentContextService } from '../services/AgentContextService.js';
 import { AgentEntryService } from '../services/AgentEntryService.js';
 import { AppRegistry } from '../apps/AppRegistry.js';
@@ -33,6 +34,7 @@ import photos from '../apps/photos/index.js';
 import trash from '../apps/trash/index.js';
 import weatherApp from '../apps/weather/index.js';
 import aiAssistant from '../apps/ai/index.js';
+import musicApp from '../apps/music/index.js';
 import { attachActivitySurfaces } from '../apps/activity/index.js';
 
 export async function createSystem(root) {
@@ -48,14 +50,15 @@ export async function createSystem(root) {
   const userdata=kernel.register('userdata',new UserDataService(system));
   const clipboard=kernel.register('clipboard',new ClipboardService());
   const weather=kernel.register('weather',new WeatherService(settings));
+  const music=kernel.register('music',new MusicService(system));
   const registry=new AppRegistry();
-  attachActivitySurfaces([aiAssistant,files,photos,calendar,weatherApp,contacts,reminders,notes,textedit,preview,calculator,clock,diskutility,terminal,machineApp,monitor,settingsApp,trash]).forEach(app=>registry.register(app));
+  attachActivitySurfaces([aiAssistant,files,photos,calendar,weatherApp,contacts,reminders,notes,textedit,preview,calculator,clock,diskutility,terminal,machineApp,monitor,settingsApp,trash,musicApp]).forEach(app=>registry.register(app));
   const agentContext=kernel.register('agentContext',new AgentContextService(registry,i18n));
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
-  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,weather,metrics,machine,registry,i18n}));
+  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,weather,metrics,machine,music,registry,i18n}));
   const aiAgent=kernel.register('aiAgent',new AiAgentService(system,tools,localStorage,agentContext));
-  const context={kernel,settings,i18n,dialog,machine,system,metrics,tools,aiAgent,agentContext,agentEntry,userdata,clipboard,weather,notifications,registry};
+  const context={kernel,settings,i18n,dialog,machine,system,metrics,tools,aiAgent,agentContext,agentEntry,userdata,clipboard,weather,music,notifications,registry};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
   window.aeris={kernel,services:kernel.services,apps:registry,shell};
   await kernel.boot();

@@ -69,7 +69,7 @@ export class GuestSystemService {
   cachedList(path){const cached=this.directoryCache.get(String(path));return cached?structuredClone(cached.entries):null}
   async #refreshDirectory(path,options={}){const active=this.listInflight.get(path);if(active){if(!options.fresh)return active;await active.catch(()=>{})}const revision=this.directoryRevision.get(path)||0;const request=this.#readDirectory(path,options).then(entries=>{if((this.directoryRevision.get(path)||0)===revision){this.#cacheDirectory(path,entries);this.kernel?.bus.emit('filesystem:list-updated',{path,entries:structuredClone(entries)})}return structuredClone(entries)}).catch(error=>{this.kernel?.bus.emit('filesystem:list-error',{path,error:error.message});throw error}).finally(()=>{if(this.listInflight.get(path)===request)this.listInflight.delete(path)});this.listInflight.set(path,request);return request}
   #loadDirectoryCache(){try{const stored=JSON.parse(localStorage.getItem('aeris.files.directory-cache')||'{}');return new Map(Object.entries(stored).filter(([,value])=>Array.isArray(value?.entries)))}catch{return new Map()}}
-  #seedDirectoryCache(){const directory=(name)=>({name,type:'directory',size:0,modified:0}),seeds={'/home/aeris':['Desktop','Documents','Downloads','Pictures'].map(directory),'/home/aeris/Desktop':[],'/home/aeris/Documents':[],'/home/aeris/Downloads':[],'/home/aeris/Pictures':[],'/home/aeris/.local/share/Trash/files':[]};for(const [path,entries] of Object.entries(seeds))if(!this.directoryCache.has(path))this.directoryCache.set(path,{entries,updatedAt:0})}
+  #seedDirectoryCache(){const directory=(name)=>({name,type:'directory',size:0,modified:0}),seeds={'/home/aeris':['Desktop','Documents','Downloads','Pictures'].map(directory),'/home/aeris/Desktop':[],'/home/aeris/Documents':[],'/home/aeris/Downloads':[],'/home/aeris/Pictures':[],'/mnt/aeris/Music':[],'/home/aeris/.local/share/Trash/files':[]};for(const [path,entries] of Object.entries(seeds))if(!this.directoryCache.has(path))this.directoryCache.set(path,{entries,updatedAt:0})}
   #cacheDirectory(path,entries){this.directoryCache.set(path,{entries:structuredClone(entries),updatedAt:Date.now()});const recent=[...this.directoryCache.entries()].sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0)).slice(0,60);try{localStorage.setItem('aeris.files.directory-cache',JSON.stringify(Object.fromEntries(recent)))}catch{}}
   #invalidateDirectory(path){const cached=this.directoryCache.get(path);if(cached){cached.updatedAt=0;this.#cacheDirectory(path,cached.entries)}}
   async #warmDirectories(){for(const path of ['/home/aeris','/home/aeris/Desktop','/home/aeris/Documents','/home/aeris/Downloads','/home/aeris/Pictures']){if(!this.ready)break;await this.#refreshDirectory(path,{priority:false,timeout:8000}).catch(()=>{});await new Promise(resolve=>setTimeout(resolve,80))}}
@@ -91,13 +91,21 @@ export class GuestSystemService {
   }
 
   async read(path, { priority = false } = {}) {
-    const shared=this.#sharedPath(path);if(shared!==null)try{return await this.machine.readShared(shared)}catch{}
+    return new TextDecoder().decode(await this.readBytes(path,{priority}));
+  }
+  async readBytes(path, { priority = false, timeout = 120000 } = {}) {
+    const shared=this.#sharedPath(path);if(shared!==null)try{return await this.machine.readSharedBytes(shared)}catch{}
     // Keep the control channel ASCII-only and decode file bytes explicitly.
     // This works on both the serial and VGA recovery transports.
-    const {output}=await this.execChecked(`base64 < ${quote(path)} | tr -d '\n'`,30000,{priority}),encoded=output.replace(/\s+/g,'');
+    const {output}=await this.execChecked(`base64 < ${quote(path)} | tr -d '\n'`,timeout,{priority}),encoded=output.replace(/\s+/g,'');
     const binary=atob(encoded),bytes=new Uint8Array(binary.length);
     for(let index=0;index<binary.length;index++)bytes[index]=binary.charCodeAt(index);
-    return new TextDecoder().decode(bytes);
+    return bytes;
+  }
+  async writeBytes(path, bytes, { priority = true } = {}) {
+    const shared=this.#sharedPath(path);
+    if(shared!==null){const parent=path.split('/').slice(0,-1).join('/')||'/mnt/aeris';await this.execChecked(`mkdir -p ${quote(parent)}`,12000,{priority});await this.machine.writeSharedBytes(shared,bytes);this.#changed(path);return path}
+    throw new Error('Binary imports must be saved in the shared Aeris filesystem.');
   }
   async write(path, content, { priority = true } = {}) { const result=await this.execChecked(`mkdir -p ${quote(path.split('/').slice(0,-1).join('/')||'/')}; printf %s ${quote(content)} > ${quote(path)}`,12000,{priority});this.#changed(path);return result; }
   async writeChunked(path, content, { chunkSize = 6000, priority = true } = {}) {

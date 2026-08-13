@@ -29,8 +29,8 @@ const mutableAerisPath = value => {
 };
 
 export class SystemToolService {
-  constructor({ userdata, system, settings, weather, metrics, machine, registry, i18n }) {
-    Object.assign(this, { userdata, system, settings, weather, metrics, machine, registry, i18n });
+  constructor({ userdata, system, settings, weather, metrics, machine, music, registry, i18n }) {
+    Object.assign(this, { userdata, system, settings, weather, metrics, machine, music, registry, i18n });
     this.definitions = new Map();
     this.executions = new Map();
     this.approvals = new Map();
@@ -167,6 +167,9 @@ export class SystemToolService {
     this.#register({ name:'trash_empty',appId:'trash',operation:'empty',risk:'high',label:'Empty Trash',description:'Permanently delete every item in Trash. Requires user approval.',parameters:object({}),approval:()=> 'Permanently delete every item in Trash? This cannot be undone.',execute:async()=>{await this.system.emptyTrash();return{emptied:true}},success:()=> 'Trash was emptied.' });
 
     this.#register({ name:'calculator_calculate',appId:'calculator',operation:'calculate',label:'Calculate expression',description:'Evaluate a basic arithmetic expression containing numbers and + - * / % parentheses.',parameters:object({expression:Type.String()}),execute:async({expression})=>{if(!/^[\d\s+\-*/%().]+$/.test(expression))throw new Error('Unsupported calculator expression.');const value=Function(`"use strict";return (${expression})`)();if(!Number.isFinite(value))throw new Error('The result is not finite.');return{expression,value}},success:result=>`${result.expression} = ${result.value}` });
+    this.#register({ name:'music_list',appId:'music',operation:'list',label:'List local music',description:'List songs imported into the Aeris Music library.',parameters:object({query:optionalString('Optional song title, artist, or category')}),execute:async({query})=>{await this.music.refresh();const needle=String(query||'').toLowerCase();return this.music.snapshot().tracks.filter(track=>!needle||`${track.title} ${track.artist} ${track.category}`.toLowerCase().includes(needle)).slice(0,100)},success:tracks=>tracks.length?JSON.stringify(tracks):'No matching local songs.' });
+    this.#register({ name:'music_play',appId:'music',operation:'play',label:'Play local music',description:'Play a local song by title or path in the real Aeris Music player.',parameters:object({song:Type.String({description:'Song title, partial title, or Aeris path'})}),execute:async({song})=>{if(!this.music.snapshot().tracks.length)await this.music.refresh();return this.music.play(song)},success:track=>`Now playing “${track.title}” by ${track.artist}.` });
+    this.#register({ name:'music_pause',appId:'music',operation:'pause',label:'Pause music',description:'Pause the song currently playing in Aeris Music.',parameters:object({}),execute:async()=>{this.music.pause();return this.music.snapshot().current},success:track=>track?`Paused “${track.title}”.`:'Music is paused.' });
 
     for(const app of this.registry.list().filter(item=>item.id!=='ai'))this.#register({
       name:`${app.id}_open_app`,
