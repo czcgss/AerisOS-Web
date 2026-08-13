@@ -216,7 +216,7 @@ const resourceIcon = resource => resource?.kind === 'desktop'
       : resource?.kind?.includes('calendar') ? 'calendar'
         : resource?.kind === 'reminder' ? 'reminder' : 'maximize';
 
-export const contextViewMarkup = (context, windows, tools, i18n) => {
+export const contextViewMarkup = (context, windows, tools, i18n, activityApps = []) => {
   const app=context?.appId?tools.registry.get(context.appId):null,resource=context?.resource||null,selection=context?.selection||null;
   const label=resource?.name||resource?.path||resource?.date||context?.label||i18n.t('desktop');
   const metadata=resource?.metadata&&typeof resource.metadata==='object'?Object.fromEntries(Object.entries(resource.metadata).filter(([key,value])=>key!=='content'&&value!==''&&value!==null&&value!==undefined)):{};
@@ -237,6 +237,7 @@ export const contextViewMarkup = (context, windows, tools, i18n) => {
       <section class="ai-context-choices"><header><strong>${esc(i18n.t('availableContext'))}</strong><small>${esc(i18n.t('availableContextCopy'))}</small></header><div>
         <button data-ai-context-desktop class="${resource?.kind==='desktop'?'selected':''}"><span class="app-icon app-icon-blue">${icon('desktop',14)}</span><span><strong>${esc(i18n.t('desktop'))}</strong><small>${esc(i18n.t('desktopContext'))}</small></span>${resource?.kind==='desktop'?icon('check',11):''}</button>
         ${windows.map(item=>`<button data-ai-context-window="${esc(item.id)}" class="${context?.windowId===item.id?'selected':''}"><span class="app-icon app-icon-${esc(item.color)}">${icon(item.icon,14)}</span><span><strong>${esc(item.title)}</strong><small>${esc(item.path||i18n.t(item.minimized?'minimizedWindow':'openWindow'))}</small></span>${context?.windowId===item.id?icon('check',11):''}</button>`).join('')}
+        ${activityApps.map(app=>`<button data-ai-context-activity="${esc(app.id)}" class="${context?.appId===app.id&&context?.resource?.kind==='application-view'?'selected':''}"><span class="app-icon app-icon-${esc(app.color||'grey')}">${icon(app.icon,14)}</span><span><strong>${esc(i18n.t(app.title))}</strong><small>${esc(i18n.t('activityCompactView'))}</small></span>${context?.appId===app.id&&context?.resource?.kind==='application-view'?icon('check',11):''}</button>`).join('')}
       </div></section>
       <aside class="ai-context-scope"><span>${icon('lock',14)}</span><div><strong>${esc(i18n.t('contextScope'))}</strong><p>${esc(i18n.t('contextScopeCopy'))}</p></div></aside>
     </div>
@@ -380,13 +381,12 @@ export function workspaceMarkup(activity, activities, tools, i18n, { animate = t
   return `<aside class="ai-app-workspace ${activity?`ai-app-workspace-${esc(activity.phase)}`:'ai-app-workspace-empty'} ${animate?'':'ai-app-workspace-stable'}" data-ai-app-workspace data-workspace-tool-id="${esc(activity?.id||'')}" data-workspace-signature="${esc(signature||'empty')}">
     ${resizeHandle}
     <header>
-      <span class="ai-workspace-brand">${icon('aerisAi', 20)}</span>
       <div><strong>${esc(i18n.t('agentWorkspace'))}</strong><small>${esc(activities.length?countCopy:i18n.t('workspaceReady'))}</small></div>
       <button data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}">${icon('close', 15)}</button>
     </header>
     <nav class="ai-workspace-view-switch" aria-label="${esc(i18n.t('agentWorkspace'))}"><button class="${view==='activity'?'selected':''}" data-ai-workspace-view="activity" aria-pressed="${view==='activity'}">${icon('maximize',12)} ${esc(i18n.t('workspaceActivity'))}</button><button class="${view==='context'?'selected':''}" data-ai-workspace-view="context" aria-pressed="${view==='context'}">${icon('focus',12)} ${esc(i18n.t('workspaceContextView'))}</button><button class="${view==='results'?'selected':''}" data-ai-workspace-view="results" aria-pressed="${view==='results'}">${icon('sparkles',12)} ${esc(i18n.t('workspaceResults'))}</button></nav>
     <main class="ai-workspace-content-layout">
-      ${view==='activity'?activityViewMarkup(activityApps,activityAppId,i18n):view==='context'?contextViewMarkup(context,windows,tools,i18n):resultsViewMarkup(activities,tools,i18n)}
+      ${view==='activity'?activityViewMarkup(activityApps,activityAppId,i18n):view==='context'?contextViewMarkup(context,windows,tools,i18n,activityApps):resultsViewMarkup(activities,tools,i18n)}
     </main>
     <footer><span>${icon(view==='context'?'lock':view==='results'?'sparkles':'maximize',14)} ${esc(i18n.t(view==='context'?'contextManagedByAeris':view==='results'?'resultsManagedByAeris':'activityManagedByAeris'))}</span></footer>
   </aside>`;

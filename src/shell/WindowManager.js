@@ -15,14 +15,18 @@ export class WindowManager {
     }
     const id = `window-${++this.sequence}`;
     const width = Math.min(options.width || app.width || 820, innerWidth - 32);
-    const height = Math.min(options.height || app.height || 560, innerHeight - 105);
+    const dock = this.layer.closest('.desktop')?.querySelector('.dock');
+    const dockTop = dock?.getBoundingClientRect().top || innerHeight - 75;
+    const topBound = 48;
+    const bottomBound = Math.max(topBound + 260, Math.ceil(dockTop - 8));
+    const height = Math.min(options.height || app.height || 560, bottomBound - topBound);
     const offset = this.windows.size * 22;
-    const left=options.left??Math.max(12,(innerWidth-width)/2+offset),top=options.top??Math.max(48,(innerHeight-height)/2+offset/2);
+    const left=options.left??Math.max(12,(innerWidth-width)/2+offset),top=options.top??Math.max(topBound,topBound+(bottomBound-topBound-height)/2+offset/2);
     const record = { id, app, cleanup: null, maximized: false, fullscreen: false, previous: null, fullscreenPrevious: null, restored: !!options.restored, launchOptions: { path: options.path || '' } };
     const element = document.createElement('article');
     element.className = 'window focused'; element.dataset.id = id;
     element.style.cssText = `left:${left}px;top:${top}px;width:${width}px;height:${height}px;z-index:${++this.z}`;
-    element.innerHTML = `<header class="titlebar"><div class="window-controls"><button class="win-close" data-window-action="close" aria-label="Close"></button><button class="win-min" data-window-action="minimize" aria-label="Minimize"></button><button class="win-max" data-window-action="maximize" aria-label="Maximize"></button></div><div class="window-title"><span class="app-icon app-icon-${app.color || 'grey'}">${icon(app.icon,16)}</span><span data-window-title>${this.context.i18n.t(app.title)}</span></div><div></div></header><div class="window-body" data-app-root></div><i class="resize-handle"></i>`;
+    element.innerHTML = `<header class="titlebar"><div class="window-controls"><button class="win-close" data-window-action="close" aria-label="Close"></button><button class="win-min" data-window-action="minimize" aria-label="Minimize"></button><button class="win-max" data-window-action="maximize" aria-label="Maximize"></button></div><div class="window-title">${app.id==='ai'?'':`<span class="app-icon app-icon-${app.color || 'grey'}">${icon(app.icon,16)}</span>`}<span data-window-title>${this.context.i18n.t(app.title)}</span></div><div></div></header><div class="window-body" data-app-root></div><i class="resize-handle"></i>`;
     this.layer.appendChild(element); record.element = element; this.windows.set(id, record);
     this.#bindWindow(record);
     record.cleanup = app.mount(element.querySelector('[data-app-root]'), { ...this.context, window: record, windowManager: this, launchOptions: record.launchOptions }) || null;
