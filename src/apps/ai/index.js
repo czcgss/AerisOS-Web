@@ -30,7 +30,7 @@ const readWorkspacePrefs = () => {
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
-  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, userdata, system, settings, weather, metrics, machine }) {
+  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, userdata, system, settings, weather, music, metrics, machine }) {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
     let workspaceSelectedId = null, activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
@@ -52,7 +52,7 @@ export default {
       if(!app||!host||!app.activity?.mount)return;
       if(activitySurface?.appId===app.id&&activitySurface.host===host)return;
       unmountActivitySurface();
-      const context={app,i18n,kernel,dialog,shell,clipboard,tools,notifications,agentContext,agentEntry,userdata,system,settings,weather,metrics,machine,openFullApp:(appId,path='')=>shell.open(appId,path||undefined)};
+      const context={app,i18n,kernel,dialog,shell,clipboard,tools,notifications,agentContext,agentEntry,userdata,system,settings,weather,music,metrics,machine,openFullApp:(appId,path='')=>shell.open(appId,path||undefined)};
       activitySurface={appId:app.id,host,cleanup:app.activity.mount(host,context,activityTarget||{})||null};
     };
     const selectActivityApp=(id,target=null)=>{

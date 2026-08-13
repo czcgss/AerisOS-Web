@@ -1,0 +1,62 @@
+.music-app { position: relative; }
+
+.music-import-sheet {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  inset: 0;
+  place-items: center;
+  background: rgba(9, 7, 14, .46);
+  backdrop-filter: blur(12px);
+}
+
+.music-import-sheet > div {
+  display: flex;
+  width: 260px;
+  padding: 26px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 24px;
+  flex-direction: column;
+  background: linear-gradient(150deg, rgba(48, 37, 67, .98), rgba(20, 17, 29, .98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .5);
+  color: #f8f3ff;
+  text-align: center;
+}
+
+.music-import-sheet > div > span {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 10px;
+  border-radius: 17px;
+  place-items: center;
+  background: linear-gradient(145deg, #bb72f2, #7255df);
+  box-shadow: 0 12px 32px rgba(146, 85, 225, .4);
+}
+
+.music-import-sheet h2 { margin: 0; font-size: 17px; }
+.music-import-sheet p { margin: 7px 0 18px; color: #aa9eb4; font-size: 9px; line-height: 1.55; }
+
+.music-import-sheet button {
+  display: flex;
+  height: 37px;
+  margin-top: 7px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 11px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, .075);
+  color: #f5edfc;
+  font-size: 9px;
+}
+
+.music-import-sheet button:first-of-type {
+  border-color: transparent;
+  background: linear-gradient(100deg, #ad68ed, #7659de);
+  box-shadow: 0 8px 20px rgba(117, 77, 211, .3);
+}
+
+.music-import-sheet button.quiet { border-color: transparent; background: transparent; color: #998fa4; }
+.music-import-sheet button:disabled { cursor: wait; opacity: .55; }
