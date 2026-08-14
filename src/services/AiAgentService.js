@@ -6,10 +6,12 @@ export const AI_STATE_STORAGE_KEY = 'aeris.ai.state.v1';
 
 const PROVIDER_ID = 'aeris-openai-compatible';
 const LEGACY_DEFAULT_MODEL = 'gpt-4o-mini';
+const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
 const defaultConfig = () => ({
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: LEGACY_DEFAULT_MODEL,
+  reasoningEffort: 'medium',
   recentModels: [],
   systemPrompt: 'You are the Aeris system assistant. Be concise, helpful, and transparent. Reply in the language used by the user.',
   disabledToolApps: [],
@@ -18,7 +20,9 @@ const clone = value => structuredClone(value);
 const now = () => Date.now();
 const hasAssistantContent = message => message?.role === 'assistant' && (typeof message.content === 'string'
   ? Boolean(message.content.trim())
-  : (message.content || []).some(block => block?.type === 'toolCall' || (block?.type === 'text' && String(block.text || '').trim())));
+  : (message.content || []).some(block => block?.type === 'toolCall'
+    || (block?.type === 'text' && String(block.text || '').trim())
+    || (block?.type === 'thinking' && String(block.thinking || '').trim())));
 const turnResponseMessages = messages => (messages || []).filter(message => ['assistant', 'toolResult'].includes(message?.role));
 const reconcileTurnResponses = (recorded, completedRun) => {
   const previous = recorded || [], canonical = turnResponseMessages(completedRun);
@@ -95,11 +99,13 @@ export class AiAgentService {
   async updateConfig(changes) {
     const previous = this.state.config;
     const model=String(changes.model ?? previous.model).trim();
+    const reasoningEffort=String(changes.reasoningEffort ?? previous.reasoningEffort);
     this.state.config = {
       ...previous,
       ...changes,
       baseUrl: String(changes.baseUrl ?? previous.baseUrl).trim().replace(/\/+$/, ''),
       model,
+      reasoningEffort: REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : defaultConfig().reasoningEffort,
       recentModels: [...new Set([model,...(previous.recentModels||[])])].filter(Boolean).slice(0,8),
       apiKey: String(changes.apiKey ?? previous.apiKey).trim(),
       systemPrompt: String(changes.systemPrompt ?? previous.systemPrompt).trim() || defaultConfig().systemPrompt,
@@ -254,7 +260,7 @@ export class AiAgentService {
       api: 'openai-completions',
       provider: PROVIDER_ID,
       baseUrl: config.baseUrl,
-      reasoning: false,
+      reasoning: true,
       input: ['text'],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: 128000,
@@ -272,7 +278,7 @@ export class AiAgentService {
     models.setProvider(provider);
     const agent = new Agent({
       sessionId: session.id,
-      initialState: { systemPrompt: this.#systemPrompt(config.systemPrompt), model, messages: clone(session.messages), thinkingLevel: 'off', tools: this.#activeTools() },
+      initialState: { systemPrompt: this.#systemPrompt(config.systemPrompt), model, messages: clone(session.messages), thinkingLevel: config.reasoningEffort, tools: this.#activeTools() },
       streamFn: (activeModel, context, options) => models.streamSimple(activeModel, context, { ...options, apiKey: this.state.config.apiKey }),
       followUpMode: 'one-at-a-time',
       steeringMode: 'one-at-a-time',
@@ -352,6 +358,7 @@ export class AiAgentService {
 
   #normalise(saved) {
     const config = { ...defaultConfig(), ...(saved?.config || {}) };
+    if(!REASONING_EFFORTS.has(config.reasoningEffort))config.reasoningEffort=defaultConfig().reasoningEffort;
     config.disabledToolApps=Array.isArray(config.disabledToolApps)?[...new Set(config.disabledToolApps.map(String))]:[];
     config.model=String(config.model||'').trim();
     const recentModels=(Array.isArray(config.recentModels)?config.recentModels:[])

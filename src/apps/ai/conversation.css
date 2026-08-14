@@ -199,3 +199,46 @@
   background: color-mix(in srgb, var(--accent) 7%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
+
+.ai-assistant-stream {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+}
+
+.ai-thinking {
+  width: min(600px, 100%);
+  margin: 1px 0 3px;
+  color: var(--muted);
+}
+
+.ai-thinking summary {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 5px;
+  min-height: 25px;
+  padding: 0;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.ai-thinking summary::-webkit-details-marker { display: none; }
+.ai-thinking summary > span { display: grid; place-items: center; color: var(--muted); opacity: .72; }
+.ai-thinking summary strong { color: var(--muted); font-size: 10px; font-weight: 600; }
+.ai-thinking summary > i { display: grid; place-items: center; color: var(--muted); font-style: normal; transition: transform 160ms ease; }
+.ai-thinking[open]:not(.is-thinking) summary > i { transform: rotate(90deg); }
+.ai-thinking.is-thinking summary strong { animation: aiThinkingText 1.45s ease-in-out infinite; }
+.ai-thinking.is-thinking summary > i > b { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: aiThinkingPulse 1.15s ease-in-out infinite; }
+.ai-thinking-content { max-height: 260px; overflow: auto; margin-left: 7px; padding: 2px 0 5px 14px; border-left: 1px solid color-mix(in srgb, var(--muted) 22%, transparent); color: var(--muted); font-size: 11px; line-height: 1.58; user-select: text; }
+.ai-thinking.is-thinking .ai-thinking-content { max-height: none; overflow: visible; }
+.ai-thinking-content p { margin: 0; }
+.ai-thinking-content p + p { margin-top: 8px; }
+.ai-thinking-content pre { margin: 8px 0 0; padding: 0 0 0 9px; border-left: 1px solid color-mix(in srgb, var(--muted) 18%, transparent); background: transparent; color: inherit; font: 10px/1.5 'Ubuntu Mono', monospace; white-space: pre-wrap; }
+.ai-thinking-placeholder { opacity: .72; }
+
+@keyframes aiThinkingPulse { 50% { opacity: .32; transform: scale(.72); } }
+@keyframes aiThinkingText { 50% { opacity: .52; } }
