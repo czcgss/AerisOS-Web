@@ -7,6 +7,9 @@ const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&
 const messageText = message => typeof message?.content === 'string'
   ? message.content
   : (message?.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
+const messageBlocks = message => typeof message?.content === 'string'
+  ? [{ type: 'text', text: message.content }]
+  : (Array.isArray(message?.content) ? message.content : []);
 const renderText = renderMarkdown;
 const WORKSPACE_PREFS_KEY = 'aeris.ai.workspace';
 const DEFAULT_WORKSPACE_WIDTH = 390;
@@ -103,19 +106,33 @@ export default {
       return `<section class="ai-tool-call ai-tool-${phase}" data-tool-call="${esc(toolCallId)}"><header>${toolIcon(metadata.appId||execution.appId)}<span><strong>${esc(label)}</strong><small>${app?i18n.t(app.title):i18n.t('systemTool')}</small></span>${metadata.risk==='high'||execution.risk==='high'?`<b class="ai-risk-badge">${icon('lock',10)} ${i18n.t('approvalRequired')}</b>`:''}<em>${i18n.t(`toolStatus_${phase}`)}</em></header>${Object.keys(args||{}).length?`<details><summary>${i18n.t('toolParameters')}</summary><pre data-copyable>${esc(JSON.stringify(args,null,2))}</pre></details>`:''}${output?`<details class="ai-tool-output"><summary>${i18n.t('toolResult')}</summary><p data-copyable>${esc(output).slice(0,1200)}</p></details>`:''}</section>`;
     };
     const assistantText = turn => (turn.responses||[]).filter(message=>message.role==='assistant').map(messageText).filter(Boolean).join('\n\n');
+    const thinkingMarkup=(block,{active=false}={})=>{
+      const content=String(block?.thinking||'').trim();
+      if(!content&&!active)return'';
+      return `<details class="ai-thinking ${active?'is-thinking':''}" ${active?'open':''}><summary><span>${icon('sparkles',12)}</span><strong>${i18n.t(active?'thinkingInProgress':'thinking')}</strong><i>${active?'<b></b>':icon('chevron',9)}</i></summary><div class="ai-thinking-content" data-copyable>${content?renderText(content):`<span class="ai-thinking-placeholder">${i18n.t('thinkingInProgress')}</span>`}</div></details>`;
+    };
+    const assistantBlocksMarkup=(message,{streaming=false,resultForCall=null,turnStatus='running'}={})=>{
+      const blocks=messageBlocks(message),lastMeaningfulIndex=blocks.reduce((last,block,index)=>block?.type==='thinking'||block?.type==='text'||block?.type==='toolCall'?index:last,-1),parts=[];
+      blocks.forEach((block,index)=>{
+        if(block?.type==='thinking')parts.push(thinkingMarkup(block,{active:streaming&&index===lastMeaningfulIndex}));
+        else if(block?.type==='text'&&String(block.text||'').trim())parts.push(`<div class="ai-message-content ai-turn-text" data-copyable>${renderText(block.text)}</div>`);
+        else if(block?.type==='toolCall'){
+          const result=resultForCall?.(block.id);parts.push(toolCard({name:result?.toolName||block.name,toolCallId:block.id,args:block.arguments,details:result?.details,output:result?messageText(result):'',isError:result?.isError,turnStatus}));
+        }
+      });
+      return parts.filter(Boolean).join('');
+    };
     const answerMarkup = (turn, session) => {
       const responses=turn.responses||[],results=new Map(responses.filter(message=>message.role==='toolResult').map(message=>[message.toolCallId,message])),usedResults=new Set(),parts=[];
       for(const response of responses){
         if(response.role==='assistant'){
-          const text=messageText(response);if(text)parts.push(`<div class="ai-message-content ai-turn-text" data-copyable>${renderText(text)}</div>`);
-          for(const call of (response.content||[]).filter?.(block=>block.type==='toolCall')||[]){const result=results.get(call.id);if(result)usedResults.add(call.id);parts.push(toolCard({name:result?.toolName||call.name,toolCallId:call.id,args:call.arguments,details:result?.details,output:result?messageText(result):'',isError:result?.isError,turnStatus:turn.status}))}
+          parts.push(assistantBlocksMarkup(response,{resultForCall:id=>{const result=results.get(id);if(result)usedResults.add(id);return result},turnStatus:turn.status}));
         }else if(response.role==='toolResult'&&!usedResults.has(response.toolCallId))parts.push(toolCard({name:response.toolName,toolCallId:response.toolCallId,details:response.details,output:messageText(response),isError:response.isError,turnStatus:turn.status}));
       }
       const streaming=turn.id===session.activeTurnId?session.streamingMessage:null;
       if(streaming?.role==='assistant'){
-        const text=messageText(streaming),calls=(streaming.content||[]).filter?.(block=>block.type==='toolCall')||[];
-        if(text||!calls.length)parts.push(`<div class="ai-message-content ai-turn-stream" data-ai-turn-stream data-copyable>${text?renderText(text):'<span class="ai-typing"><i></i><i></i><i></i></span>'}</div>`);
-        parts.push(...calls.map(call=>toolCard({name:call.name,toolCallId:call.id,args:call.arguments})));
+        const streamMarkup=assistantBlocksMarkup(streaming,{streaming:true,turnStatus:turn.status});
+        parts.push(`<div class="ai-turn-stream ai-assistant-stream" data-ai-turn-stream>${streamMarkup||'<span class="ai-typing"><i></i><i></i><i></i></span>'}</div>`);
       }else if(turn.status==='running'&&turn.id===session.activeTurnId&&session.streaming)parts.push(`<div class="ai-turn-stream" data-ai-turn-stream><span class="ai-typing"><i></i><i></i><i></i></span></div>`);
       if(turn.status==='failed'&&turn.error)parts.push(errorMarkup(turn.error));
       return parts.join('');
@@ -167,7 +184,7 @@ export default {
           <div class="ai-conversation-heading"><strong>${i18n.t('conversations')}</strong><button data-ai-toggle-search class="${searchOpen?'selected':''}" aria-pressed="${searchOpen}" title="${i18n.t('searchChats')}">${icon('search',14)}</button></div>
           ${searchOpen?`<label class="ai-search">${icon('search',14)}<input data-ai-search value="${esc(query)}" placeholder="${i18n.t('searchChats')}"></label>`:''}
           <nav class="ai-session-list">${sessions.length ? sessions.map(item => `<div class="ai-session-row ${item.id === activeId ? 'selected' : ''}"><button data-ai-session="${item.id}"><span>${icon('message', 15)}</span><span><strong>${esc(item.title)}</strong><small>${new Intl.DateTimeFormat(i18n.t('dateFormat'), { month: 'short', day: 'numeric' }).format(item.updatedAt)}</small></span>${item.streaming ? '<i></i>' : ''}</button><button data-ai-delete="${item.id}" title="${i18n.t('deleteChat')}">${icon('delete', 13)}</button></div>`).join('') : `<div class="ai-sidebar-empty">${i18n.t(query ? 'noSearchResults' : 'noConversations')}</div>`}</nav>
-          <footer><button data-ai-settings>${icon('settings', 16)}<span><strong>${i18n.t('settings')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('setupRequired')}</small></span></button></footer>
+          <footer><button data-ai-settings>${icon('settings', 16)}<span><strong>${i18n.t('settings')}</strong></span></button></footer>
         </aside>
         <section class="ai-workspace">
           <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-workspace-toggle ${workspaceVisible?'selected':''}" data-ai-toggle-workspace aria-pressed="${workspaceVisible}" title="${i18n.t(workspaceVisible?'closeWorkspace':'openWorkspace')}">${icon('panelRight', 17)}</button><button class="ai-applications-button ${activityAppsOpen?'selected':''}" data-ai-applications aria-pressed="${activityAppsOpen}" title="${i18n.t('openApplication')}">${icon('grid', 17)}</button><button class="ai-notification-button ${notificationOpen?'selected':''} ${notificationState.unread?'has-unread':''}" data-ai-notifications title="${i18n.t('notifications')}" aria-label="${notificationState.unread?`${i18n.t('notifications')}, ${notificationState.unread}`:i18n.t('notifications')}">${icon('bell', 17)}<i class="${notificationState.unread?'visible':''}" data-ai-notification-dot></i></button></header>
@@ -177,7 +194,7 @@ export default {
           <footer class="ai-composer-area">
             ${localError ? errorMarkup(localError,'ai-composer-error') : ''}
             ${approvalMarkup()}
-            <div class="ai-composer-shell ${session?.streaming ? 'streaming' : ''}"><textarea data-ai-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready || !configured || editingTurnId !== null || session?.streaming ? 'disabled' : ''}>${esc(draft)}</textarea><div class="ai-composer-toolbar">${contextMarkup()}<label class="ai-composer-model" title="${i18n.t('aiModel')}">${icon('sparkles',12)}<select data-ai-composer-model ${session?.streaming?'disabled':''}>${aiAgent.modelOptions().map(model=>`<option value="${esc(model)}" ${model===aiAgent.config().model?'selected':''}>${esc(model)}</option>`).join('')}<option value="__settings__">${i18n.t('modelSettings')}…</option></select>${icon('chevron',9)}</label><span></span><button data-ai-send ${!state.ready || !configured || editingTurnId !== null ? 'disabled' : ''} aria-label="${i18n.t(session?.streaming ? 'stopGenerating' : 'send')}">${icon(session?.streaming ? 'stopSquare' : 'arrowUp', 17)}</button></div></div>
+            <div class="ai-composer-shell ${session?.streaming ? 'streaming' : ''}"><textarea data-ai-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready || !configured || editingTurnId !== null || session?.streaming ? 'disabled' : ''}>${esc(draft)}</textarea><div class="ai-composer-toolbar">${contextMarkup()}<label class="ai-composer-model" title="${i18n.t('aiModel')}">${icon('sparkles',12)}<select data-ai-composer-model ${session?.streaming?'disabled':''}>${aiAgent.modelOptions().map(model=>`<option value="${esc(model)}" ${model===aiAgent.config().model?'selected':''}>${esc(model)}</option>`).join('')}<option value="__settings__">${i18n.t('modelSettings')}…</option></select><em>${i18n.t(`reasoning_${aiAgent.config().reasoningEffort||'medium'}`)}</em>${icon('chevron',9)}</label><span></span><button data-ai-send ${!state.ready || !configured || editingTurnId !== null ? 'disabled' : ''} aria-label="${i18n.t(session?.streaming ? 'stopGenerating' : 'send')}">${icon(session?.streaming ? 'stopSquare' : 'arrowUp', 17)}</button></div></div>
             <small>${i18n.t('aiMayMakeMistakes')}</small>
           </footer>
           ${settingsOpen ? settingsMarkup() : ''}
@@ -206,23 +223,26 @@ export default {
         streamingFrame=0;
         const session=current(),message=session?.streamingMessage;
         if(message?.role!=='assistant')return;
-        if((message.content||[]).some?.(block=>block.type==='toolCall'))return refreshActiveAnswer();
+        const blocks=messageBlocks(message);
+        if(blocks.some(block=>block.type==='toolCall'))return refreshActiveAnswer();
         const answer=[...root.querySelectorAll('[data-ai-turn-answer]')].find(node=>node.dataset.aiTurnAnswer===session.activeTurnId),target=answer?.querySelector('[data-ai-turn-stream]'),conversation=root.querySelector('[data-ai-conversation]');
         if(!target||!conversation)return render({preserveComposer:true});
         const text=messageText(message);
         // The next assistant protocol message is briefly empty after tool
         // results are appended to the same turn. Keep the existing UI until
         // the final response begins producing text.
-        if(!text)return;
+        if(!text&&!blocks.some(block=>block.type==='thinking'))return;
         const nearBottom=followConversation||nearConversationBottom(conversation);
-        target.innerHTML=renderText(text);
+        target.innerHTML=blocks.some(block=>block.type==='thinking')
+          ? assistantBlocksMarkup(message,{streaming:true,turnStatus:'running'})
+          : `<div class="ai-message-content ai-turn-text" data-copyable>${renderText(text)}</div>`;
         if(nearBottom){followConversation=true;scrollConversationToBottom()}
       });
     };
 
     const settingsMarkup = () => {
       const config = aiAgent.config();
-      const modelContent=`<div class="ai-settings-scroll"><label><span>${i18n.t('apiBaseUrl')}</span><input data-ai-base type="url" value="${esc(config.baseUrl)}" spellcheck="false" autocomplete="off"></label><label><span>${i18n.t('apiKey')}</span><div class="ai-secret-field"><input data-ai-key type="text" value="${esc(config.apiKey)}" spellcheck="false" autocomplete="off" data-lpignore="true"><button data-ai-reveal type="button">${icon('eye',15)}</button></div><small>${i18n.t('apiKeyStoredCopy')}</small></label><label><span>${i18n.t('aiModel')}</span><input data-ai-model value="${esc(config.model)}" spellcheck="false" autocomplete="off"></label><label><span>${i18n.t('systemInstructions')}</span><textarea data-ai-prompt rows="5">${esc(config.systemPrompt)}</textarea></label><div class="ai-storage-card">${icon('folder',18)}<span><strong>${i18n.t('conversationStorage')}</strong><code>localStorage · ${AI_STATE_STORAGE_KEY}</code></span></div></div>`;
+      const modelContent=`<div class="ai-settings-scroll"><label><span>${i18n.t('apiBaseUrl')}</span><input data-ai-base type="url" value="${esc(config.baseUrl)}" spellcheck="false" autocomplete="off"></label><label><span>${i18n.t('apiKey')}</span><div class="ai-secret-field"><input data-ai-key type="text" value="${esc(config.apiKey)}" spellcheck="false" autocomplete="off" data-lpignore="true"><button data-ai-reveal type="button">${icon('eye',15)}</button></div><small>${i18n.t('apiKeyStoredCopy')}</small></label><label><span>${i18n.t('aiModel')}</span><input data-ai-model value="${esc(config.model)}" spellcheck="false" autocomplete="off"></label><fieldset class="ai-reasoning-setting"><legend>${i18n.t('reasoningEffort')}</legend><small>${i18n.t('reasoningEffortCopy')}</small><div>${['low','medium','high'].map(level=>`<label><input type="radio" name="ai-reasoning-effort" value="${level}" ${config.reasoningEffort===level?'checked':''}><span>${i18n.t(`reasoning_${level}`)}</span></label>`).join('')}</div></fieldset><label><span>${i18n.t('systemInstructions')}</span><textarea data-ai-prompt rows="5">${esc(config.systemPrompt)}</textarea></label><div class="ai-storage-card">${icon('folder',18)}<span><strong>${i18n.t('conversationStorage')}</strong><code>localStorage · ${AI_STATE_STORAGE_KEY}</code></span></div></div>`;
       const toolContent=`<div class="ai-tool-settings"><header><h3>${i18n.t('registeredApps')}</h3><p>${i18n.t('toolAccessCopy')}</p></header><div>${aiAgent.toolApps().map(app=>{const definitions=tools.list().filter(tool=>tool.appId===app.id),hasHigh=definitions.some(tool=>tool.risk==='high');return`<button class="ai-tool-permission ${app.enabled?'enabled':''}" data-ai-tool-toggle="${app.id}" aria-pressed="${app.enabled}">${toolIcon(app.id)}<span><strong>${i18n.t(app.title)}</strong><small>${i18n.t('toolCount').replace('{count}',definitions.length)}${hasHigh?` · ${i18n.t('includesProtectedActions')}`:''}</small></span><em>${i18n.t(app.enabled?'registered':'notRegistered')}</em><i></i></button>`}).join('')}</div></div>`;
       return `<div class="ai-settings-backdrop" data-ai-close-settings></div><section class="ai-settings-panel ai-settings-root">
         <header><div><span>${icon(settingsSection==='model'?'settings':'wrench',20)}</span><div><h2>${i18n.t('settings')}</h2><p>${i18n.t(settingsSection==='model'?'providerConfiguration':'toolConfiguration')}</p></div></div><button data-ai-close-settings>${icon('close',16)}</button></header>
@@ -343,7 +363,7 @@ export default {
       root.querySelectorAll('[data-ai-tool-toggle]').forEach(button=>button.onclick=async()=>{try{const update=aiAgent.setToolAppEnabled(button.dataset.aiToolToggle,button.getAttribute('aria-pressed')!=='true');render({preserveComposer:true});await update;}catch(error){localError=friendlyError(error);render({preserveComposer:true});}});
       root.querySelectorAll('[data-ai-close-settings]').forEach(button => button.onclick = () => { settingsOpen = false; render({ preserveComposer: true }); });
       root.querySelector('[data-ai-reveal]')?.addEventListener('click', event => event.currentTarget.closest('.ai-secret-field').classList.toggle('revealed'));
-      root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
+      root.querySelector('[data-ai-save-settings]')?.addEventListener('click', async () => { try { await aiAgent.updateConfig({ baseUrl: root.querySelector('[data-ai-base]').value, apiKey: root.querySelector('[data-ai-key]').value, model: root.querySelector('[data-ai-model]').value, reasoningEffort: root.querySelector('input[name="ai-reasoning-effort"]:checked')?.value||'medium', systemPrompt: root.querySelector('[data-ai-prompt]').value }); settingsOpen = false; localError = ''; shell.toast(i18n.t('aiSettingsSaved')); render(); } catch (error) { localError = friendlyError(error); render(); } });
       root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
       root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-activity-app]').forEach(button=>button.onclick=()=>{selectActivityApp(button.dataset.aiActivityApp);workspaceView='activity';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
