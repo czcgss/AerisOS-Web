@@ -48,6 +48,13 @@ export class NotificationService {
     if (changed) await this.#save();
   }
 
+  async markRead(id) {
+    const item = this.state.items.find(entry => entry.id === id);
+    if (!item || item.read) return;
+    item.read = true;
+    await this.#save();
+  }
+
   async clear() {
     if (!this.state.items.length) return;
     this.state.items = [];
