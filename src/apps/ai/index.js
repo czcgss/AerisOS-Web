@@ -342,7 +342,11 @@ export default {
       root.querySelector('[data-ai-send]')?.addEventListener('click', () => {if(current()?.streaming){liveExecution=null;liveExecutionTurnId=null;aiAgent.abort(activeId)}else send()});
     };
 
-    const offReady = kernel.bus.on('ai:ready', () => { ensureSession();activeId||=aiAgent.snapshot().sessions[0]?.id||null;syncConversation(); });
+    const offReady = kernel.bus.on('ai:ready', () => {
+      ensureSession();
+      activeId ||= aiAgent.snapshot().sessions[0]?.id || null;
+      render({ preserveComposer: true, focusComposer: false });
+    });
     const offChanged = kernel.bus.on('ai:changed', detail => {
       const sessions=aiAgent.snapshot().sessions,activeStillExists=activeId&&sessions.some(item=>item.id===activeId);
       if(activeId&&!activeStillExists)activeId=sessions[0]?.id||null;
