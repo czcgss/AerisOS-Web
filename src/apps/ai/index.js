@@ -222,6 +222,28 @@ export default {
         <main><div class="ai-applications-grid">${apps.map(app=>`<button data-ai-activity-open-app="${esc(app.id)}"><span class="app-icon app-icon-${esc(app.color||'grey')}">${icon(app.icon,22)}</span><span><strong>${esc(i18n.t(app.title))}</strong><small>${activityAppIds.includes(app.id)?i18n.t('activityActive'):shell.windowManager.isOpen(app.id)?i18n.t('running'):i18n.t('openApplication')}</small></span>${icon('chevron',11)}</button>`).join('')}</div></main>
       </section>`;
     };
+    const closeApplicationsPanel=()=>{
+      activityAppsOpen=false;
+      root.querySelectorAll('.ai-applications-panel,[data-ai-close-applications].ai-settings-backdrop').forEach(node=>node.remove());
+      const button=root.querySelector('[data-ai-applications]');
+      button?.classList.remove('selected');button?.setAttribute('aria-pressed','false');
+    };
+    const bindApplicationControls=(scope=root)=>{
+      scope.querySelectorAll('[data-ai-activity-open-app]').forEach(button=>button.onclick=()=>{activityAppsOpen=false;const app=activateApp(button.dataset.aiActivityOpenApp);focusActivityContext(app);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      scope.querySelectorAll('[data-ai-close-applications]').forEach(button=>button.onclick=closeApplicationsPanel);
+    };
+    const toggleApplicationsPanel=()=>{
+      if(activityAppsOpen)return closeApplicationsPanel();
+      activityAppsOpen=true;notificationOpen=false;settingsOpen=false;
+      root.querySelectorAll('.ai-settings-root,[data-ai-close-settings].ai-settings-backdrop,.ai-notification-menu,.ai-notification-backdrop').forEach(node=>node.remove());
+      root.querySelector('[data-ai-notifications]')?.classList.remove('selected');
+      const workspace=root.querySelector('.ai-workspace');
+      if(!workspace)return render({preserveComposer:true,preserveConversation:true,focusComposer:false});
+      workspace.insertAdjacentHTML('beforeend',applicationsMarkup());
+      const button=root.querySelector('[data-ai-applications]');
+      button?.classList.add('selected');button?.setAttribute('aria-pressed','true');
+      bindApplicationControls(workspace);
+    };
 
     const send = async () => {
       const input = root.querySelector('[data-ai-composer]'), text = input?.value.trim();
@@ -314,15 +336,14 @@ export default {
       root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-activity-app]').forEach(button=>button.onclick=()=>{selectActivityApp(button.dataset.aiActivityApp);workspaceView='activity';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-close-activity-app]').forEach(button=>button.onclick=event=>{event.stopPropagation();closeActivityApp(button.dataset.aiCloseActivityApp);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
-      root.querySelectorAll('[data-ai-activity-open-app]').forEach(button=>button.onclick=()=>{activityAppsOpen=false;const app=activateApp(button.dataset.aiActivityOpenApp);focusActivityContext(app);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
-      root.querySelectorAll('[data-ai-close-applications]').forEach(button=>button.onclick=()=>{activityAppsOpen=false;render({preserveComposer:true,focusComposer:false})});
+      bindApplicationControls();
       root.querySelectorAll('[data-ai-open-workspace-app]').forEach(button=>button.onclick=()=>shell.open(button.dataset.aiOpenWorkspaceApp));
       root.querySelectorAll('[data-ai-open-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiOpenResult);if(!activity)return;shell.open(button.dataset.resultApp,button.dataset.resultPath||undefined);kernel.bus.emit('agent:open-result',{appId:activity.appId,operation:activity.operation,result:structuredClone(activity.result),params:structuredClone(activity.params),path:button.dataset.resultPath||''})});
       root.querySelectorAll('[data-ai-reveal-result]').forEach(button=>button.onclick=()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiRevealResult),path=activity?.result?.path||activity?.params?.path;if(!path)return;const parent=path.split('/').slice(0,-1).join('/')||'/home/aeris';shell.open('files',parent)});
       root.querySelectorAll('[data-ai-copy-result]').forEach(button=>button.onclick=async()=>{const activity=displayedActivities.find(item=>item.id===button.dataset.aiCopyResult);if(!activity)return;const value=activity.result??activity.output??activity.params;if(await clipboard.copyText(typeof value==='object'?JSON.stringify(value,null,2):String(value??''))){button.innerHTML=`${icon('check',12)} ${i18n.t('copiedToClipboard')}`}});
       const setWorkspaceOpen=open=>{workspaceOpen=open;if(!open)unmountActivitySurface();persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
       root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
-      root.querySelector('[data-ai-applications]')?.addEventListener('click',()=>{activityAppsOpen=!activityAppsOpen;notificationOpen=false;settingsOpen=false;render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+      root.querySelector('[data-ai-applications]')?.addEventListener('click',toggleApplicationsPanel);
       root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));
       const resizeHandle=root.querySelector('[data-ai-workspace-resize]');
       if(resizeHandle){
