@@ -1,0 +1,81 @@
+.ai-new-chat {
+  display: flex;
+  align-items: center;
+  flex: none;
+  width: calc(100% - 4px);
+  min-height: 40px;
+  gap: 9px;
+  margin: 0 2px 18px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  box-shadow: var(--small-shadow);
+  color: var(--accent) !important;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.ai-new-chat:hover {
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+
+.ai-conversation-heading {
+  display: flex;
+  align-items: center;
+  flex: none;
+  min-height: 33px;
+  padding: 0 4px 5px 9px;
+}
+
+.ai-conversation-heading > strong {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -.015em;
+}
+
+.ai-conversation-heading > button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 9px;
+  color: var(--muted);
+}
+
+.ai-conversation-heading > button:hover,
+.ai-conversation-heading > button.selected {
+  background: var(--surface);
+  box-shadow: var(--small-shadow);
+  color: var(--accent);
+}
+
+.ai-sidebar > .ai-search {
+  margin: 0 2px 9px;
+  animation: aiSidebarSearchIn .16s ease-out;
+}
+
+@keyframes aiSidebarSearchIn {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+.app-icon-ai {
+  border: 1px solid rgba(255, 255, 255, .72);
+  background: linear-gradient(145deg, #f4f8ff, #dfeaff 52%, #f1e8f6) !important;
+  box-shadow: inset 1px 1px 1px rgba(255, 255, 255, .9), 3px 5px 12px rgba(105, 126, 170, .2) !important;
+  color: #7387b8 !important;
+}
+
+.dock-app:has(.app-icon-ai) {
+  filter: drop-shadow(0 5px 8px rgba(112, 132, 177, .16));
+}
+
+.ai-brand-icon,
+.ai-orb {
+  border: 1px solid rgba(255, 255, 255, .78);
+  background: linear-gradient(145deg, #f5f9ff, #dce9fa 50%, #eee7f6);
+  box-shadow: inset 1px 1px 1px rgba(255, 255, 255, .9), 0 8px 20px rgba(104, 126, 170, .18);
+  color: #7086b7;
+}
