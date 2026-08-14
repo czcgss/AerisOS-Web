@@ -33,7 +33,7 @@ export default {
   mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, userdata, system, settings, weather, music, metrics, machine }) {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', searchOpen = false, settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [];
-    let workspaceSelectedId = null, activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0;
+    let workspaceSelectedId = null, activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0, followConversation = true, conversationResizeObserver = null;
     let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, workspaceView = workspacePrefs.view;
 
     const persistWorkspacePrefs = () => {
@@ -134,10 +134,13 @@ export default {
       if(!turns.length)return`<div class="ai-welcome"><h1>${i18n.t('howCanIHelp')}</h1><p>${i18n.t('aiWelcomeCopy')}</p><div class="ai-suggestions">${['aiSuggestionOne','aiSuggestionTwo','aiSuggestionThree'].map(key=>`<button data-ai-suggestion="${esc(i18n.t(key))}">${icon('sparkles',14)}<span>${i18n.t(key)}</span>${icon('chevron',13)}</button>`).join('')}</div></div>`;
       return`<div class="ai-message-stack">${turns.map((turn,index)=>turnMarkup(turn,index,turns.length-1,session)).join('')}${session.error?errorMarkup(session.error):''}</div>`;
     };
+    const nearConversationBottom=conversation=>!conversation||conversation.scrollHeight-conversation.scrollTop-conversation.clientHeight<120;
+    const scrollConversationToBottom=()=>{if(!followConversation)return;requestAnimationFrame(()=>{const conversation=root.querySelector('[data-ai-conversation]');if(conversation)conversation.scrollTop=conversation.scrollHeight})};
+    const bindConversationViewport=conversation=>{conversationResizeObserver?.disconnect();conversationResizeObserver=null;if(!conversation)return;conversation.onscroll=()=>{followConversation=nearConversationBottom(conversation)};const content=conversation.firstElementChild;if(content&&typeof ResizeObserver!=='undefined'){conversationResizeObserver=new ResizeObserver(()=>{if(followConversation)conversation.scrollTop=conversation.scrollHeight});conversationResizeObserver.observe(content)}};
 
     const render = ({ preserveComposer = false, preserveConversation = false, focusSearch = false, focusComposer = preserveComposer } = {}) => {
       const draft = preserveComposer ? root.querySelector('[data-ai-composer]')?.value ?? composerDraft : composerDraft;composerDraft=draft;
-      const previousConversation=root.querySelector('[data-ai-conversation]'),previousConversationScroll=previousConversation?.scrollTop||0;
+      const previousConversation=root.querySelector('[data-ai-conversation]'),previousConversationScroll=previousConversation?.scrollTop||0,shouldFollowConversation=followConversation||nearConversationBottom(previousConversation);
       const previousWorkspace=root.querySelector('[data-ai-app-workspace]');
       const state = aiAgent.snapshot(), session = current(), configured = Boolean(aiAgent.config().apiKey), notificationState=notifications.snapshot();
       const turns=session?.turns||[];displayedTurns=turns;
@@ -189,7 +192,8 @@ export default {
       mountActivitySurface();
       requestAnimationFrame(() => {
         const conversation = root.querySelector('[data-ai-conversation]');
-        if (conversation) conversation.scrollTop = preserveConversation ? previousConversationScroll : conversation.scrollHeight;
+        bindConversationViewport(conversation);
+        if (conversation) {followConversation=shouldFollowConversation;conversation.scrollTop=shouldFollowConversation?conversation.scrollHeight:previousConversationScroll}
         if (focusSearch) { const search = root.querySelector('[data-ai-search]'); search?.focus(); search?.setSelectionRange(search.value.length, search.value.length); }
         else if (focusComposer) { const input = root.querySelector('[data-ai-composer]'); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }
       });
@@ -210,9 +214,9 @@ export default {
         // results are appended to the same turn. Keep the existing UI until
         // the final response begins producing text.
         if(!text)return;
-        const nearBottom=conversation.scrollHeight-conversation.scrollTop-conversation.clientHeight<90;
+        const nearBottom=followConversation||nearConversationBottom(conversation);
         target.innerHTML=renderText(text);
-        if(nearBottom)conversation.scrollTop=conversation.scrollHeight;
+        if(nearBottom){followConversation=true;scrollConversationToBottom()}
       });
     };
 
@@ -261,7 +265,7 @@ export default {
       if (!text) return;
       if(!activeId)activeId=await aiAgent.createSession();
       localError = '';liveExecution=null;liveExecutionTurnId=null;
-      input.value = '';composerDraft='';
+      input.value = '';composerDraft='';followConversation=true;
       render();
       aiAgent.send(activeId, text).catch(error => { localError = friendlyError(error); render(); });
     };
@@ -269,7 +273,7 @@ export default {
     const submitInlineEdit = () => {
       const text = root.querySelector('[data-ai-inline-edit]')?.value.trim(), turnId = editingTurnId;
       if (!text || turnId === null || !activeId) return;
-      editingTurnId = null; editDraft = ''; localError = '';liveExecution=null;liveExecutionTurnId=null; render();
+      editingTurnId = null; editDraft = ''; localError = '';liveExecution=null;liveExecutionTurnId=null;followConversation=true; render();
       aiAgent.editAndResend(activeId, turnId, text).catch(error => { localError = friendlyError(error); render(); });
     };
 
@@ -304,17 +308,17 @@ export default {
     };
     const syncConversation=({forceBottom=false}={})=>{
       const conversation=root.querySelector('[data-ai-conversation]');if(!conversation)return render({preserveComposer:true,focusComposer:false});
-      const nearBottom=forceBottom||conversation.scrollHeight-conversation.scrollTop-conversation.clientHeight<90,state=aiAgent.snapshot(),session=current(),configured=Boolean(aiAgent.config().apiKey);
+      const nearBottom=forceBottom||followConversation||nearConversationBottom(conversation),state=aiAgent.snapshot(),session=current(),configured=Boolean(aiAgent.config().apiKey);
       conversation.dataset.aiConversationSignature=conversationSignature(session);conversation.innerHTML=conversationMarkup(state,session,configured);bindConversationControls(conversation);
-      if(nearBottom)conversation.scrollTop=conversation.scrollHeight;
+      bindConversationViewport(conversation);if(nearBottom){followConversation=true;scrollConversationToBottom()}
     };
     const refreshActiveAnswer=()=>{
       const session=current(),turnId=session?.activeTurnId,turn=(session?.turns||[]).find(item=>item.id===turnId);if(!turn)return;
       const answer=[...root.querySelectorAll('[data-ai-turn-answer]')].find(node=>node.dataset.aiTurnAnswer===turnId),body=answer?.querySelector('.ai-turn-response');
       if(!body)return render({preserveComposer:true,focusComposer:false});
-      const conversation=root.querySelector('[data-ai-conversation]'),nearBottom=conversation&&conversation.scrollHeight-conversation.scrollTop-conversation.clientHeight<90;
+      const conversation=root.querySelector('[data-ai-conversation]'),nearBottom=followConversation||nearConversationBottom(conversation);
       body.innerHTML=answerMarkup(turn,session);bindToolCards(body);displayedTurns=session.turns||[];
-      if(nearBottom)conversation.scrollTop=conversation.scrollHeight;
+      if(nearBottom){followConversation=true;scrollConversationToBottom()}
     };
     const updateToolExecution=detail=>{
       const card=[...root.querySelectorAll('[data-tool-call]')].find(node=>node.dataset.toolCall===detail.toolCallId);if(!card)return;
@@ -323,8 +327,8 @@ export default {
     };
 
     const bind = () => {
-      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession();query='';searchOpen=false; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;unmountActivitySurface();render(); });
-      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;unmountActivitySurface();render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
+      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession();query='';searchOpen=false; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); });
+      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
       root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
       bindConversationControls();
       const search = root.querySelector('[data-ai-search]');
@@ -407,13 +411,13 @@ export default {
     });
     const offNotifications = kernel.bus.on('notification:changed',refreshNotificationPanel);
     const offContext = kernel.bus.on('agent:context-changed',updateContextUi);
-    const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=false;notificationOpen=false;render({focusComposer:true});if(detail.autoSend&&composerDraft)send()});
+    const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=false;notificationOpen=false;followConversation=true;render({focusComposer:true});if(detail.autoSend&&composerDraft)send()});
     const offOpenApp = kernel.bus.on('agent:open-app',detail=>{activateApp(detail?.appId,detail?.path,detail);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offLocale = kernel.bus.on('settings:change', ({ key }) => { if (key === 'locale') render({ preserveComposer: true }); });
     const closeContextOnClick=event=>{const selector=event.target.closest('[data-ai-context-selector]');if(selector){event.preventDefault();setContextMenuOpen(selector.getAttribute('aria-expanded')!=='true');return}const active=root.querySelector('[data-ai-context-selector]');if(active?.getAttribute('aria-expanded')==='true'&&!event.target.closest('.ai-native-context-wrap'))setContextMenuOpen(false)};
     const closeContextOnEscape=event=>{const selector=root.querySelector('[data-ai-context-selector]');if(selector?.getAttribute('aria-expanded')==='true'&&event.key==='Escape'){event.stopPropagation();setContextMenuOpen(false)}};
     root.addEventListener('click',closeContextOnClick);root.addEventListener('keydown',closeContextOnEscape,true);
     ensureSession();render();
-    return () => { unmountActivitySurface();if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offEntry(); offOpenApp();offLocale(); };
+    return () => { unmountActivitySurface();conversationResizeObserver?.disconnect();if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offEntry(); offOpenApp();offLocale(); };
   },
 };
