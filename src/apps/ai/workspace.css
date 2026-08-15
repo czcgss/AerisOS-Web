@@ -1057,4 +1057,5 @@
 [data-reduce-motion="true"] .ai-app-workspace small i { animation: none; }
 
 .ai-app-workspace-stable,
-.ai-app-workspace-stable .agent-app-window { animation: none; }
+.ai-app-workspace-stable .agent-app-window,
+.ai-app-workspace-stable .activity-surface { animation: none; }

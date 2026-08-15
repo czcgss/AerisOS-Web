@@ -188,11 +188,9 @@ export default {
       const workspaceContext=agentContext.snapshot(),contextWindows=shell.windowManager.contextWindows();
       if(workspaceView==='activity'&&!activityAppIds.includes(activityAppId))activityAppId=activityAppIds[0]||null;
       const activityApps=activityAppIds.map(id=>tools.registry.get(id)).filter(Boolean);
-      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):workspaceView==='activity'?JSON.stringify({activityAppId,activityAppIds,target:activityTarget?.id||activityTarget?.result?.id||activityTarget?.path||''}):'',signature=workspaceSignature(workspaceActivity,`${localeSignature}:${workspaceView}:${historySignature}:${contextSignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceToolId===(workspaceActivity?.id||'')&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
-      if(reuseConversation)previousConversation.remove();
-      if(reuseWorkspace)previousWorkspace.remove();
-      else unmountActivitySurface();
-      root.innerHTML = `<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
+      const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):workspaceView==='activity'?JSON.stringify({activityAppId,activityAppIds,target:activityTarget?.id||activityTarget?.result?.id||activityTarget?.path||''}):'';
+      const signature=workspaceView==='activity'?`activity:${localeSignature}:${contextSignature}`:workspaceView==='context'?`context:${localeSignature}:${contextSignature}`:workspaceSignature(workspaceActivity,`${localeSignature}:results:${historySignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
+      const shellMarkup=`<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
         <aside class="ai-sidebar">
           <header><span class="ai-brand-icon">${icon('aerisAi', 21)}</span><strong>${i18n.t('aerisAI')}</strong></header>
           <button class="ai-new-chat" data-ai-new>${icon('plus',15)}<span>${i18n.t('newChat')}</span></button>
@@ -216,10 +214,35 @@ export default {
           ${activityAppsOpen ? applicationsMarkup() : ''}
           ${notificationOpen ? notificationMarkup() : ''}
         </section>
-        ${workspaceVisible&&!reuseWorkspace?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,view:workspaceView,context:workspaceContext,windows:contextWindows,activityApps,activityAppId}):''}
+        ${workspaceVisible?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,view:workspaceView,context:workspaceContext,windows:contextWindows,activityApps,activityAppId}):''}
       </div>`;
-      if(reuseConversation)root.querySelector('[data-ai-conversation]')?.replaceWith(previousConversation);
-      if(reuseWorkspace)root.querySelector('.ai-system-app')?.append(previousWorkspace);
+      const currentShell=root.querySelector(':scope > .ai-system-app'),template=document.createElement('template');template.innerHTML=shellMarkup.trim();const nextShell=template.content.firstElementChild;
+      if(!currentShell){root.replaceChildren(nextShell)}else{
+        const nextConversation=nextShell.querySelector('[data-ai-conversation]');
+        if(reuseConversation&&previousConversation&&nextConversation)nextConversation.replaceWith(previousConversation);
+        const currentSidebar=currentShell.querySelector(':scope > .ai-sidebar'),nextSidebar=nextShell.querySelector(':scope > .ai-sidebar'),currentCenter=currentShell.querySelector(':scope > .ai-workspace'),nextCenter=nextShell.querySelector(':scope > .ai-workspace');
+        if(currentSidebar&&nextSidebar)currentSidebar.replaceWith(nextSidebar);
+        if(currentCenter&&nextCenter)currentCenter.replaceWith(nextCenter);
+        currentShell.className=nextShell.className;currentShell.setAttribute('style',nextShell.getAttribute('style')||'');
+        const nextWorkspace=nextShell.querySelector(':scope > [data-ai-app-workspace]');
+        if(reuseWorkspace&&previousWorkspace&&nextWorkspace){
+          previousWorkspace.className=`${nextWorkspace.className} ai-app-workspace-stable`.trim();
+          previousWorkspace.dataset.workspaceToolId=nextWorkspace.dataset.workspaceToolId||'';
+          previousWorkspace.dataset.workspaceSignature=nextWorkspace.dataset.workspaceSignature||'empty';
+          const currentHeader=previousWorkspace.querySelector(':scope > header'),nextHeader=nextWorkspace.querySelector(':scope > header');
+          if(currentHeader&&nextHeader&&currentHeader.innerHTML!==nextHeader.innerHTML)currentHeader.replaceWith(nextHeader);
+        }else if(workspaceVisible&&nextWorkspace){
+          unmountActivitySurface();
+          if(previousWorkspace){
+            previousWorkspace.className=`${nextWorkspace.className} ai-app-workspace-stable`.trim();
+            previousWorkspace.dataset.workspaceToolId=nextWorkspace.dataset.workspaceToolId||'';
+            previousWorkspace.dataset.workspaceSignature=nextWorkspace.dataset.workspaceSignature||'empty';
+            previousWorkspace.replaceChildren(...nextWorkspace.childNodes);
+          }else currentShell.append(nextWorkspace);
+        }else if(previousWorkspace){
+          unmountActivitySurface();previousWorkspace.remove();
+        }
+      }
       bind();
       mountActivitySurface();
       requestAnimationFrame(() => {
@@ -397,7 +420,7 @@ export default {
       const setWorkspaceOpen=open=>{workspaceOpen=open;if(!open)unmountActivitySurface();persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})};
       root.querySelector('[data-ai-toggle-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(!workspaceOpen));
       root.querySelector('[data-ai-applications]')?.addEventListener('click',toggleApplicationsPanel);
-      root.querySelector('[data-ai-close-workspace]')?.addEventListener('click',()=>setWorkspaceOpen(false));
+      const closeWorkspace=root.querySelector('[data-ai-close-workspace]');if(closeWorkspace)closeWorkspace.onclick=()=>setWorkspaceOpen(false);
       const resizeHandle=root.querySelector('[data-ai-workspace-resize]');
       if(resizeHandle){
         let resize=null;
