@@ -1,4 +1,5 @@
 import { icon } from '../../icons.js';
+import { compactToolArguments } from '../../services/AgentMessageCompaction.js';
 
 const esc = value => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -67,7 +68,7 @@ export function collectToolActivities(session, tools, liveExecution = null) {
       operation: details.operation || metadata.operation || previous.operation || '',
       label: details.label || metadata.label || previous.label || name,
       risk: details.risk || metadata.risk || previous.risk || 'safe',
-      params: details.params || args || previous.params || {},
+      params: compactToolArguments(name||previous.name,details.params||args||previous.params||{}),
       phase,
       result: resultFor(details, output),
       output,
@@ -102,7 +103,7 @@ export function collectToolActivities(session, tools, liveExecution = null) {
 }
 
 export const workspaceSignature = (activity, localeKey = '') => {
-  const value=JSON.stringify({phase:activity?.phase,params:activity?.params,result:activity?.result,output:activity?.output,localeKey});
+  const value=JSON.stringify({phase:activity?.phase,params:compactToolArguments(activity?.name,activity?.params),result:activity?.result,output:activity?.output,localeKey});
   let hash=2166136261;
   for(let index=0;index<value.length;index++){hash^=value.charCodeAt(index);hash=Math.imul(hash,16777619)}
   return`${activity?.id||''}:${(hash>>>0).toString(36)}`;
@@ -273,7 +274,7 @@ const resultSummary = (activity, i18n) => {
   return shortText(typeof activity.result==='object'?displayValue(activity.result):activity.result||activity.output,180);
 };
 const resultIcon = activity => ({calendar:'calendar',reminders:'reminder',notes:'note',contacts:'contacts',files:'folder',textedit:'document',preview:'preview',photos:'image',trash:'delete',weather:'sun',terminal:'terminal',calculator:'calc',settings:'settings',music:'music'}[activity.appId]||'sparkles');
-const resultOperationKind = operation => ({app_capability:'used',create:'created',create_event:'created',create_folder:'created',create_document:'created',write_file:'written',delete:'deleted',delete_event:'deleted',empty:'emptied',list:'listed',list_events:'listed',list_volumes:'inspected',read_file:'read',read_text:'read',read_metrics:'inspected',current:'checked',current_time:'checked',copy:'copied',move:'moved',rename:'renamed',complete:'completed',search:'searched',update:'updated',run_command:'executed',restart:'restarted',calculate:'calculated',play:'playing',pause:'paused'}[operation]||'completed');
+const resultOperationKind = operation => ({app_capability:'used',create:'created',create_event:'created',create_folder:'created',create_document:'created',write_file:'written',delete:'deleted',delete_event:'deleted',uninstall:'deleted',empty:'emptied',list:'listed',list_events:'listed',list_volumes:'inspected',inspect:'inspected',read_file:'read',read_text:'read',read_metrics:'inspected',current:'checked',current_time:'checked',copy:'copied',move:'moved',rename:'renamed',complete:'completed',search:'searched',update:'updated',run_command:'executed',restart:'restarted',calculate:'calculated',play:'playing',pause:'paused'}[operation]||'completed');
 const resultOperationIcon = kind => ({used:'wrench',created:'plus',written:'document',deleted:'delete',emptied:'delete',listed:'list',read:'eye',inspected:'info',checked:'check',copied:'copy',moved:'upload',renamed:'textedit',completed:'check',searched:'search',updated:'settings',executed:'terminal',restarted:'refresh',calculated:'calc',playing:'play',paused:'pause'}[kind]||'check');
 const resultOperationCopy = (activity, i18n) => i18n.t(`resultOperation_${resultOperationKind(activity.operation)}`);
 const resultTone = activity => ['deleted','emptied'].includes(resultOperationKind(activity.operation))?'removed':['created','written','copied'].includes(resultOperationKind(activity.operation))?'created':'neutral';
@@ -360,7 +361,7 @@ const resultsViewMarkup = (activities, tools, i18n) => {
         <header><span class="app-icon app-icon-${esc(app?.color||'blue')}">${icon(app?.icon||resultIcon(activity),17)}</span><div><small>${esc(meta)}</small><strong>${esc(resultTitle(activity,i18n))}</strong></div><b class="ai-result-operation">${icon(resultOperationIcon(operationKind),10)} ${esc(resultOperationCopy(activity,i18n))}</b></header>
         ${resultBodyMarkup(activity,i18n)}
         ${resultFactsMarkup(activity,i18n)}
-        <details class="ai-activity-inspector ai-result-inspector"><summary>${esc(i18n.t('toolCallDetails'))}${icon('chevron',11)}</summary><div><section><small>${esc(i18n.t('toolParameters'))}</small><pre data-copyable>${esc(displayValue(activity.params))}</pre></section>${activity.result!=null||activity.output?`<section><small>${esc(i18n.t('toolResult'))}</small><pre data-copyable>${esc(displayValue(activity.result??activity.output))}</pre></section>`:''}</div></details>
+        <details class="ai-activity-inspector ai-result-inspector"><summary>${esc(i18n.t('toolCallDetails'))}${icon('chevron',11)}</summary><div><section><small>${esc(i18n.t('toolParameters'))}</small><pre data-copyable>${esc(displayValue(compactToolArguments(activity.name,activity.params)))}</pre></section>${activity.result!=null||activity.output?`<section><small>${esc(i18n.t('toolResult'))}</small><pre data-copyable>${esc(displayValue(activity.result??activity.output))}</pre></section>`:''}</div></details>
         <footer><button data-ai-workspace-turn="${esc(activity.turnId)}" title="${esc(i18n.t('locateInConversation'))}">${icon('message',12)}</button>${path?`<button data-ai-reveal-result="${esc(activity.id)}" title="${esc(i18n.t('showInFiles'))}">${icon('folder',12)}</button>`:''}<span></span><button data-ai-copy-result="${esc(activity.id)}">${icon('copy',12)} ${esc(i18n.t('copy'))}</button>${target.appId?`<button class="primary" data-ai-open-result="${esc(activity.id)}" data-result-app="${esc(target.appId)}" data-result-path="${esc(target.path)}">${esc(i18n.t('open'))} ${icon('chevron',11)}</button>`:''}</footer>
       </article>`;
     }).join(''):`<div class="ai-results-empty"><span>${icon('sparkles',25)}</span><strong>${esc(i18n.t('noResultsTitle'))}</strong><p>${esc(i18n.t('noResultsCopy'))}</p></div>`}</div>
