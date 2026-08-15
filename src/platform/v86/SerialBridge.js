@@ -91,7 +91,10 @@ export class SerialBridge {
       // Clear the current line and keep the next retry on the serial service;
       // switching blindly to VGA leaves Files without a usable prompt.
       await this.write('\u0003\n');
-      await new Promise(resolve=>setTimeout(resolve,140));
+      // Ctrl+C may terminate the init-managed outer shell together with its
+      // timed child. Wait for init to respawn ttyS0 before starting the next
+      // queued command, otherwise every retry is sent into the same gap.
+      await new Promise(resolve=>setTimeout(resolve,650));
       this.activateSerial();
     }
     if (this.transport === 'control-vga') await this.machine.activateUserConsole();

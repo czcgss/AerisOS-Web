@@ -7,7 +7,10 @@ export class I18nService {
     try { Object.assign(this.packs, JSON.parse(localStorage.getItem('aeris.languagePacks') || '{}')); } catch {}
   }
   get locale() { return this.settings.get('locale'); }
-  t(key) { return this.packs[this.locale]?.[key] ?? this.packs.en[key] ?? key; }
+  t(key) {
+    if(key&&typeof key==='object')return key[this.locale]??key.en??Object.values(key)[0]??'';
+    return this.packs[this.locale]?.[key] ?? this.packs.en[key] ?? key;
+  }
   list() { return Object.entries(this.packs).map(([code, pack]) => ({ code, name: pack._name })); }
   use(locale) { if (this.packs[locale]) this.settings.set('locale', locale); }
   install(pack) {

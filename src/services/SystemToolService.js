@@ -37,7 +37,15 @@ export class SystemToolService {
     this.#registerBuiltins();
   }
 
-  start() {}
+  start() {
+    this.offRegistry=this.registry.subscribe(change=>{
+      if(change.type==='registered')this.#registerOpenApp(change.app);
+      if(change.type==='unregistered')this.definitions.delete(`${change.app.id}_open_app`);
+      this.kernel?.bus.emit('tools:changed',{appId:change.app.id,type:change.type});
+    });
+  }
+
+  stop() { this.offRegistry?.();this.offRegistry=null; }
 
   list() { return [...this.definitions.values()].map(({ execute, parameters, ...metadata }) => ({ ...metadata })); }
   metadata(name) {
@@ -51,6 +59,17 @@ export class SystemToolService {
   execution(id) { return this.executions.get(id) ? structuredClone(this.executions.get(id)) : null; }
   pendingApproval() { const id=[...this.approvals.keys()].at(-1);return id?this.execution(id):null; }
   resolveApproval(id, approved) { const pending=this.approvals.get(id);if(!pending)return false;this.approvals.delete(id);pending.resolve(!!approved);return true; }
+  async runProtected({toolCallId,name,label,appId='',operation,params={},approvalMessage},signal,onUpdate,execute){
+    const state={toolCallId,name,label,appId,operation,risk:'high',params:structuredClone(params),phase:'approval',approvalMessage,startedAt:Date.now()};
+    const onAbort=()=>{if(['running','approval'].includes(state.phase)){state.phase='cancelled';state.finishedAt=Date.now();this.#setExecution(state)}};
+    signal?.addEventListener('abort',onAbort,{once:true});this.#setExecution(state);onUpdate?.(toolResult('Waiting for user approval.',state));
+    const approved=await this.#requestApproval(state,signal);
+    if(!approved){signal?.removeEventListener('abort',onAbort);if(signal?.aborted){onAbort();throw new Error('System action cancelled.')}state.phase='denied';state.finishedAt=Date.now();this.#setExecution(state);return{approved:false,state:structuredClone(state)}}
+    if(signal?.aborted){signal.removeEventListener('abort',onAbort);onAbort();throw new Error('System action cancelled.')}
+    try{state.phase='running';this.#setExecution(state);onUpdate?.(toolResult(`Running ${label}…`,state));const value=await execute();state.phase='completed';state.finishedAt=Date.now();state.result=value;this.#setExecution(state);return{approved:true,state:structuredClone(state),value}}
+    catch(error){state.phase=signal?.aborted?'cancelled':'failed';state.finishedAt=Date.now();state.error=error.message||String(error);this.#setExecution(state);throw error}
+    finally{signal?.removeEventListener('abort',onAbort)}
+  }
   apps() {
     const grouped = new Map();
     for (const tool of this.definitions.values()) {
@@ -125,6 +144,24 @@ export class SystemToolService {
     });
   }
 
+  #registerOpenApp(app) {
+    if(!app||app.id==='ai')return;
+    this.#register({
+      name:`${app.id}_open_app`,
+      appId:app.id,
+      operation:'open',
+      label:`Open ${this.i18n.t(app.title)}`,
+      description:`Open the real Aeris ${this.i18n.t(app.title)} application in the Agent Activity workspace. Use this when the user asks to open, show, or work directly in the application.`,
+      parameters:Type.Object({path:Type.Optional(Type.String({description:'Optional Aeris file or folder path the app should open'}))},{additionalProperties:false}),
+      execute:async({path})=>{
+        const detail={appId:app.id,path:String(path||'')};
+        this.kernel?.bus.emit('agent:open-app',detail);
+        return detail;
+      },
+      success:()=>`Opened ${this.i18n.t(app.title)} in the Agent Activity workspace.`,
+    });
+  }
+
   #registerBuiltins() {
     const object = properties => Type.Object(properties, { additionalProperties: false });
     const optionalString = description => Type.Optional(Type.String({ description }));
@@ -171,19 +208,6 @@ export class SystemToolService {
     this.#register({ name:'music_play',appId:'music',operation:'play',label:'Play local music',description:'Play a local song by title or path in the real Aeris Music player.',parameters:object({song:Type.String({description:'Song title, partial title, or Aeris path'})}),execute:async({song})=>{if(!this.music.snapshot().tracks.length)await this.music.refresh();return this.music.play(song)},success:track=>`Now playing “${track.title}” by ${track.artist}.` });
     this.#register({ name:'music_pause',appId:'music',operation:'pause',label:'Pause music',description:'Pause the song currently playing in Aeris Music.',parameters:object({}),execute:async()=>{this.music.pause();return this.music.snapshot().current},success:track=>track?`Paused “${track.title}”.`:'Music is paused.' });
 
-    for(const app of this.registry.list().filter(item=>item.id!=='ai'))this.#register({
-      name:`${app.id}_open_app`,
-      appId:app.id,
-      operation:'open',
-      label:`Open ${this.i18n.t(app.title)}`,
-      description:`Open the real Aeris ${this.i18n.t(app.title)} application in the Agent Activity workspace. Use this when the user asks to open, show, or work directly in the application.`,
-      parameters:object({path:optionalString('Optional Aeris file or folder path the app should open')}),
-      execute:async({path})=>{
-        const detail={appId:app.id,path:String(path||'')};
-        this.kernel?.bus.emit('agent:open-app',detail);
-        return detail;
-      },
-      success:()=>`Opened ${this.i18n.t(app.title)} in the Agent Activity workspace.`,
-    });
+    for(const app of this.registry.list())this.#registerOpenApp(app);
   }
 }

@@ -150,10 +150,12 @@ export class V86Machine {
   async #resumeControlPlane(){
     // A normal refresh restores the already-running serial shell. Probe it
     // first so recovery never waits on inactive VGA consoles.
-    for(const timeout of [1200,1800,2600]){
+    for(const timeout of [1600,2600,4000]){
       this.#bootActivity({key:'reconnectingLinuxServices',kind:'service'});
       if(await this.#connectSerialControlPlane(timeout)){await this.#installControlHelpers();this.controlReady=true;return}
-      await new Promise(resolve=>setTimeout(resolve,320));
+      // A failed framed probe interrupts ttyS0 in SerialBridge. Give init time
+      // to respawn the dedicated shell before the next probe.
+      await new Promise(resolve=>setTimeout(resolve,650));
     }
 
     // Older snapshots do not contain the serial service. Recover one root VGA
@@ -212,10 +214,11 @@ export class V86Machine {
     this.#activateSerialLines();
     this.serial.activateSerial();
     try{
-      // Cancel a partial line captured in the snapshot, then start a clean
-      // framed command. This is safe for the dedicated /bin/ash -s service.
-      this.emulator.serial0_send('\u0003\n');
-      await new Promise(resolve=>setTimeout(resolve,90));
+      // Clear a partial canonical input line without sending SIGINT. Ctrl+C
+      // can terminate the init-managed /bin/ash -s process and make every
+      // quick restore probe race against its respawn.
+      this.emulator.serial0_send('\u0015\n');
+      await new Promise(resolve=>setTimeout(resolve,120));
       const handshake=await this.serial.execute("printf 'aeris-serial-ready'",timeout,true);
       return handshake.code===0&&handshake.output.replace(/\s+/g,'').includes('aeris-serial-ready');
     }catch{return false}
@@ -236,26 +239,68 @@ export class V86Machine {
   }
 
   async #installControlHelpers(){
-    const fileHelper=`#!/bin/ash\np="$1"\n[ -d "$p" ] || exit 44\nfor f in "$p"/*; do\n  [ -e "$f" ] || continue\n  n=\${f##*/}\n  meta=$(stat -c '%s|%Y' "$f" 2>/dev/null || printf '0|0')\n  s=\${meta%%|*}; m=\${meta#*|}\n  if [ -d "$f" ]; then t=directory; s=0; else t=file; fi\n  printf '__AERIS_FILE__%s__AERIS_FIELD__%s__AERIS_FIELD__%s__AERIS_FIELD__%s__AERIS_ROW__' "$n" "$t" "$s" "$m"\ndone`;
+    const check='[ -x /usr/local/bin/aeris_list ]';
+    const installed=await this.#probeGuest(check,4000);
+    if(installed.passed||(!installed.answered&&this.bootMode==='restore'))return;
+    const fileHelper=`#!/bin/ash\n# AERIS_LIST_V1\np="$1"\n[ -d "$p" ] || exit 44\nfor f in "$p"/*; do\n  [ -e "$f" ] || continue\n  n=\${f##*/}\n  meta=$(stat -c '%s|%Y' "$f" 2>/dev/null || printf '0|0')\n  s=\${meta%%|*}; m=\${meta#*|}\n  if [ -d "$f" ]; then t=directory; s=0; else t=file; fi\n  printf '__AERIS_FILE__%s__AERIS_FIELD__%s__AERIS_FIELD__%s__AERIS_FIELD__%s__AERIS_ROW__' "$n" "$t" "$s" "$m"\ndone`;
     const fileHelperPayload=btoa(fileHelper);
-    await this.serial.execute(`mkdir -p /usr/local/bin; printf %s '${fileHelperPayload}' | base64 -d > /usr/local/bin/aeris_list; chmod 755 /usr/local/bin/aeris_list`,5000,true);
+    await this.#ensureGuestSetup(`mkdir -p /usr/local/bin; printf %s '${fileHelperPayload}' | base64 -d > /usr/local/bin/.aeris_list.new; chmod 755 /usr/local/bin/.aeris_list.new; mv /usr/local/bin/.aeris_list.new /usr/local/bin/aeris_list`,check,'Linux file helper');
   }
 
   async #installTerminalServices(){
     this.#activateTerminalLines();
     const check=`[ -x /usr/local/bin/aeris-terminal-login ] && grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || exit 1; for terminal_port in 1 2 3; do grep -q "^ttyS\${terminal_port}::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login " /etc/inittab || exit 1; done`;
-    try{const installed=await this.serial.execute(check,3000,true);if(installed.code===0)return}catch{}
+    const installed=await this.#probeGuest(check,5000);
+    if(installed.passed)return;
+    // A successfully created snapshot already contains these services. A
+    // missing response during restore is transport uncertainty, not evidence
+    // that guest files are absent; rewriting them here can turn a transient
+    // UART delay into a boot failure.
+    if(!installed.answered&&this.bootMode==='restore')return;
     const loginHelper=`#!/bin/ash\nexport TERM=xterm-256color COLORTERM=truecolor\nexec /bin/login -f aeris`;
     const profile=`\n# AERIS_TERMINAL_PROFILE\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nalias ls='ls --color=auto'\nalias ll='ls -lah --color=auto'\nPS1='\\[\\033[38;5;75m\\]aeris@aeris \\[\\033[38;5;110m\\]\\w \\[\\033[38;5;78m\\]❯ \\[\\033[0m\\]'\n`;
     const encode=value=>{const bytes=new TextEncoder().encode(value);return btoa(String.fromCharCode(...bytes))};
     const helperPayload=encode(loginHelper),profilePayload=encode(profile);
-    const configure=`mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/aeris-terminal-login; chmod 755 /usr/local/bin/aeris-terminal-login; grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/aeris/.profile; chown aeris:aeris /home/aeris/.profile; sed -i '/^ttyS[123]::/d' /etc/inittab; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /etc/inittab; done`;
-    const configured=await this.serial.execute(configure,12000,true);
-    if(configured.code!==0)throw new Error(configured.output||'Unable to configure Aeris terminal services');
+    await this.#ensureGuestSetup(
+      `mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/.aeris-terminal-login.new; chmod 755 /usr/local/bin/.aeris-terminal-login.new; mv /usr/local/bin/.aeris-terminal-login.new /usr/local/bin/aeris-terminal-login`,
+      '[ -x /usr/local/bin/aeris-terminal-login ]',
+      'terminal login helper',
+    );
+    await this.#ensureGuestSetup(
+      `touch /home/aeris/.profile; grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/aeris/.profile; chown aeris:aeris /home/aeris/.profile`,
+      'grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null',
+      'terminal profile',
+    );
+    const terminalRules=`for terminal_port in 1 2 3; do grep -q "^ttyS\${terminal_port}::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login " /etc/inittab || exit 1; done`;
+    await this.#ensureGuestSetup(
+      `sed '/^ttyS[123]::/d' /etc/inittab > /tmp/aeris-inittab.new; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /tmp/aeris-inittab.new; done; cat /tmp/aeris-inittab.new > /etc/inittab; rm -f /tmp/aeris-inittab.new`,
+      terminalRules,
+      'terminal service rules',
+    );
     // Finish the framed setup command before restarting init-managed TTYs.
     // Otherwise their output can hide the end marker and falsely fail restore.
-    await this.serial.execute(`( sleep 1; kill -HUP 1; for terminal_pid in $(ps -eo pid,tty 2>/dev/null | awk '$2 ~ /^ttyS[123]$/ {print $1}'); do kill -HUP "$terminal_pid" 2>/dev/null || true; done ) >/dev/null 2>&1 &`,3000,true);
+    try{await this.serial.execute(`( sleep 1; kill -HUP 1; for terminal_pid in $(ps -eo pid,tty 2>/dev/null | awk '$2 ~ /^ttyS[123]$/ {print $1}'); do kill -HUP "$terminal_pid" 2>/dev/null || true; done ) >/dev/null 2>&1 &`,5000,true)}catch(error){if(!await this.#guestCheck(check,6000))throw error}
     await new Promise(resolve=>setTimeout(resolve,350));
+  }
+
+  async #guestCheck(command,timeout=5000){
+    return (await this.#probeGuest(command,timeout)).passed;
+  }
+
+  async #probeGuest(command,timeout=5000){
+    try{const result=await this.serial.execute(command,timeout,true);return{answered:true,passed:result.code===0,result}}
+    catch(error){return{answered:false,passed:false,error}}
+  }
+
+  async #ensureGuestSetup(command,check,label){
+    let lastError;
+    for(const timeout of [10000,18000]){
+      try{const result=await this.serial.execute(command,timeout,true);if(result.code!==0)lastError=new Error(result.output||`${label} exited with status ${result.code}`)}catch(error){lastError=error}
+      await new Promise(resolve=>setTimeout(resolve,180));
+      if(await this.#guestCheck(check,6000))return;
+    }
+    const timedOut=/timed out/i.test(lastError?.message||'');
+    throw new Error(timedOut?`The Aeris ${label} could not be verified after the Linux guest stopped responding.`:`Unable to configure the Aeris ${label}: ${lastError?.message||'unknown error'}`);
   }
 
   async #launchControlPlane() {
