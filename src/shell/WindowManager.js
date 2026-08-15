@@ -50,6 +50,21 @@ export class WindowManager {
   minimize(id) { const record = this.windows.get(id); if (record) { if(record.fullscreen)this.maximize(id);record.element.hidden=true;this.#syncFullscreenChrome();this.#persistSession(); } }
   focus(id) { const record = this.windows.get(id); if (!record) return; document.querySelectorAll('.window').forEach(el => el.classList.remove('focused')); record.element.classList.add('focused'); record.element.style.zIndex = ++this.z; this.context.kernel.bus.emit('window:focused', record.app.id);this.context.kernel.bus.emit('window:context-focused',this.#contextWindow(record)); }
   contextWindows(){return [...this.windows.values()].filter(record=>record.app.id!=='ai').map(record=>this.#contextWindow(record)).sort((a,b)=>Number(a.minimized)-Number(b.minimized)||Number(b.focused)-Number(a.focused)||b.zIndex-a.zIndex)}
+  snapshotApp(appId){
+    return [...this.windows.values()].filter(record=>record.app.id===appId).map(record=>{
+      const {element,maximized,fullscreen,launchOptions}=record,normalStyle=maximized?record.previous:fullscreen?record.fullscreenPrevious:element.style.cssText,style=document.createElement('div').style;
+      style.cssText=normalStyle||element.style.cssText;
+      return{left:parseFloat(style.left)||0,top:parseFloat(style.top)||48,width:parseFloat(style.width)||element.offsetWidth,height:parseFloat(style.height)||element.offsetHeight,maximized,fullscreen,minimized:element.hidden,focused:element.classList.contains('focused'),launchOptions:{...launchOptions}};
+    });
+  }
+  restoreApp(appId,states=[]){
+    let focused=null;
+    for(const state of states){
+      const record=this.open(appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});
+      if(state.maximized)this.zoom(record.id);if(state.fullscreen)this.maximize(record.id);if(state.minimized)record.element.hidden=true;if(state.focused&&!state.minimized)focused=record.id;
+    }
+    this.#syncFullscreenChrome();if(focused)this.focus(focused);this.#persistSession();
+  }
   focusNext(){const visible=[...this.windows.values()].filter(record=>!record.element.hidden);if(!visible.length)return;const focused=visible.findIndex(record=>record.element.classList.contains('focused')),next=visible[(focused+1)%visible.length];this.focus(next.id)}
   snap(id,side){const record=this.windows.get(id);if(!record||record.maximized)return;const element=record.element;if(!record.previous)record.previous=element.style.cssText;element.style.cssText+=side==='left'?`;left:10px;top:46px;width:calc(50vw - 15px);height:calc(100vh - 122px);z-index:${++this.z}`:`;left:calc(50vw + 5px);top:46px;width:calc(50vw - 15px);height:calc(100vh - 122px);z-index:${++this.z}`;element.classList.add('snapped');this.#persistSession()}
   maximize(id) {

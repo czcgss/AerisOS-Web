@@ -1,0 +1,32 @@
+.aeris-extension-loading {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent));
+}
+
+.aeris-extension-loading i {
+  width: 20px;
+  height: 20px;
+  border: 2px solid color-mix(in srgb, var(--muted) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: aeris-extension-spin .8s linear infinite;
+}
+
+.aeris-extension-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+@keyframes aeris-extension-spin { to { transform: rotate(360deg); } }
+
+html[data-reduce-motion="true"] .aeris-extension-loading i { animation: none; }

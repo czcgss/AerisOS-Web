@@ -4,7 +4,7 @@ import { SetupAssistant } from './SetupAssistant.js';
 import { DesktopWidgets } from './DesktopWidgets.js';
 
 export class DesktopShell {
-  constructor(root, context, registry) { this.root=root; this.context=context; this.registry=registry; this.launcherOpen=false;this.bootActivities=[];this.lastBootActivity=Date.now();this.desktopRenderSequence=0;this.desktopRefreshTimer=0; }
+  constructor(root, context, registry) { this.root=root; this.context=context; this.registry=registry; this.launcherOpen=false;this.bootActivities=[];this.lastBootActivity=Date.now();this.desktopRenderSequence=0;this.desktopRefreshTimer=0;this.pendingAppUpdates=new Map(); }
 
   mount() {
     const { i18n, settings } = this.context;
@@ -22,6 +22,7 @@ export class DesktopShell {
     this.root.querySelector('.desktop').setAttribute('inert','');this.root.querySelector('.desktop').setAttribute('aria-hidden','true');
     const menuButtons=this.root.querySelectorAll('.app-menu>button');if(menuButtons[0])menuButtons[0].dataset.shell='launcher';if(menuButtons[1])menuButtons[1].dataset.shell='system-menu';
     this.windowManager=new WindowManager(this.root.querySelector('[data-window-layer]'),this.registry,{...this.context,i18n});this.#renderDock();
+    this.offRegistry=this.registry.subscribe(change=>{if(change.type==='unregistered')this.windowManager.closeApp(change.app.id);this.#renderDock();if(this.launcherOpen){this.launcherOpen=false;this.toggleLauncher()}});
     this.widgets=new DesktopWidgets(this.root.querySelector('.desktop'),this.context);this.widgets.mount();this.#bind();if(settings.get('setupComplete'))this.windowManager.restoreSession();this.#renderDesktop();this.#clock();this.clockTimer=setInterval(()=>this.#clock(),30000);
     setTimeout(()=>this.context.machine.start().catch(error=>this.#bootError(error)),650);
   }
@@ -57,6 +58,9 @@ export class DesktopShell {
     this.context.kernel.bus.on('window:opened',({appId})=>this.#updateAppRunning(appId));
     this.context.kernel.bus.on('window:closed',({appId})=>this.#updateAppRunning(appId));
     this.context.kernel.bus.on('shell:open-app',({id,path})=>this.open(id,path));
+    this.context.kernel.bus.on('app-runtime:before-update',({appId})=>this.pendingAppUpdates.set(appId,this.windowManager.snapshotApp(appId)));
+    this.context.kernel.bus.on('app-runtime:updated',({appId})=>{const states=this.pendingAppUpdates.get(appId)||[];this.pendingAppUpdates.delete(appId);if(states.length)this.windowManager.restoreApp(appId,states)});
+    this.context.kernel.bus.on('app-runtime:uninstalled',({appId})=>this.pendingAppUpdates.delete(appId));
     addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='c'&&this.context.clipboard.textFor(event.target)){event.preventDefault();this.#copySelection(event.target)}if((event.metaKey||event.ctrlKey)&&event.shiftKey&&event.code==='Space'){event.preventDefault();this.context.agentEntry.open({source:'keyboard'})}else if((event.metaKey||event.ctrlKey)&&event.code==='Space'){event.preventDefault();this.toggleLauncher(true)}if(event.altKey&&event.key==='Tab'){event.preventDefault();this.closeOverlays();this.windowManager.focusNext()}if(event.key==='Escape')this.closeOverlays()});
   }
 
