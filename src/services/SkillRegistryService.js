@@ -30,7 +30,13 @@ export class SkillRegistryService {
 
   load(sessionId,name){
     const skill=this.skills.get(String(name));if(!skill?.enabled)throw new Error(`Skill is unavailable or disabled: ${name}`);
-    const loaded=this.loadedBySession.get(sessionId)||new Set();loaded.add(skill.name);this.loadedBySession.set(sessionId,loaded);return skill;
+    const loaded=this.loadedBySession.get(sessionId)||new Set();loaded.add(skill.name);this.loadedBySession.set(sessionId,loaded);this.kernel?.bus.emit('skill:loaded',{sessionId,name:skill.name});return skill;
+  }
+
+  restoreSession(sessionId,names=[]){
+    const loaded=new Set((names||[]).map(String).filter(name=>this.skills.get(name)?.enabled));
+    if(loaded.size)this.loadedBySession.set(sessionId,loaded);else this.loadedBySession.delete(sessionId);
+    return [...loaded];
   }
 
   setEnabled(name,enabled){
