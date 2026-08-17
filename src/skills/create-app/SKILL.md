@@ -7,6 +7,12 @@ description: Create, inspect, modify, validate, install, update, and uninstall A
 
 Use this skill only for extension applications that run through the Aeris App Runtime. Never edit the Aeris host source or register App Studio as an App Tool. The runtime reference bundled with this skill is mandatory; do not invent package fields or SDK signatures.
 
+## Required widget-extension clarification
+
+Before drafting a new app, determine whether the user explicitly requested or explicitly rejected desktop widget extension support. If neither intent is present in the user's request, you MUST call `query_user` once with topic `app-widget-extension` and wait for the answer. Do not infer the choice from the app category, even when a widget seems useful or unnecessary. Do not call `query_user` for app inspection, modification, update, or uninstall, and do not call it when the user already made the choice.
+
+Treat the structured `widgetExtension` result as authoritative for the rest of the task. When it is false, do not invent or advertise widget capabilities. When it is true, follow the runtime contract for declaring a widget provider; if that contract is unavailable, do not claim widget support was implemented.
+
 ## Create and install
 
 1. Translate the request into one focused application with a lowercase hyphenated id.

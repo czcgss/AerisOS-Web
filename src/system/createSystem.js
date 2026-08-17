@@ -14,6 +14,7 @@ import { NotificationService } from '../services/NotificationService.js';
 import { MusicService } from '../services/MusicService.js';
 import { AgentContextService } from '../services/AgentContextService.js';
 import { AgentEntryService } from '../services/AgentEntryService.js';
+import { AgentQueryService } from '../services/AgentQueryService.js';
 import { AppRegistry } from '../apps/AppRegistry.js';
 import { AppRuntimeService } from '../apps/AppRuntimeService.js';
 import { WidgetRegistry } from '../widgets/WidgetRegistry.js';
@@ -71,7 +72,8 @@ export async function createSystem(root) {
   await widgetRuntime.prepare();
   const widgetStudio=kernel.register('widgetStudio',new WidgetStudioService(widgetRuntime));
   const appStudio=kernel.register('appStudio',new AppStudioService(appRuntime));
-  const skillRegistry=kernel.register('skillRegistry',new SkillRegistryService({storage:localStorage,bundledSkills:[createAppSkill(appStudio),createWidgetSkill(widgetStudio)]}));
+  const queryUser=kernel.register('queryUser',new AgentQueryService());
+  const skillRegistry=kernel.register('skillRegistry',new SkillRegistryService({storage:localStorage,bundledSkills:[createAppSkill(appStudio,queryUser),createWidgetSkill(widgetStudio)]}));
   const agentContext=kernel.register('agentContext',new AgentContextService(registry,i18n));
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
@@ -79,7 +81,7 @@ export async function createSystem(root) {
   appStudio.setApprovalService(tools);
   widgetStudio.setApprovalService(tools);
   const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry));
-  const context={kernel,settings,i18n,dialog,machine,system,metrics,tools,aiAgent,agentContext,agentEntry,userdata,clipboard,weather,music,notifications,registry,appRuntime,appStudio,skillRegistry,widgetRegistry,widgetRuntime,widgetStudio};
+  const context={kernel,settings,i18n,dialog,machine,system,metrics,tools,aiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,notifications,registry,appRuntime,appStudio,skillRegistry,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
   window.aeris={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,shell};
   await kernel.boot();

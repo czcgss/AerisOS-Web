@@ -298,7 +298,16 @@ export class AiAgentService {
       followUpMode: 'one-at-a-time',
       steeringMode: 'one-at-a-time',
       maxRetryDelayMs: 12000,
-      prepareNextTurnWithContext:({context})=>({context:{...context,systemPrompt:this.#systemPrompt(this.state.config.systemPrompt,id),tools:this.#activeTools(id)}}),
+      prepareNextTurnWithContext:({context,toolResults})=>{
+        // Pi runs a turn against a shallow context snapshot. Replacing
+        // agent.state.messages after a Studio result does not alter that live
+        // snapshot, so the next summarization request would still serialize
+        // the complete generated source. Compact the actual next-turn context
+        // only after a successful Studio operation; failed validation keeps
+        // its source so the model can repair it.
+        const compactSource=(toolResults||[]).some(shouldCompactLiveProtocol);
+        return{context:{...context,messages:compactSource?compactAgentMessages(context.messages):context.messages,systemPrompt:this.#systemPrompt(this.state.config.systemPrompt,id),tools:this.#activeTools(id)}};
+      },
     });
     agent.subscribe(async event => {
       let publishedEvent=event;

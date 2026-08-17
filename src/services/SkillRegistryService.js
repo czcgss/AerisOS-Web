@@ -64,7 +64,7 @@ export class SkillRegistryService {
         return result(formatSkillInvocation(skill),{skillId:skill.name,operation:'load',phase:'completed',result:{name:skill.name,tools:(skill.tools||[]).map(tool=>tool.name)}});
       },
     };
-    const owned=[...loaded].flatMap(name=>{const skill=this.skills.get(name);return skill?.enabled?(skill.tools||[]):[]});
+    const owned=[...loaded].flatMap(name=>{const skill=this.skills.get(name);return skill?.enabled?(skill.tools||[]):[]}).map(tool=>typeof tool.forSession==='function'?tool.forSession(sessionId):tool);
     return [loadTool,...owned];
   }
 
