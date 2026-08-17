@@ -30,7 +30,13 @@ export class SkillRegistryService {
 
   load(sessionId,name){
     const skill=this.skills.get(String(name));if(!skill?.enabled)throw new Error(`Skill is unavailable or disabled: ${name}`);
-    const loaded=this.loadedBySession.get(sessionId)||new Set();loaded.add(skill.name);this.loadedBySession.set(sessionId,loaded);return skill;
+    const loaded=this.loadedBySession.get(sessionId)||new Set();loaded.add(skill.name);this.loadedBySession.set(sessionId,loaded);this.kernel?.bus.emit('skill:loaded',{sessionId,name:skill.name});return skill;
+  }
+
+  restoreSession(sessionId,names=[]){
+    const loaded=new Set((names||[]).map(String).filter(name=>this.skills.get(name)?.enabled));
+    if(loaded.size)this.loadedBySession.set(sessionId,loaded);else this.loadedBySession.delete(sessionId);
+    return [...loaded];
   }
 
   setEnabled(name,enabled){
@@ -58,7 +64,7 @@ export class SkillRegistryService {
         return result(formatSkillInvocation(skill),{skillId:skill.name,operation:'load',phase:'completed',result:{name:skill.name,tools:(skill.tools||[]).map(tool=>tool.name)}});
       },
     };
-    const owned=[...loaded].flatMap(name=>{const skill=this.skills.get(name);return skill?.enabled?(skill.tools||[]):[]});
+    const owned=[...loaded].flatMap(name=>{const skill=this.skills.get(name);return skill?.enabled?(skill.tools||[]):[]}).map(tool=>typeof tool.forSession==='function'?tool.forSession(sessionId):tool);
     return [loadTool,...owned];
   }
 
