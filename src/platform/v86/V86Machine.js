@@ -3,6 +3,19 @@ import { TerminalBridge } from './TerminalBridge.js';
 import { MachineStateStore } from './MachineStateStore.js';
 
 const IMAGE_VERSION = 'alpine-3.24.1-x86-native-terminal-v12';
+const SNAPSHOT_SCHEMA_VERSION = 2;
+const V86_STATE_FORMAT_VERSION = 'v86-state-v6-aeris-uart3-v1';
+const V86_ASSET_VERSION = 'b80fba71-abd51298';
+const MACHINE_CONFIGURATION_VERSION = 'virtio-9p-net-uart0-3-no-speaker-v1';
+
+class MachineRestoreError extends Error {
+  constructor(message, cause, code = 'SNAPSHOT_RESTORE_FAILED') {
+    super(message, { cause });
+    this.name = 'MachineRestoreError';
+    this.code = code;
+    this.technicalDetails = cause?.stack || cause?.message || String(cause || 'Unknown v86 restore failure');
+  }
+}
 
 export class V86Machine {
   constructor(settings) {
@@ -22,6 +35,7 @@ export class V86Machine {
   }
 
   get profile() { return `${IMAGE_VERSION}-${this.settings.get('memory')}mb`; }
+  get snapshotMetadata() { return {schema:SNAPSHOT_SCHEMA_VERSION,stateFormat:V86_STATE_FORMAT_VERSION,assets:V86_ASSET_VERSION,machine:MACHINE_CONFIGURATION_VERSION,image:IMAGE_VERSION,memory:this.settings.get('memory')}; }
 
   async start() {
     if (this.emulator) return;
@@ -30,15 +44,18 @@ export class V86Machine {
     this.#setStatus('booting');
     let loadingProgress=3;
     const loadingPulse=setInterval(()=>this.#bootStage('checkingSystem',Math.min(17,++loadingProgress),'checking'),700);
-    let V86,snapshot;
-    try{[V86,snapshot]=await Promise.all([this.#loadRuntime(),this.stateStore.load(this.profile).catch(()=>null)])}
+    let V86,snapshotRecord;
+    const snapshotLoad=this.stateStore.load(this.profile).catch(error=>{throw new MachineRestoreError('The saved virtual computer state could not be read. Your saved state has not been erased.',error,'SNAPSHOT_READ_FAILED')});
+    try{[V86,snapshotRecord]=await Promise.all([this.#loadRuntime(),snapshotLoad])}
     finally{clearInterval(loadingPulse)}
-    this.bootMode = snapshot ? 'restore' : 'install';
+    this.bootMode = snapshotRecord ? 'restore' : 'install';
+    this.#validateSnapshot(snapshotRecord);
+    const snapshot=snapshotRecord?.state||null;
     this.#bootStage(snapshot ? 'restoringSystem' : 'loadingInstallationMedia', snapshot ? 18 : 8, this.bootMode);
     const base = this.base, screen = document.querySelector('#guest-screen-persistent');
     if (!screen) throw new Error('Guest screen device is not mounted');
     const machineOptions = {
-      wasm_path: `${base}/v86.wasm`, memory_size: this.settings.get('memory') * 1024 * 1024,
+      wasm_path: `${base}/v86.wasm?v=${V86_ASSET_VERSION}`, memory_size: this.settings.get('memory') * 1024 * 1024,
       vga_memory_size: 8 * 1024 * 1024, screen_container: screen,
       bios: { url: `${base}/seabios.bin` }, vga_bios: { url: `${base}/vgabios.bin` },
       filesystem: {}, autostart: false,
@@ -138,13 +155,45 @@ export class V86Machine {
   }
 
   async #restoreSnapshot(snapshot, timeout = 90000) {
-    let timer;
+    let timer,capturedError=null;
+    const capture=event=>{const reason=event?.reason||event?.error;if(this.#isSnapshotRestoreFailure(reason||event?.message))capturedError=reason instanceof Error?reason:new Error(String(reason||event?.message))};
+    addEventListener('error',capture,true);
+    addEventListener('unhandledrejection',capture,true);
     try {
       await Promise.race([
         this.emulator.restore_state(snapshot),
         new Promise((_, reject) => { timer=setTimeout(() => reject(new Error('The saved computer did not finish restoring within 90 seconds. Try again, or reinstall only if the saved state can no longer be recovered.')), timeout); }),
       ]);
-    } finally { clearTimeout(timer); }
+      // Some v86 device restore failures are reported on the window event loop
+      // instead of rejecting restore_state(). Observe one turn before allowing
+      // Linux recovery to start so the root error cannot become a later tty
+      // timeout.
+      await new Promise(resolve=>setTimeout(resolve,0));
+      if(capturedError)throw capturedError;
+    } catch(error) {
+      try{this.emulator?.stop()}catch{}
+      throw new MachineRestoreError('The saved virtual computer state could not be restored. Your saved state has not been erased.',error);
+    } finally {
+      clearTimeout(timer);
+      removeEventListener('error',capture,true);
+      removeEventListener('unhandledrejection',capture,true);
+    }
+  }
+
+  #isSnapshotRestoreFailure(reason){return /(?:set_state|restore_state|saved (?:machine|computer)|snapshot|virtual hardware)/i.test(reason?.message||String(reason||''))}
+
+  #validateSnapshot(record){
+    if(!record?.metadata)return;
+    const expected=this.snapshotMetadata,actual=record.metadata;
+    // Schema 1 used the HTTP cache token as its runtime compatibility value.
+    // That token did not describe the serialized v86 state format, so those
+    // records remain valid when their actual machine topology still matches.
+    const comparable=['machine','image','memory'];
+    if(Number(actual.schema||1)>=2)comparable.push('schema','stateFormat');
+    const mismatch=comparable.find(key=>actual[key]!==expected[key]);
+    if(!mismatch)return;
+    const cause=new Error(`Snapshot ${mismatch} is ${JSON.stringify(actual[mismatch])}; this build requires ${JSON.stringify(expected[mismatch])}.`);
+    throw new MachineRestoreError('The saved virtual computer was created by an incompatible Aeris runtime. Your saved state has not been erased.',cause,'SNAPSHOT_INCOMPATIBLE');
   }
 
   async #resumeControlPlane(){
@@ -331,7 +380,7 @@ export class V86Machine {
   async checkpoint() {
     if (!this.emulator || !this.guestReady || this.saving || this.status !== 'running' || this.serial?.active || this.serial?.pending?.length) return false;
     this.saving = true;
-    try { const state = await this.emulator.save_state(); await this.stateStore.save(this.profile, state); this.kernel.bus.emit('machine:checkpoint', Date.now()); return true; }
+    try { const state = await this.emulator.save_state(); await this.stateStore.save(this.profile, state, this.snapshotMetadata); this.kernel.bus.emit('machine:checkpoint', Date.now()); return true; }
     catch (error) { this.kernel.bus.emit('machine:checkpoint-error', error); return false; }
     finally { this.saving = false; }
   }
@@ -487,8 +536,8 @@ export class V86Machine {
   #setStatus(status) { this.status=status;this.kernel?.bus.emit('machine:status',status); }
 
   async #loadRuntime() {
-    if(window.V86){const loaded=[...document.scripts].reverse().find(script=>/\/libv86\.js(?:\?|$)/.test(script.src));this.base=window.__aerisV86Base||(loaded?new URL('.',loaded.src).pathname.replace(/\/$/,''):'/v86');return window.V86;}
-    for(const base of ['/v86','/public/v86']){try{await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=`${base}/libv86.js`;script.onload=resolve;script.onerror=reject;document.head.appendChild(script)});this.base=base;window.__aerisV86Base=base;return window.V86}catch{}}
+    if(window.V86&&window.__aerisV86RuntimeVersion===V86_ASSET_VERSION){const loaded=[...document.scripts].reverse().find(script=>/\/libv86\.js(?:\?|$)/.test(script.src));this.base=window.__aerisV86Base||(loaded?new URL('.',loaded.src).pathname.replace(/\/$/,''):'/v86');return window.V86;}
+    for(const base of ['/v86','/public/v86']){try{await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=`${base}/libv86.js?v=${V86_ASSET_VERSION}`;script.onload=resolve;script.onerror=reject;document.head.appendChild(script)});this.base=base;window.__aerisV86Base=base;window.__aerisV86RuntimeVersion=V86_ASSET_VERSION;return window.V86}catch{}}
     throw new Error('Unable to load the v86 runtime');
   }
 }
