@@ -19,7 +19,7 @@ export default {
   startingServices: '正在启动系统服务…', creatingSnapshot: '正在创建首个恢复快照…', restoringSystem: '正在恢复上次会话…', systemReady: 'Aeris 已准备就绪',
   firstInstallHint: '请保持页面开启。安装完成后桌面会自动解锁。', restoreHint: '正在将应用、窗口和 Linux 电脑恢复到你上次离开时的状态。',
   systemStartup: '系统启动', savedSystem: '已保存的系统', newSystem: '新系统', preparationProgress: '正在准备电脑', restoreProgress: '恢复进度', installationProgress: '安装进度', startupSecurityCopy: '系统设置仅保存在这台设备上。', restoreSecurityCopy: '已保存的电脑状态仅保留在此浏览器中。',
-  installationFailed: 'Aeris 未能完成安装', installationFailedHint: '为避免使用不完整的系统，桌面仍保持锁定。', recoveryFailed: 'Aeris 无法恢复这台电脑', recoveryFailedHint: '已保存的数据尚未被抹掉。你可以重试恢复，或复制错误信息以便排查。', attentionRequired: '需要处理',
+  installationFailed: 'Aeris 未能完成安装', installationFailedHint: '为避免使用不完整的系统，桌面仍保持锁定。', recoveryFailed: 'Aeris 无法恢复这台电脑', recoveryFailedHint: '已保存的数据尚未被抹掉。你可以重试恢复，或复制错误信息以便排查。', attentionRequired: '需要处理', technicalCause: '技术原因',
   installationDetails: '安装详情', installationStatus: '安装状态', restoreDetails: '恢复详情', restoreStatus: '恢复状态', previousStep: '上一步', currentStep: '当前步骤', waitingForNextStep: '正在等待 Alpine Linux 报告下一步…', waitingForRestoreStep: '正在准备下一步恢复操作…', showDetails: '显示详情', hideDetails: '隐藏详情', waitingForGuest: '正在等待客体系统…', activityNow: '刚刚有活动', now: '刚刚', secondsAgo: '{seconds} 秒前',
   continuingAlpineBoot: '检测到启动提示符，正在使用 Alpine 兼容配置启动',
   lastActivitySeconds: '上次活动在 {seconds} 秒前', guestBusySeconds: '已有 {seconds} 秒无新输出，Linux 可能仍在处理', startupMayBeStalled: '已有 {seconds} 秒无新输出，启动可能已卡住', startupStalledMinutes: '启动已连续 {minutes} 分钟没有新输出，安装程序可能已卡住。',
