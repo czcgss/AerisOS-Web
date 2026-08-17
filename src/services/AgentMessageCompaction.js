@@ -1,19 +1,20 @@
-const APP_STUDIO_TOOL='aeris_app_studio';
+const APP_STUDIO_TOOL='aeris_app_studio',WIDGET_STUDIO_TOOL='aeris_widget_studio',STUDIO_TOOLS=new Set([APP_STUDIO_TOOL,WIDGET_STUDIO_TOOL]);
 const APP_SOURCE_FIELDS=new Set([
   'initialStateJson','localeEnJson','localeZhJson',
   'mainHtml','mainCss','mainJavaScript',
   'activityHtml','activityCss','activityJavaScript',
 ]);
+const WIDGET_SOURCE_FIELDS=new Set(['initialStateJson','localeEnJson','localeZhJson','widgetHtml','widgetCss','widgetJavaScript']);
 const clone=value=>structuredClone(value);
 const characters=value=>String(value??'').length;
 const messageText=message=>typeof message?.content==='string'?message.content:(message?.content||[]).filter(block=>block?.type==='text').map(block=>block.text||'').join('\n');
 
 export const compactToolArguments=(name,args={})=>{
-  if(name!==APP_STUDIO_TOOL||!args||typeof args!=='object'||Array.isArray(args))return clone(args||{});
+  if(!STUDIO_TOOLS.has(name)||!args||typeof args!=='object'||Array.isArray(args))return clone(args||{});
   if(args.sourceSummary?.omitted)return clone(args);
   const compact={},fields={};let totalCharacters=0;
   for(const [key,value] of Object.entries(args)){
-    if(APP_SOURCE_FIELDS.has(key)&&typeof value==='string'){
+    if((name===APP_STUDIO_TOOL?APP_SOURCE_FIELDS:WIDGET_SOURCE_FIELDS).has(key)&&typeof value==='string'){
       const size=characters(value);fields[key]={characters:size};totalCharacters+=size;
     }else compact[key]=clone(value);
   }
@@ -21,17 +22,17 @@ export const compactToolArguments=(name,args={})=>{
   return compact;
 };
 
-const compactAppStudioResult=message=>{
+const compactStudioResult=message=>{
   const operation=message.details?.operation||'',text=messageText(message);
   if(operation!=='inspect'&&characters(text)<=4000)return clone(message);
-  const {content:_,...metadata}=message,compact=clone(metadata),result=compact.details?.result||{},appId=result.appId||compact.details?.appId||result.manifest?.id||'extension app',path=result.path?` (${result.path})`:'',size=Number(result.bytes)||0;
-  compact.content=[{type:'text',text:`App Studio ${operation||'operation'} completed for ${appId}${path}.${size?` ${size} source bytes were inspected.`:''} Full source was omitted from saved conversation history; inspect the app again before making another source change.`}];
+  const {content:_,...metadata}=message,compact=clone(metadata),result=compact.details?.result||{},resourceId=result.appId||result.widgetId||compact.details?.appId||result.manifest?.id||'extension',path=result.path?` (${result.path})`:'',size=Number(result.bytes)||0,studio=message.toolName===WIDGET_STUDIO_TOOL?'Widget Studio':'App Studio',resource=message.toolName===WIDGET_STUDIO_TOOL?'widget':'app';
+  compact.content=[{type:'text',text:`${studio} ${operation||'operation'} completed for ${resourceId}${path}.${size?` ${size} source bytes were inspected.`:''} Full source was omitted from saved conversation history; inspect the ${resource} again before making another source change.`}];
   return compact;
 };
 
 export const compactAgentMessage=message=>{
   if(!message||typeof message!=='object')return message;
-  if(message.role==='toolResult'&&message.toolName===APP_STUDIO_TOOL)return compactAppStudioResult(message);
+  if(message.role==='toolResult'&&STUDIO_TOOLS.has(message.toolName))return compactStudioResult(message);
   const {content,...metadata}=message,compact=clone(metadata);
   compact.content=Array.isArray(content)?content.map(block=>{
     if(block?.type!=='toolCall')return clone(block);
@@ -43,3 +44,13 @@ export const compactAgentMessage=message=>{
 };
 
 export const compactAgentMessages=messages=>(messages||[]).map(compactAgentMessage);
+
+export const shouldCompactLiveProtocol=message=>message?.role==='toolResult'&&STUDIO_TOOLS.has(message?.toolName)&&!message?.isError&&message?.details?.phase==='completed';
+
+export const compactAgentEvent=event=>{
+  if(!event||typeof event!=='object')return event;
+  const compact={...event};
+  if(event.message)compact.message=compactAgentMessage(event.message);
+  if(Array.isArray(event.messages))compact.messages=compactAgentMessages(event.messages);
+  return compact;
+};

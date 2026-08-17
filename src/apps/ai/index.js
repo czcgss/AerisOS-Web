@@ -34,7 +34,7 @@ const readWorkspacePrefs = () => {
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
-  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, userdata, system, settings, weather, music, metrics, machine, skillRegistry }) {
+  mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, queryUser, userdata, system, settings, weather, music, metrics, machine, skillRegistry }) {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', searchOpen = false, settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [], skillCommandQuery = null, skillCommandIndex = 0, selectedSkillName = '';
     let workspaceSelectedId = null, activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0, followConversation = true, conversationResizeObserver = null;
@@ -105,6 +105,7 @@ export default {
       return`<div class="ai-composer-context ai-native-context-wrap"><button data-ai-context-selector aria-expanded="${contextMenuOpen}" title="${i18n.t('chooseContext')}"><span class="app-icon app-icon-${app?.color||'blue'}">${icon(app?.icon||(desktop?'desktop':'maximize'),12)}</span><strong>${esc(context?label:i18n.t('chooseContext'))}</strong>${context?.selection?.text?`<em>${i18n.t('selectedText')}</em>`:''}${icon('chevron',9)}</button>${picker}</div>`;
     };
     const approvalMarkup=()=>{const request=liveExecution?.phase==='approval'?liveExecution:tools.pendingApproval();if(!request)return'';const app=tools.registry.get(request.appId);return`<section class="ai-inline-approval" data-ai-approval="${esc(request.toolCallId)}"><span class="ai-tool-app-icon app-icon app-icon-${app?.color||'grey'}">${icon(app?.icon||'lock',16)}<i>${icon('lock',8)}</i></span><div><small>${i18n.t('approvalRequired')}</small><strong>${esc(request.label||i18n.t('approveAgentAction'))}</strong><p>${esc(request.approvalMessage||'')}</p></div><footer><button data-ai-deny-approval="${esc(request.toolCallId)}">${i18n.t('deny')}</button><button class="ai-approval-primary" data-ai-approve="${esc(request.toolCallId)}">${icon('check',12)}${i18n.t('approve')}</button></footer></section>`};
+    const clarificationMarkup=()=>{const request=queryUser.pendingForSession(activeId);if(!request)return'';return`<section class="ai-inline-query" data-ai-query="${esc(request.toolCallId)}"><span>${icon('grid',17)}</span><div><small>${i18n.t('clarificationRequired')}</small><strong>${esc(i18n.t('appWidgetQuestion').replace('{app}',request.appName))}</strong><p>${i18n.t('appWidgetQuestionCopy')}</p></div><footer><button data-ai-query-choice="disable">${i18n.t('appOnly')}</button><button class="ai-query-primary" data-ai-query-choice="enable">${icon('grid',12)}${i18n.t('includeWidgets')}</button></footer></section>`};
 
     const toolIcon = (appId,skillTool=null) => { if(skillTool)return`<span class="ai-skill-call-icon">${icon('skill',17)}</span>`;const app=tools.registry.get(appId);return app?`<span class="ai-tool-app-icon app-icon app-icon-${app.color}">${icon(app.icon,17)}<i>${icon('wrench',8)}</i></span>`:`<span class="ai-tool-app-icon">${icon('wrench',16)}</span>`; };
     const errorMarkup=(message,className='ai-inline-error')=>`<div class="${className} ai-copyable-error" data-copyable><span class="ai-error-icon">${icon('warning',15)}</span><span class="ai-error-text">${esc(message)}</span><button data-ai-copy-error title="${i18n.t('copyError')}">${icon('copy',13)}</button></div>`;
@@ -206,6 +207,7 @@ export default {
           </main>
           <footer class="ai-composer-area">
             ${localError ? errorMarkup(localError,'ai-composer-error') : ''}
+            ${clarificationMarkup()}
             ${approvalMarkup()}
             <div class="ai-composer-shell ${taskActive ? 'streaming' : ''}"><div data-ai-skill-command-host>${skillCommandMarkup()}</div><div class="ai-composer-input">${selectedSkillMarkup()}<textarea data-ai-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready || !configured || editingTurnId !== null || taskActive ? 'disabled' : ''}>${esc(draft)}</textarea></div><div class="ai-composer-toolbar">${contextMarkup()}<label class="ai-composer-model" title="${i18n.t('aiModel')}">${icon('sparkles',12)}<select data-ai-composer-model ${taskActive?'disabled':''}>${aiAgent.modelOptions().map(model=>`<option value="${esc(model)}" ${model===aiAgent.config().model?'selected':''}>${esc(model)}</option>`).join('')}<option value="__settings__">${i18n.t('modelSettings')}…</option></select><em>${i18n.t(`reasoning_${aiAgent.config().reasoningEffort||'medium'}`)}</em>${icon('chevron',9)}</label><span></span><button data-ai-send ${!state.ready || !configured || editingTurnId !== null ? 'disabled' : ''} aria-label="${i18n.t(taskActive ? 'stopGenerating' : 'send')}">${icon(taskActive ? 'stopSquare' : 'arrowUp', 17)}</button></div></div>
             <small>${i18n.t('aiMayMakeMistakes')}</small>
@@ -401,6 +403,7 @@ export default {
       bindContextControls();
       root.querySelector('[data-ai-deny-approval]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiDenyApproval,false)});
       root.querySelector('[data-ai-approve]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiApprove,true)});
+      root.querySelectorAll('[data-ai-query-choice]').forEach(button=>button.addEventListener('click',event=>{const card=event.currentTarget.closest('[data-ai-query]');if(!card)return;card.classList.add('resolving');card.querySelectorAll('button').forEach(item=>item.disabled=true);queryUser.resolve(card.dataset.aiQuery,event.currentTarget.dataset.aiQueryChoice)}));
       root.querySelectorAll('[data-ai-settings-section]').forEach(button=>button.onclick=()=>{settingsSection=button.dataset.aiSettingsSection;render({preserveComposer:true});});
       root.querySelectorAll('[data-ai-tool-toggle]').forEach(button=>button.onclick=async()=>{try{const update=aiAgent.setToolAppEnabled(button.dataset.aiToolToggle,button.getAttribute('aria-pressed')!=='true');render({preserveComposer:true});await update;}catch(error){localError=friendlyError(error);render({preserveComposer:true});}});
       root.querySelectorAll('[data-ai-skill-toggle]').forEach(button=>button.onclick=()=>{try{skillRegistry.setEnabled(button.dataset.aiSkillToggle,button.getAttribute('aria-pressed')!=='true');render({preserveComposer:true})}catch(error){localError=friendlyError(error);render({preserveComposer:true})}});
@@ -475,6 +478,7 @@ export default {
       // conversation itself remains the same DOM node throughout the tool run.
       if(!settingsOpen)render({preserveComposer:true,preserveConversation:true,focusComposer:false})
     });
+    const offQuery = kernel.bus.on('agent:query-user',detail=>{if(detail?.sessionId===activeId&&!settingsOpen)render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offNotifications = kernel.bus.on('notification:changed',refreshNotificationPanel);
     const offContext = kernel.bus.on('agent:context-changed',updateContextUi);
     const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=false;notificationOpen=false;followConversation=true;render({focusComposer:true});if(detail.autoSend&&composerDraft)send()});
@@ -489,6 +493,6 @@ export default {
     const closeSkillOnPointerDown=event=>{if(skillCommandQuery!==null&&!event.target.closest('[data-ai-composer],[data-ai-skill-command-host]'))closeSkillCommand()};
     root.addEventListener('click',closeContextOnClick);root.addEventListener('keydown',closeContextOnEscape,true);document.addEventListener('pointerdown',closeSkillOnPointerDown,true);
     ensureSession();render();
-    return () => { unmountActivitySurface();conversationResizeObserver?.disconnect();if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);document.removeEventListener('pointerdown',closeSkillOnPointerDown,true);offReady(); offChanged(); offAgent(); offCapability(); offNotifications(); offContext(); offEntry(); offOpenApp();offAppBeforeUpdate();offAppUpdated();offAppBeforeUninstall();offLocale();offSkills(); };
+    return () => { unmountActivitySurface();conversationResizeObserver?.disconnect();if(streamingFrame)cancelAnimationFrame(streamingFrame);clearTimeout(workspaceHighlightTimer);root.removeEventListener('click',closeContextOnClick);root.removeEventListener('keydown',closeContextOnEscape,true);document.removeEventListener('pointerdown',closeSkillOnPointerDown,true);offReady(); offChanged(); offAgent(); offCapability(); offQuery(); offNotifications(); offContext(); offEntry(); offOpenApp();offAppBeforeUpdate();offAppUpdated();offAppBeforeUninstall();offLocale();offSkills(); };
   },
 };

@@ -5,108 +5,42 @@ description: Create, inspect, modify, validate, install, update, and uninstall A
 
 # Create an Aeris app
 
-Use this skill only for extension applications that run through the Aeris App Runtime. Never edit the Aeris host source or register the App Studio as an App Tool.
+Use this skill only for extension applications that run through the Aeris App Runtime. Never edit the Aeris host source or register App Studio as an App Tool. The runtime reference bundled with this skill is mandatory; do not invent package fields or SDK signatures.
 
-## Required workflow
+## Required widget-extension clarification
 
-1. Translate the user's request into one focused application with a lowercase hyphenated id.
-2. Design both surfaces before calling the tool:
-   - Main is the complete resizable desktop application.
-   - Activity is a purpose-built compact Agent workspace, not a scaled copy of Main.
-3. Both surfaces must share state through the asynchronous Aeris App SDK. Follow the exact runtime contract and template below; do not invent API signatures.
-4. Provide complete English and Chinese names, descriptions, and translation dictionaries.
-5. Use semantic HTML, keyboard-accessible controls, responsive CSS, Aeris visual variables, and restrained motion.
-6. Do not use network access, external assets, browser dialogs, browser storage, `window.parent`, or host DOM access.
-7. Call `aeris_app_studio` with type `validate` and all source fields.
-8. Review validation errors and correct the source. Never claim success from unvalidated code.
-9. After validation succeeds, call `aeris_app_studio` with type `install` and the returned `draftId`.
-10. Tell the user the installed app id and that it is available in Launcher and Agent Activity.
+Before drafting a new app, determine whether the user explicitly requested or explicitly rejected desktop widget extension support. If neither intent is present in the user's request, you MUST call `query_user` once with topic `app-widget-extension` and wait for the answer. Do not infer the choice from the app category, even when a widget seems useful or unnecessary. Do not call `query_user` for app inspection, modification, update, or uninstall, and do not call it when the user already made the choice.
 
-## Managing installed extension apps
+Treat the structured `widgetExtension` result as authoritative for the rest of the task. When it is false, do not invent or advertise widget capabilities. When it is true, follow the runtime contract for declaring a widget provider; if that contract is unavailable, do not claim widget support was implemented.
 
-Use `aeris_app_studio` with type `list` before managing an existing extension. To remove an app, call type `uninstall` with its exact `id`. Uninstall is destructive and always pauses for Aeris system approval. Never imply that approval was granted, never retry a denied uninstall, and never attempt to remove a bundled app. A successful uninstall closes every Main and Activity instance and permanently removes the app package and its saved state.
+## Create and install
 
-## Modifying an installed extension
+1. Translate the request into one focused application with a lowercase hyphenated id.
+2. Design Main as the complete desktop application and Activity as a compact, task-focused Agent surface. Do not scale Main into Activity.
+3. Use one shared state schema through the asynchronous Aeris SDK.
+4. Provide complete English and Chinese metadata and translation dictionaries.
+5. Implement every visible control and all loading, empty, error, disabled, hover, active, and focus states.
+6. Call `aeris_app_studio` with type `validate` and the complete package.
+7. Correct every validation error. Never claim success from unvalidated code.
+8. Call type `install` with the returned `draftId`.
+9. Report the installed app id and its availability in Launcher and Agent Activity.
 
-Never use the Terminal or Files tools to discover an extension app implementation. Extension packages live in the Aeris App Runtime, not in the Linux filesystem.
+## Inspect and update
 
-1. Call `aeris_app_studio` with type `inspect` and the exact app `id`. With no `path`, it returns the complete validated manifest and every source file. Use `path` to reread one exact file when only a focused source is needed.
-2. Preserve the app id and all package files. Modify only what the user's request requires, while bringing both Main and Activity into compliance when their shared behavior changes.
-3. Increment the semantic version and call type `validate` with the complete revised source.
-4. Correct every validation error. Then call type `update` with the returned `draftId`.
-5. Update is a protected action and pauses for Aeris approval. Do not retry a denial. Successful update replaces the package, reloads any open Main and Agent Activity views, and preserves existing shared app state by default.
+Never use Terminal or Files to discover an extension implementation. Extension packages live in App Runtime, not Linux.
 
-Never attempt to update a bundled app and never claim that source was inspected unless the `inspect` operation completed.
+1. Call type `list`, then type `inspect` with the exact app id. Inspect the complete package unless the change is isolated to one known file.
+2. Preserve the id and every package file; modify only what the request requires.
+3. Keep Main and Activity on the same state schema and update both when shared behavior changes.
+4. Increment the semantic version and validate the complete revised package.
+5. Call type `update` with the returned `draftId`. Update requires Aeris approval and preserves state by default.
 
-## Aeris design language contract
+Never update a bundled app, retry denied approval, or claim source was inspected when inspection failed.
 
-AerisOS styling is the default, not an optional theme. Unless the user explicitly requests a different visual direction, both Main and Activity must look native beside the built-in Aeris apps:
+## Uninstall
 
-- Build a desktop application layout, not a web landing page. Main should use a compact toolbar/sidebar/content/status-bar hierarchy when those regions are useful. Activity must fill its available surface and expose only the task-focused controls appropriate to the Agent workspace.
-- Use the runtime tokens `--surface`, `--surface-2`, `--text`, `--muted`, `--accent`, `--line`, `--shadow`, `--small-shadow`, `--inset`, `--font-ui`, and `--font-mono`. Do not invent an unrelated global palette, branded gradient background, or typography system.
-- Use `var(--font-ui)` for interface copy and `var(--font-mono)` only for code, paths, counters, or terminal-like data. Default interface text is compact: 9–13px for controls and supporting copy, with larger type reserved for a clear page title or primary value.
-- Use soft translucent surfaces, subtle depth, thin separators, 9–16px control/card radii, and the current system accent. Neumorphic depth is selective: use it for raised controls and focused surfaces, not on every row.
-- Buttons must have hover, active, disabled, and `:focus-visible` states. Inputs must use Aeris surfaces and focus rings. Selection, empty, loading, and error states must be intentionally designed.
-- Motion should normally complete in 120–220ms, change opacity/transform rather than layout, and remain restrained. Any animation or transition must include a `prefers-reduced-motion` fallback.
-- Both views must respond to narrow sizes without clipped controls or scaled desktop UI. Avoid fixed full-window dimensions inside either surface.
-- React to `Aeris.environment.subscribe` so locale, theme, and accent changes update without reopening the app. Never hard-code a light-only interface.
+Call type `list`, then type `uninstall` with the exact id. Uninstall is destructive and requires Aeris approval. Never retry denial or remove a bundled app. Successful uninstall closes its surfaces and removes its package and state.
 
-Before validation, compare Main and Activity against this contract. A technically functional app that looks like a generic webpage is incomplete.
+## Completion gate
 
-## SDK rules
-
-`Aeris.ready` is a Promise, not a callback-registration function. Start each Main and Activity script with `Aeris.ready.then(() => { ... })` or an async IIFE containing `await Aeris.ready`. Never write `Aeris.ready(...)`.
-
-`Aeris.app.getState()`, `setState(...)`, and `patchState(...)` are asynchronous and return Promises. Always `await` them when their result or completion affects the next operation. Never treat the Promise returned by `getState()` as the state object. `Aeris.activity.openFullApp()` is asynchronous too.
-
-Use this state pattern in both views:
-
-```js
-Aeris.ready.then(() => {
-  let currentState = null;
-
-  const normalizeState = value => ({
-    items: Array.isArray(value?.items) ? value.items : [],
-    // Normalize every other field owned by this app.
-  });
-
-  const render = state => {
-    // Render only from the state argument. Do not call getState here.
-  };
-
-  Aeris.app.subscribe(nextState => {
-    currentState = normalizeState(nextState);
-    render(currentState);
-  });
-
-  Aeris.environment.subscribe(() => {
-    // Reapply translations and environment-dependent presentation.
-    if (currentState) render(currentState);
-  });
-
-  document.querySelector('[data-add]').onclick = async () => {
-    const latest = normalizeState(await Aeris.app.getState());
-    await Aeris.app.patchState({
-      items: [...latest.items, createItem()],
-    });
-  };
-});
-```
-
-Adapt the state field names to the application; do not copy `items` blindly. Register DOM handlers only after `Aeris.ready` resolves. Render from `Aeris.app.subscribe(state => ...)` so Main and Activity remain synchronized. Before a read-modify-write mutation, await the latest state instead of relying on a possibly stale closure. Mutations must produce a JSON-serializable object.
-
-Use `Aeris.i18n.t(key)` for all visible copy. Use `Aeris.environment.subscribe` to re-render locale-, theme-, and accent-dependent presentation. Activity may call `await Aeris.activity.openFullApp()`.
-
-## Pre-validation self-check
-
-Before calling `validate`, inspect both JavaScript sources and correct every failure:
-
-- Reject `Aeris.ready(`. Use `Aeris.ready.then(` or `await Aeris.ready`.
-- Reject an unawaited `Aeris.app.getState()` used as an object, spread value, or collection source.
-- Ensure every interactive control has a handler registered after readiness.
-- Trace create, edit, toggle, delete, filter, and reset flows from the DOM event through the awaited state mutation and subscribed render.
-- Ensure Main and Activity use the same state schema and neither keeps an independent authoritative copy.
-- Ensure rejected SDK operations produce an in-app error state; never use browser dialogs.
-- Ensure initial render comes from the state subscription, not from a fabricated empty state that can overwrite persisted data.
-
-Every application must remain useful after refresh and must never expose native browser interaction as part of its UI.
+Before validation, follow the bundled runtime reference and trace every interaction from DOM event through the awaited SDK operation to the subscribed render. A visually plausible surface with incomplete behavior is not complete.
