@@ -112,6 +112,8 @@
   transform: translateY(-1px);
 }
 
+.ai-usage-trigger{position:relative;display:grid;place-items:center;width:27px;height:25px;border-radius:8px;background:color-mix(in srgb,var(--surface-2) 92%,transparent);box-shadow:var(--small-shadow);color:var(--muted);cursor:default}.ai-usage-trigger:hover,.ai-usage-trigger:focus-visible{color:var(--accent);outline:0}.ai-usage-tooltip{position:absolute;z-index:20;left:0;bottom:calc(100% + 7px);display:none;box-sizing:border-box;width:230px;padding:11px;border:1px solid color-mix(in srgb,var(--muted) 15%,transparent);border-radius:12px;background:color-mix(in srgb,var(--surface) 97%,transparent);box-shadow:0 14px 38px rgba(38,45,70,.22);color:var(--text);backdrop-filter:blur(18px)}.ai-usage-trigger:hover .ai-usage-tooltip,.ai-usage-trigger:focus .ai-usage-tooltip{display:block}.ai-usage-tooltip>strong{display:block;font-size:10px}.ai-usage-tooltip>small{display:block;margin:2px 0 9px;color:var(--muted);font-size:8px}.ai-usage-tooltip dl{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0}.ai-usage-tooltip dl>div{padding:7px;border-radius:8px;background:var(--surface-2)}.ai-usage-tooltip dt{color:var(--muted);font-size:7px}.ai-usage-tooltip dd{margin:3px 0 0;font:10px 'Ubuntu Mono',ui-monospace,monospace;font-weight:700}
+
 .ai-message-stack .ai-message {
   padding-bottom: 22px;
 }

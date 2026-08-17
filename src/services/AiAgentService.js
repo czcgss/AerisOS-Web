@@ -8,12 +8,21 @@ export const AI_STATE_STORAGE_KEY = 'aeris.ai.state.v1';
 const PROVIDER_ID = 'aeris-openai-compatible';
 const LEGACY_DEFAULT_MODEL = 'gpt-4o-mini';
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
+const MODEL_KEY_SEPARATOR = '::';
+const emptyUsage = () => ({ input:0, output:0, cacheRead:0, cacheWrite:0, totalTokens:0 });
+const modelKey = (providerId, modelId) => `${providerId}${MODEL_KEY_SEPARATOR}${modelId}`;
+const dayKey = (timestamp=now()) => {const date=new Date(timestamp),year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return`${year}-${month}-${day}`};
+const defaultProvider = () => ({
+  id:PROVIDER_ID,
+  name:'OpenAI compatible',
+  api:'openai-completions',
+  baseUrl:'https://api.openai.com/v1',
+  apiKey:'',
+  models:[{id:LEGACY_DEFAULT_MODEL,name:LEGACY_DEFAULT_MODEL,reasoning:true,reasoningEffort:'medium',contextWindow:128000,maxTokens:8192}],
+});
 const defaultConfig = () => ({
-  baseUrl: 'https://api.openai.com/v1',
-  apiKey: '',
-  model: LEGACY_DEFAULT_MODEL,
-  reasoningEffort: 'medium',
-  recentModels: [],
+  providers:[defaultProvider()],
+  activeModelKey:modelKey(PROVIDER_ID,LEGACY_DEFAULT_MODEL),
   systemPrompt: 'You are the Aeris system assistant. Be concise, helpful, and transparent. Reply in the language used by the user.',
   disabledToolApps: [],
 });
@@ -46,7 +55,7 @@ export class AiAgentService {
     this.ready = false;
     this.loading = false;
     this.error = '';
-    this.state = { version: 3, updatedAt: 0, config: defaultConfig(), sessions: [] };
+    this.state = { version: 4, updatedAt: 0, config: defaultConfig(), usage: {}, sessions: [] };
     this.agents = new Map();
     this.activeTurns = new Map();
     this.streamingAssistantMessages = new Map();
@@ -68,12 +77,13 @@ export class AiAgentService {
   stop() { this.offToolsChanged?.();this.offSkillsChanged?.();this.offSkillLoaded?.();this.offToolsChanged=null;this.offSkillsChanged=null;this.offSkillLoaded=null; }
 
   snapshot() {
+    const safeConfig=clone(this.state.config);safeConfig.providers=safeConfig.providers.map(provider=>({...provider,apiKey:provider.apiKey?'••••••••':''}));
     return {
       ready: this.ready,
       loading: this.loading,
       error: this.error,
       storageKey: AI_STATE_STORAGE_KEY,
-      config: { ...this.state.config, apiKey: this.state.config.apiKey ? '••••••••' : '' },
+      config: safeConfig,
       sessions: this.state.sessions.map(session => ({
         id: session.id,
         title: session.title,
@@ -85,8 +95,22 @@ export class AiAgentService {
     };
   }
 
-  config() { return { ...this.state.config, disabledToolApps: [...(this.state.config.disabledToolApps||[])], recentModels: [...(this.state.config.recentModels||[])] }; }
-  modelOptions() { return [...new Set([this.state.config.model,...(this.state.config.recentModels||[])].map(value=>String(value||'').trim()).filter(Boolean))]; }
+  config() {
+    const selected=this.#selectedModelConfig();
+    return { ...clone(this.state.config), disabledToolApps:[...(this.state.config.disabledToolApps||[])], activeModelKey:selected.key, providerId:selected.provider.id, providerName:selected.provider.name, baseUrl:selected.provider.baseUrl, apiKey:selected.provider.apiKey, model:selected.model.id, modelName:selected.model.name, reasoningEffort:selected.model.reasoningEffort };
+  }
+  modelOptions() { return this.state.config.providers.flatMap(provider=>provider.models.map(model=>({key:modelKey(provider.id,model.id),providerId:provider.id,providerName:provider.name,modelId:model.id,label:model.name||model.id,reasoningEffort:model.reasoningEffort}))); }
+
+  turnUsage(turn) {
+    const usage=emptyUsage();let providerId='',modelId='';
+    for(const message of turn?.responses||[]){if(message?.role!=='assistant'||!message.usage)continue;providerId=message.provider||providerId;modelId=message.model||modelId;this.#addUsage(usage,message.usage)}
+    const provider=this.state.config.providers.find(item=>item.id===providerId),model=provider?.models.find(item=>item.id===modelId);
+    return {...usage,providerId,modelId,providerName:provider?.name||providerId,modelName:model?.name||modelId,modelKey:providerId&&modelId?modelKey(providerId,modelId):'',hasUsage:usage.input+usage.output+usage.cacheRead+usage.cacheWrite>0};
+  }
+
+  usageSummary() {
+    return Object.values(this.state.usage||{}).map(entry=>{const provider=this.state.config.providers.find(item=>item.id===entry.providerId),model=provider?.models.find(item=>item.id===entry.modelId);return{...entry,daily:clone(entry.daily||{}),providerName:provider?.name||entry.providerId,modelName:model?.name||entry.modelId}}).sort((a,b)=>b.totalTokens-a.totalTokens);
+  }
 
   toolApps() {
     const disabled=new Set(this.state.config.disabledToolApps||[]);
@@ -106,19 +130,24 @@ export class AiAgentService {
   }
 
   async updateConfig(changes) {
-    const previous = this.state.config;
-    const model=String(changes.model ?? previous.model).trim();
-    const reasoningEffort=String(changes.reasoningEffort ?? previous.reasoningEffort);
-    this.state.config = {
-      ...previous,
-      ...changes,
-      baseUrl: String(changes.baseUrl ?? previous.baseUrl).trim().replace(/\/+$/, ''),
-      model,
-      reasoningEffort: REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : defaultConfig().reasoningEffort,
-      recentModels: [...new Set([model,...(previous.recentModels||[])])].filter(Boolean).slice(0,8),
-      apiKey: String(changes.apiKey ?? previous.apiKey).trim(),
-      systemPrompt: String(changes.systemPrompt ?? previous.systemPrompt).trim() || defaultConfig().systemPrompt,
-    };
+    const previous=this.state.config,next={...previous,...changes};
+    if(changes.providers){
+      const providerIds=new Set();
+      for(const [index,provider] of changes.providers.entries()){
+        const providerId=String(provider?.id||`provider-${index+1}`).trim().replace(/[^a-zA-Z0-9._-]/g,'-')||`provider-${index+1}`;
+        if(providerIds.has(providerId))throw new Error('Provider IDs must be unique.');providerIds.add(providerId);
+        const modelIds=new Set();
+        for(const model of provider?.models||[]){const modelId=String(model?.id||'').trim();if(!modelId)continue;if(modelIds.has(modelId))throw new Error(`Model IDs must be unique within ${provider?.name||providerId}.`);modelIds.add(modelId)}
+      }
+      next.providers=this.#normaliseProviders(changes.providers);
+    }
+    if(changes.activeModelKey)next.activeModelKey=String(changes.activeModelKey);
+    next.systemPrompt=String(changes.systemPrompt??previous.systemPrompt).trim()||defaultConfig().systemPrompt;
+    next.disabledToolApps=[...(previous.disabledToolApps||[])];
+    const available=new Set(next.providers.flatMap(provider=>provider.models.map(model=>modelKey(provider.id,model.id))));
+    if(!available.has(next.activeModelKey))next.activeModelKey=available.values().next().value||'';
+    if(!next.activeModelKey)throw new Error('Add at least one model before saving.');
+    this.state.config=next;
     this.agents.forEach(agent => agent.abort());
     this.agents.clear();
     this.activeTurns.clear();this.streamingAssistantMessages.clear();this.sessionRuns.clear();this.settlingSessions.clear();
@@ -184,8 +213,9 @@ export class AiAgentService {
     const prompt = String(text).trim();
     if (!prompt) return;
     if (!this.ready) throw new Error('The AI service is waiting for the Linux system.');
-    if (!this.state.config.apiKey) throw new Error('Add an API key in AI settings first.');
-    if (!this.state.config.baseUrl || !this.state.config.model) throw new Error('The AI provider configuration is incomplete.');
+    const selected=this.#selectedModelConfig();
+    if (!selected.provider.apiKey) throw new Error('Add an API key in AI settings first.');
+    if (!selected.provider.baseUrl || !selected.model.id) throw new Error('The AI provider configuration is incomplete.');
     if(skillName)this.skillRegistry?.load(id,skillName);
     const agent = this.#agent(id), session=this.#session(id);if(skillName)this.#refreshAgentTools(id);
     // A follow-up queued after Pi has performed its final queue poll but before
@@ -226,7 +256,7 @@ export class AiAgentService {
     const prompt = String(text).trim();
     if (!prompt) return;
     if (!this.ready) throw new Error('The AI service is waiting for the Linux system.');
-    if (!this.state.config.apiKey) throw new Error('Add an API key in AI settings first.');
+    if (!this.#selectedModelConfig().provider.apiKey) throw new Error('Add an API key in AI settings first.');
     const agent = this.#agent(id), messages = agent.state.messages, session=this.#session(id);
     const turnIndex=session.turns.findIndex(turn=>turn.id===turnId),turn=session.turns[turnIndex];
     if(this.settlingSessions.has(id))await agent.waitForIdle();
@@ -268,33 +298,21 @@ export class AiAgentService {
 
   #agent(id) {
     if (this.agents.has(id)) return this.agents.get(id);
-    const session = this.#session(id), config = this.state.config;
-    const model = {
-      id: config.model,
-      name: config.model,
-      api: 'openai-completions',
-      provider: PROVIDER_ID,
-      baseUrl: config.baseUrl,
-      reasoning: true,
-      input: ['text'],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 128000,
-      maxTokens: 8192,
-    };
-    const provider = createProvider({
-      id: PROVIDER_ID,
-      name: 'OpenAI compatible',
-      baseUrl: config.baseUrl,
-      auth: { apiKey: { name: 'API key', resolve: async () => ({ auth: { apiKey: this.state.config.apiKey }, source: 'Aeris AI settings' }) } },
-      models: [model],
-      api: openAICompletionsApi(),
-    });
+    const session=this.#session(id),config=this.state.config,selected=this.#selectedModelConfig(config);
     const models = createModels();
-    models.setProvider(provider);
+    for(const definition of config.providers){
+      const providerModels=definition.models.map(item=>this.#piModel(definition,item));
+      models.setProvider(createProvider({
+        id:definition.id,name:definition.name,baseUrl:definition.baseUrl,
+        auth:{apiKey:{name:`${definition.name} API key`,resolve:async()=>{const current=this.state.config.providers.find(item=>item.id===definition.id);return{auth:{apiKey:current?.apiKey||''},source:'Aeris AI settings'}}}},
+        models:providerModels,api:openAICompletionsApi(),
+      }));
+    }
+    const model=this.#piModel(selected.provider,selected.model);
     const agent = new Agent({
-      sessionId: session.id,
-      initialState: { systemPrompt: this.#systemPrompt(config.systemPrompt,id), model, messages: clone(session.messages), thinkingLevel: config.reasoningEffort, tools: this.#activeTools(id) },
-      streamFn: (activeModel, context, options) => models.streamSimple(activeModel, context, { ...options, apiKey: this.state.config.apiKey }),
+      sessionId:session.id,
+      initialState:{systemPrompt:this.#systemPrompt(config.systemPrompt,id),model,messages:clone(session.messages),thinkingLevel:selected.model.reasoningEffort,tools:this.#activeTools(id)},
+      streamFn:(activeModel,context,options)=>models.streamSimple(activeModel,context,options),
       followUpMode: 'one-at-a-time',
       steeringMode: 'one-at-a-time',
       maxRetryDelayMs: 12000,
@@ -337,7 +355,7 @@ export class AiAgentService {
             }
             this.streamingAssistantMessages.delete(id);
           }
-          turn.responses.push(compactAgentMessage(message));turn.updatedAt=now();
+          turn.responses.push(compactAgentMessage(message));if(message.role==='assistant')this.#recordUsage(message);turn.updatedAt=now();
         }
         // Once a tool result exists, Pi no longer needs the full Studio source
         // arguments to execute the call. Compact the live protocol transcript
@@ -400,14 +418,13 @@ export class AiAgentService {
   }
 
   #normalise(saved) {
-    const config = { ...defaultConfig(), ...(saved?.config || {}) };
-    if(!REASONING_EFFORTS.has(config.reasoningEffort))config.reasoningEffort=defaultConfig().reasoningEffort;
+    const source=saved?.config||{},legacyProvider={...defaultProvider(),baseUrl:String(source.baseUrl||defaultProvider().baseUrl),apiKey:String(source.apiKey||''),models:[{...defaultProvider().models[0],id:String(source.model||LEGACY_DEFAULT_MODEL),name:String(source.model||LEGACY_DEFAULT_MODEL),reasoningEffort:REASONING_EFFORTS.has(source.reasoningEffort)?source.reasoningEffort:'medium'}]};
+    const providers=this.#normaliseProviders(Array.isArray(source.providers)?source.providers:[legacyProvider]);
+    const config={...defaultConfig(),...source,providers};
     config.disabledToolApps=Array.isArray(config.disabledToolApps)?[...new Set(config.disabledToolApps.map(String))]:[];
-    config.model=String(config.model||'').trim();
-    const recentModels=(Array.isArray(config.recentModels)?config.recentModels:[])
-      .map(model=>String(model||'').trim())
-      .filter(model=>model&&!(model===LEGACY_DEFAULT_MODEL&&config.model!==LEGACY_DEFAULT_MODEL));
-    config.recentModels=[...new Set([config.model,...recentModels].filter(Boolean))].slice(0,8);
+    const available=new Set(providers.flatMap(provider=>provider.models.map(model=>modelKey(provider.id,model.id))));
+    config.activeModelKey=available.has(source.activeModelKey)?source.activeModelKey:available.values().next().value||'';
+    delete config.baseUrl;delete config.apiKey;delete config.model;delete config.reasoningEffort;delete config.recentModels;
     const sessions = Array.isArray(saved?.sessions) ? saved.sessions.filter(item => item?.id).map(item => ({
       id: String(item.id),
       title: String(item.title || 'New chat'),
@@ -420,8 +437,31 @@ export class AiAgentService {
         user:turn.user,responses:compactAgentMessages(Array.isArray(turn.responses)?turn.responses:[]),messageIndex:Number.isInteger(turn.messageIndex)?turn.messageIndex:null,taskId:turn.taskId?String(turn.taskId):'',error:String(turn.error||''),
       })) : [],
     })) : [];
-    return { version: 3, updatedAt:Number(saved?.updatedAt)||0, config, sessions };
+    const usage={};
+    if(saved?.usage&&typeof saved.usage==='object')for(const [key,value] of Object.entries(saved.usage)){if(!value||typeof value!=='object')continue;const daily={};for(const [date,item] of Object.entries(value.daily||{})){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!item||typeof item!=='object')continue;daily[date]={...Object.fromEntries(Object.keys(emptyUsage()).map(field=>[field,Number(item[field])||0])),requests:Number(item.requests)||0}}const entry={key,providerId:String(value.providerId||'unknown'),modelId:String(value.modelId||'unknown'),input:Number(value.input)||0,output:Number(value.output)||0,cacheRead:Number(value.cacheRead)||0,cacheWrite:Number(value.cacheWrite)||0,totalTokens:Number(value.totalTokens)||0,requests:Number(value.requests)||0,daily};if(!Object.keys(daily).length&&entry.totalTokens){daily[dayKey(saved.updatedAt||now())]={input:entry.input,output:entry.output,cacheRead:entry.cacheRead,cacheWrite:entry.cacheWrite,totalTokens:entry.totalTokens,requests:entry.requests}}usage[key]=entry}
+    else for(const session of sessions)for(const turn of session.turns)for(const message of turn.responses){if(message?.role!=='assistant'||!message.usage)continue;const key=modelKey(message.provider||'unknown',message.model||'unknown'),entry=usage[key]||{key,providerId:message.provider||'unknown',modelId:message.model||'unknown',...emptyUsage(),requests:0,daily:{}};this.#addUsage(entry,message.usage);entry.requests+=1;const date=dayKey(message.timestamp||turn.updatedAt||turn.createdAt),daily=entry.daily[date]||{...emptyUsage(),requests:0};this.#addUsage(daily,message.usage);daily.requests+=1;entry.daily[date]=daily;usage[key]=entry}
+    return { version: 4, updatedAt:Number(saved?.updatedAt)||0, config, usage, sessions };
   }
+
+  #normaliseProviders(providers) {
+    const used=new Set();
+    return (Array.isArray(providers)?providers:[]).map((provider,index)=>{
+      let id=String(provider?.id||`provider-${index+1}`).trim().replace(/[^a-zA-Z0-9._-]/g,'-')||`provider-${index+1}`;while(used.has(id))id=`${id}-${index+1}`;used.add(id);
+      const modelIds=new Set(),models=(Array.isArray(provider?.models)?provider.models:[]).map(item=>{const modelId=String(item?.id||'').trim();if(!modelId||modelIds.has(modelId))return null;modelIds.add(modelId);const effort=String(item.reasoningEffort||'medium');return{id:modelId,name:String(item.name||modelId).trim()||modelId,reasoning:item.reasoning!==false,reasoningEffort:REASONING_EFFORTS.has(effort)?effort:'medium',contextWindow:Math.max(1024,Number(item.contextWindow)||128000),maxTokens:Math.max(256,Number(item.maxTokens)||8192)}}).filter(Boolean);
+      return{id,name:String(provider?.name||id).trim()||id,api:'openai-completions',baseUrl:String(provider?.baseUrl||'').trim().replace(/\/+$/,''),apiKey:String(provider?.apiKey||'').trim(),models};
+    }).filter(provider=>provider.baseUrl&&provider.models.length);
+  }
+
+  #selectedModelConfig(config=this.state.config) {
+    const providers=config.providers||[],fallbackProvider=providers[0],fallbackModel=fallbackProvider?.models?.[0];
+    const separator=String(config.activeModelKey||'').indexOf(MODEL_KEY_SEPARATOR),providerId=separator<0?'':config.activeModelKey.slice(0,separator),modelId=separator<0?'':config.activeModelKey.slice(separator+MODEL_KEY_SEPARATOR.length),provider=providers.find(item=>item.id===providerId)||fallbackProvider,model=provider?.models.find(item=>item.id===modelId)||provider?.models?.[0]||fallbackModel;
+    if(!provider||!model)throw new Error('The AI provider configuration is incomplete.');
+    return{provider,model,key:modelKey(provider.id,model.id)};
+  }
+
+  #piModel(provider,model) { return{id:model.id,name:model.name,api:'openai-completions',provider:provider.id,baseUrl:provider.baseUrl,reasoning:model.reasoning!==false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:model.contextWindow,maxTokens:model.maxTokens}; }
+  #addUsage(target,usage) { for(const key of ['input','output','cacheRead','cacheWrite','totalTokens'])target[key]=(Number(target[key])||0)+(Number(usage?.[key])||0);return target; }
+  #recordUsage(message) { if(!message?.usage)return;const key=modelKey(message.provider||'unknown',message.model||'unknown'),entry=this.state.usage[key]||{key,providerId:message.provider||'unknown',modelId:message.model||'unknown',...emptyUsage(),requests:0,daily:{}};this.#addUsage(entry,message.usage);entry.requests+=1;entry.daily||={};const date=dayKey(),daily=entry.daily[date]||{...emptyUsage(),requests:0};this.#addUsage(daily,message.usage);daily.requests+=1;entry.daily[date]=daily;this.state.usage[key]=entry; }
 
   #emit(event, detail = {}) { this.kernel.bus.emit(event, { ...detail, state: this.snapshot() }); }
 }
