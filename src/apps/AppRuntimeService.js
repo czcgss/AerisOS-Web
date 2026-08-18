@@ -21,6 +21,9 @@ const sdkBootstrap = `
   const applyEnvironment = value => {
     environment = value || {}; document.documentElement.lang = environment.locale || 'en';
     document.documentElement.dataset.theme = environment.theme || 'light';
+    document.documentElement.dataset.themeId = environment.themeId || environment.theme || 'light';
+    document.documentElement.dataset.themeMotion = environment.tokens?.motion?.scale === 0 ? 'none' : 'full';
+    for (const [name, token] of Object.entries(environment.variables || {})) document.documentElement.style.setProperty(name, token);
     document.documentElement.style.setProperty('--accent', environment.accent || '#1788c8');
     environmentListeners.forEach(listener => listener({ ...environment }));
   };
@@ -57,8 +60,8 @@ const sdkBootstrap = `
 })();`;
 
 export class AppRuntimeService {
-  constructor({registry,storage=globalThis.localStorage,bundledPackages=[]}={}){
-    this.registry=registry;this.storage=storage;this.bundledPackages=bundledPackages;this.packages=new Map();this.mounts=new Map();this.environmentListeners=[];
+  constructor({registry,storage=globalThis.localStorage,bundledPackages=[],themeRuntime=null}={}){
+    this.registry=registry;this.storage=storage;this.bundledPackages=bundledPackages;this.themeRuntime=themeRuntime;this.packages=new Map();this.mounts=new Map();this.environmentListeners=[];
   }
 
   async prepare(){
@@ -72,7 +75,7 @@ export class AppRuntimeService {
     for(const {package:appPackage} of this.packages.values())this.#register(appPackage);
   }
 
-  start(){this.environmentListeners.push(this.kernel.bus.on('settings:change',()=>this.#broadcastEnvironment()));}
+  start(){this.environmentListeners.push(this.kernel.bus.on('settings:change',()=>this.#broadcastEnvironment()),this.kernel.bus.on('theme:changed',()=>this.#broadcastEnvironment()));}
   stop(){this.environmentListeners.splice(0).forEach(off=>off());for(const appId of this.mounts.keys())this.#closeMounts(appId);}
   list(){return [...this.packages.values()].map(record=>({manifest:clone(record.package.manifest),source:record.source}));}
   get(appId){const record=this.packages.get(appId);return record?clone(record.package):null;}
@@ -164,7 +167,7 @@ export class AppRuntimeService {
 
   #environment(appPackage,context,viewName,target){
     const settings=context.settings,locale=context.i18n?.locale||settings?.get?.('locale')||'en',packs=localePacks(appPackage);
-    return {appId:appPackage.manifest.id,view:viewName,locale,strings:packs[locale]||packs.en,theme:settings?.get?.('theme')||'light',accent:settings?.get?.('accent')||'#1788c8',target:clone(target||{})};
+    const theme=this.themeRuntime?.snapshot()||context.themeRuntime?.snapshot();return {appId:appPackage.manifest.id,view:viewName,locale,strings:packs[locale]||packs.en,theme:theme?.baseMode||'light',themeId:theme?.id||settings?.get?.('theme')||'light',themeVersion:theme?.version||'',tokens:clone(theme?.tokens||{}),variables:clone(theme?.variables||{}),accent:theme?.tokens?.colors?.accent||settings?.get?.('accent')||'#1788c8',target:clone(target||{})};
   }
 
   #broadcastEnvironment(){for(const [appId,mounts] of this.mounts)for(const mount of mounts){const record=this.packages.get(appId);if(record)mount.port.postMessage({type:'environment',value:this.#environment(record.package,mount.context,mount.viewName,mount.target)})}}
@@ -174,6 +177,6 @@ export class AppRuntimeService {
 
   #document(appPackage,viewName){
     const view=appPackage.manifest.views[viewName],files=appPackage.files;
-    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'"><style>:root{color-scheme:light;--font-ui:Manrope,"SF Pro Display","Segoe UI",sans-serif;--font-mono:"Ubuntu Mono",ui-monospace,SFMono-Regular,Menlo,monospace;--accent:#5f87d7;--surface:#e5edf2;--surface-2:#eef4f7;--text:#31445a;--muted:#77899b;--line:rgba(96,122,138,.13);--light:#fff;--dark:#b4c5d0;--shadow:-7px -7px 18px rgba(255,255,255,.78),8px 8px 22px rgba(118,142,157,.27);--small-shadow:-4px -4px 10px rgba(255,255,255,.68),4px 4px 10px rgba(118,142,157,.22);--inset:inset 3px 3px 7px rgba(118,142,157,.22),inset -3px -3px 7px rgba(255,255,255,.65);font-family:var(--font-ui);background:var(--surface);color:var(--text)}:root[data-theme="dark"]{color-scheme:dark;--surface:#2d4350;--surface-2:#354d5b;--text:#dce7ed;--muted:#91a6b2;--line:rgba(255,255,255,.09);--light:#49616f;--dark:#172a35;--shadow:-6px -6px 16px rgba(75,99,112,.24),7px 8px 20px rgba(9,22,29,.34);--small-shadow:-3px -3px 9px rgba(75,99,112,.2),4px 4px 10px rgba(9,22,29,.3);--inset:inset 3px 3px 7px rgba(7,20,27,.3),inset -3px -3px 7px rgba(78,102,115,.18)}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}body{background:var(--surface);color:var(--text)}button,input,textarea,select{font:inherit;color:inherit}button{border:0;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:inherit}@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style><style>${styleText(files[view.css])}</style></head><body>${files[view.html]}<script>${scriptText(sdkBootstrap)}</script><script>${scriptText(files[view.script])}</script></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'"><style>:root{color-scheme:light;--font-ui:Manrope,"SF Pro Display","Segoe UI",sans-serif;--font-mono:"Ubuntu Mono",ui-monospace,SFMono-Regular,Menlo,monospace;--accent:#5f87d7;--surface:#e5edf2;--surface-2:#eef4f7;--text:#31445a;--muted:#77899b;--line:rgba(96,122,138,.13);--light:#fff;--dark:#b4c5d0;--shadow:-7px -7px 18px rgba(255,255,255,.78),8px 8px 22px rgba(118,142,157,.27);--small-shadow:-4px -4px 10px rgba(255,255,255,.68),4px 4px 10px rgba(118,142,157,.22);--inset:inset 3px 3px 7px rgba(118,142,157,.22),inset -3px -3px 7px rgba(255,255,255,.65);font-family:var(--font-ui);background:var(--surface);color:var(--text)}:root[data-theme="dark"]{color-scheme:dark;--surface:#2d4350;--surface-2:#354d5b;--text:#dce7ed;--muted:#91a6b2;--line:rgba(255,255,255,.09);--light:#49616f;--dark:#172a35;--shadow:-6px -6px 16px rgba(75,99,112,.24),7px 8px 20px rgba(9,22,29,.34);--small-shadow:-3px -3px 9px rgba(75,99,112,.2),4px 4px 10px rgba(9,22,29,.3);--inset:inset 3px 3px 7px rgba(7,20,27,.3),inset -3px -3px 7px rgba(78,102,115,.18)}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}body{background:var(--surface);color:var(--text)}button,input,textarea,select{font:inherit;color:inherit}button{border:0;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:inherit}:root[data-theme-motion="none"] *,:root[data-theme-motion="none"] *:before,:root[data-theme-motion="none"] *:after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style><style>${styleText(files[view.css])}</style></head><body>${files[view.html]}<script>${scriptText(sdkBootstrap)}</script><script>${scriptText(files[view.script])}</script></body></html>`;
   }
 }

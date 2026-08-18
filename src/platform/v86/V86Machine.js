@@ -101,6 +101,10 @@ export class V86Machine {
         }
         this.#startPersistence();
       } catch (error) {
+        if (snapshot) {
+          try { this.emulator?.stop(); } catch {}
+          this.#setStatus('stopped');
+        }
         this.kernel.bus.emit('guest:error', error);
       }
     });
@@ -155,20 +159,34 @@ export class V86Machine {
   }
 
   async #restoreSnapshot(snapshot, timeout = 90000) {
-    let timer,capturedError=null;
-    const capture=event=>{const reason=event?.reason||event?.error;if(this.#isSnapshotRestoreFailure(reason||event?.message))capturedError=reason instanceof Error?reason:new Error(String(reason||event?.message))};
+    let timer,capturedError=null,rejectDeviceFailure;
+    const deviceFailure=new Promise((_,reject)=>{rejectDeviceFailure=reject});
+    const capture=event=>{
+      const reason=event?.reason||event?.error||event?.message;
+      if(!this.#isSnapshotRestoreFailure(reason))return;
+      capturedError=reason instanceof Error?reason:new Error(String(reason));
+      // v86 can report device restore failures through the browser event loop
+      // instead of rejecting restore_state(). Route those failures into the
+      // Aeris recovery UI rather than leaving them as ordinary browser errors.
+      event?.preventDefault?.();
+      rejectDeviceFailure(capturedError);
+    };
     addEventListener('error',capture,true);
     addEventListener('unhandledrejection',capture,true);
     try {
       await Promise.race([
-        this.emulator.restore_state(snapshot),
+        Promise.resolve(this.emulator.restore_state(snapshot)),
+        deviceFailure,
         new Promise((_, reject) => { timer=setTimeout(() => reject(new Error('The saved computer did not finish restoring within 90 seconds. Try again, or reinstall only if the saved state can no longer be recovered.')), timeout); }),
       ]);
       // Some v86 device restore failures are reported on the window event loop
-      // instead of rejecting restore_state(). Observe one turn before allowing
-      // Linux recovery to start so the root error cannot become a later tty
-      // timeout.
-      await new Promise(resolve=>setTimeout(resolve,0));
+      // instead of rejecting restore_state(). Keep a short, bounded settling
+      // window before probing Linux so the device error cannot be replaced by
+      // a later and misleading control-service timeout.
+      await Promise.race([
+        new Promise(resolve=>setTimeout(resolve,450)),
+        deviceFailure,
+      ]);
       if(capturedError)throw capturedError;
     } catch(error) {
       try{this.emulator?.stop()}catch{}
