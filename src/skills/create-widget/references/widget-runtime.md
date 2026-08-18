@@ -43,7 +43,7 @@ Wait for `AerisWidget.ready`, then use only declared capabilities:
 - `AerisWidget.data.get(source)` and `subscribe(source, listener)` support `calendar`, `reminders`, `weather`, `metrics`, and `music`, guarded by their matching `.read` permission.
 - `AerisWidget.music.play(track)`, `pause()`, `toggle()`, `next()`, `previous()`, `seek(seconds)`, `setVolume(value)`, `toggleShuffle()`, `cycleRepeat()`, and `refresh()` require `music.control`.
 - `AerisWidget.apps.open(appId, params)` requires `app.open`.
-- `AerisWidget.environment.current` and `subscribe(listener)` expose locale, strings, theme, accent, size, and visibility.
+- `AerisWidget.environment.current` and `subscribe(listener)` expose locale, strings, the compatibility theme base mode, `themeId`, `themeVersion`, semantic `tokens`, resolved CSS `variables`, accent, size, and visibility.
 - `AerisWidget.lifecycle.subscribe(listener)` receives `pause`, `resume`, and configured interval `refresh` events.
 - `AerisWidget.errors.subscribe(listener)` reports rejected subscriptions and other background SDK failures. Render these failures inside the widget.
 - `AerisWidget.i18n.t(key)` resolves package translations.
@@ -64,7 +64,7 @@ AerisWidget.ready.then(() => {
 - The system owns the outer card, drag handle, placement, size, removal, and gallery presentation. Generate content only.
 - A widget is glanceable, not a miniature full application.
 - Avoid scrolling in small and medium sizes. Keep one primary action and open the full app for complex work.
-- Use the supplied Aeris font, colors, accent, and theme. Do not create an unrelated global surface.
+- Use the supplied Aeris font, semantic colors, radii, material, accent, and active installable theme. Do not create an unrelated global surface.
 - React to size, locale, theme, accent, visibility, and reduced motion.
 - Provide loading, empty, error, and stale-data states.
 - Do not simulate data. Subscribe to an allowed system source or use persistent widget state.

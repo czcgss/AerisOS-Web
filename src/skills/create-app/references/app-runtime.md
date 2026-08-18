@@ -73,7 +73,7 @@ await Aeris.activity.openFullApp();
 
 `getState`, `setState`, `patchState`, and `openFullApp` return Promises. Await operations when completion affects the next step. `Aeris.app.subscribe` receives state changes from every mounted surface.
 
-The environment contains `appId`, `view`, `locale`, `strings`, `theme`, `accent`, and the Activity target.
+The environment contains `appId`, `view`, `locale`, `strings`, the compatibility `theme` base mode, `themeId`, `themeVersion`, the complete semantic `tokens` object, resolved CSS `variables`, `accent`, and the Activity target. Theme packages can change at runtime; always subscribe instead of reading the environment only once.
 
 Use this mutation pattern:
 
@@ -112,7 +112,7 @@ Adapt field names instead of copying `items` blindly. Register handlers only aft
 Aeris styling is the default unless the user explicitly asks for another direction.
 
 - Build a compact desktop hierarchy, not a landing page. Use toolbar, sidebar, content, and status regions only when useful.
-- Use `--surface`, `--surface-2`, `--text`, `--muted`, `--accent`, `--line`, `--light`, `--dark`, `--shadow`, `--small-shadow`, `--inset`, `--font-ui`, and `--font-mono`.
+- Use `--surface`, `--surface-2`, `--text`, `--muted`, `--accent`, `--line`, `--positive`, `--warning`, `--danger`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--window-radius`, `--glass-blur`, `--font-ui`, and `--font-mono`. These values belong to the active installable system theme; never replace them with a separate app-wide palette.
 - Do not invent an unrelated global palette, branded gradient background, or typography system.
 - Use `var(--font-ui)` for UI text and `var(--font-mono)` only for code, paths, counters, or terminal data.
 - Use compact 9–13px control and supporting text. Reserve large type for a clear page title or primary value.
