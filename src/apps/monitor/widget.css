@@ -9,3 +9,18 @@
 .widget-system dl div {
   padding: 6px 0;
 }
+
+.widget-system-orb > strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.widget-system-orb > strong small {
+  margin-left: 1px;
+  font-size: 6px;
+  line-height: 1;
+  transform: translateY(4px);
+}
