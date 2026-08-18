@@ -507,7 +507,7 @@ export default {
     const offQuery = kernel.bus.on('agent:query-user',detail=>{if(detail?.sessionId===activeId&&!settingsOpen)render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offNotifications = kernel.bus.on('notification:changed',refreshNotificationPanel);
     const offContext = kernel.bus.on('agent:context-changed',updateContextUi);
-    const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=false;notificationOpen=false;followConversation=true;render({focusComposer:true});if(detail.autoSend&&composerDraft)send()});
+    const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=Boolean(detail.settings);if(detail.settings)settingsSection='model';notificationOpen=false;followConversation=true;render({focusComposer:!detail.settings});if(detail.autoSend&&composerDraft)send()});
     const offOpenApp = kernel.bus.on('agent:open-app',detail=>{activateApp(detail?.appId,detail?.path,detail);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offAppBeforeUpdate = kernel.bus.on('app-runtime:before-update',({appId})=>{if(activitySurface?.appId===appId)unmountActivitySurface()});
     const offAppUpdated = kernel.bus.on('app-runtime:updated',({appId})=>{if(activityAppIds.includes(appId))render({preserveComposer:true,preserveConversation:true,focusComposer:false})});

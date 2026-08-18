@@ -87,7 +87,7 @@ export default{
     }
     menu.querySelector('[data-terminal-copy]').onclick=copy;
     menu.querySelector('[data-terminal-paste]').onclick=paste;
-    menu.querySelector('[data-terminal-agent]').onclick=()=>{menu.hidden=true;agentEntry.open({source:'terminal-context-menu'})};
+    menu.querySelector('[data-terminal-agent]').onclick=()=>{menu.hidden=true;agentEntry.open({source:'terminal-context-menu',mode:'compact'})};
     root.addEventListener('pointerdown',event=>{if(!event.target.closest('[data-terminal-menu]'))menu.hidden=true});
     const observer=new ResizeObserver(resize);observer.observe(host);
     const offDataReady=kernel.bus.on('guest:ready',()=>{setStatus();sessions.forEach(session=>{session.terminal.reset();const replay=system.terminalReplay(session.port);if(replay)session.terminal.write(replay);system.writeTerminal('\r',session.port)});resize()});
