@@ -26,7 +26,7 @@ export default{
     const baseFor=current=>current===SHARED||current.startsWith(`${SHARED}/`)?SHARED:current===TRASH||current.startsWith(`${TRASH}/`)?TRASH:HOME;
     const folderTitle=()=>path===HOME?t('home'):path===SHARED?t('shared'):path===TRASH?t('trash'):path.split('/').filter(Boolean).at(-1)||'/';
     const reportContext=()=>{const chosen=selectedEntries(),resources=chosen.map(entry=>({kind:entry.type==='directory'?'folder':'file',id:joinPath(path,entry.name),uri:`aeris://files${joinPath(path,entry.name)}`,name:entry.name,path:joinPath(path,entry.name),metadata:{size:entry.size||0,modified:entry.modified||'',fileKind:fileKind(entry).key}})),resource=resources.length===1?resources[0]:{kind:'folder',id:path,uri:`aeris://files${path}`,name:folderTitle(),path,metadata:{selectedCount:resources.length}};agentContext.set({appId:'files',label:folderTitle(),resource,selection:{items:resources}})};
-    const askAeris=()=>{reportContext();const prompt=selectedEntries().length?t('askAerisFilePrompt'):t('askAerisFolderPrompt');closeMenus();agentEntry.open({prompt,source:'files'})};
+    const askAeris=()=>{reportContext();const prompt=selectedEntries().length?t('askAerisFilePrompt'):t('askAerisFolderPrompt');closeMenus();agentEntry.open({prompt,source:'files-context-menu',mode:'compact'})};
     const updateChrome=()=>{
       root.querySelector('[data-title]').textContent=folderTitle();
       root.querySelector('[data-sync]').innerHTML=syncing?`<i></i>${t('syncingFiles')}`:t('filesUpToDate');
