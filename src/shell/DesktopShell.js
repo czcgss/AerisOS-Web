@@ -114,7 +114,37 @@ export class DesktopShell {
   #bootActivity({key,message,kind='console',timestamp=Date.now(),progress=0}={}){const screen=this.root.querySelector('[data-boot-screen]');if(!screen)return;const label=message||this.context.i18n.t(key);if(!label)return;this.lastBootActivity=timestamp;screen.classList.remove('boot-stalled');screen.querySelector('[data-boot-stall]').hidden=true;const rendered=kind==='progress'?`${label} ${Math.round(progress)}%`:label,last=this.bootActivities.at(-1);if(last?.label===rendered){last.timestamp=timestamp}else{this.bootActivities.push({label:rendered,kind,timestamp});this.bootActivities=this.bootActivities.slice(-10)}this.#renderBootActivity();this.#updateBootHeartbeat()}
   #renderBootActivity(){const screen=this.root.querySelector('[data-boot-screen]'),log=screen?.querySelector('[data-boot-log]');if(!log)return;const i18n=this.context.i18n,last=this.bootActivities.at(-1),isComplete=item=>item&&(/\[\s*ok\s*\]\s*$/i.test(item.label)||item.kind==='stage'),lastCompleted=isComplete(last),previous=lastCompleted?last:[...this.bootActivities.slice(0,-1)].reverse().find(isComplete),current=lastCompleted?i18n.t(screen.dataset.mode==='restore'?'waitingForRestoreStep':'waitingForNextStep'):(last?.label||i18n.t('checkingSystem')),completedRow=screen.querySelector('[data-boot-completed]');completedRow.hidden=!previous;if(previous)screen.querySelector('[data-boot-previous]').textContent=previous.label;screen.querySelector('[data-boot-current]').textContent=current;screen.querySelector('.boot-summary .current').classList.toggle('waiting',Boolean(lastCompleted));log.innerHTML=this.bootActivities.map(item=>`<div class="boot-log-row boot-log-${item.kind}"><i></i><span>${this.#escape(item.label)}</span><time data-activity-time="${item.timestamp}"></time></div>`).join('')}
   #updateBootHeartbeat(){const screen=this.root.querySelector('[data-boot-screen]'),heartbeat=screen?.querySelector('[data-boot-heartbeat]');if(!heartbeat||document.body.classList.contains('system-ready'))return;const seconds=Math.max(0,Math.floor((Date.now()-this.lastBootActivity)/1000)),i18n=this.context.i18n;let text=seconds<5?i18n.t('activityNow'):i18n.t(seconds<30?'lastActivitySeconds':seconds<90?'guestBusySeconds':'startupMayBeStalled').replace('{seconds}',seconds);heartbeat.textContent=text;screen.querySelectorAll('[data-activity-time]').forEach(node=>{const age=Math.max(0,Math.floor((Date.now()-Number(node.dataset.activityTime))/1000));node.textContent=age<5?i18n.t('now'):i18n.t('secondsAgo').replace('{seconds}',age)});const stalled=seconds>=90;screen.classList.toggle('boot-stalled',stalled);const stall=screen.querySelector('[data-boot-stall]');if(stalled){const minutes=Math.floor(seconds/60);stall.hidden=false;stall.textContent=seconds>=300?i18n.t('startupStalledMinutes').replace('{minutes}',minutes):i18n.t('startupMayBeStalled').replace('{seconds}',seconds)}else stall.hidden=true}
-  #guestReady(detail){this.#renderDesktop(true);if(this.context.settings.get('setupComplete'))return this.#finishBoot(detail);this.#bootStage({label:'systemReady',progress:100,mode:detail?.restored?'restore':'install'});setTimeout(()=>{document.body.classList.add('system-installed');this.setupAssistant=new SetupAssistant(this.root,this.context,async()=>this.#finishBoot(detail));this.setupAssistant.mount()},450)}
-  #finishBoot({restored}={}){this.#bootStage({label:'systemReady',progress:100,mode:restored?'restore':'install'});clearInterval(this.bootHeartbeatTimer);setTimeout(()=>{const desktop=this.root.querySelector('.desktop');desktop?.removeAttribute('inert');desktop?.removeAttribute('aria-hidden');document.body.classList.add('system-ready');this.toast(this.context.i18n.t('systemReady'))},450)}
+  #guestReady(detail){
+    this.#renderDesktop(true);
+    if(this.context.settings.get('setupComplete'))return this.#finishBoot(detail);
+    if(this.setupAssistant||this.setupAssistantPending)return;
+    this.setupAssistantPending=true;
+    this.#bootStage({label:'systemReady',progress:100,mode:detail?.restored?'restore':'install'});
+    setTimeout(()=>{
+      this.setupAssistantPending=false;
+      if(this.setupAssistant||this.context.settings.get('setupComplete'))return;
+      document.body.classList.add('system-installed');
+      this.setupAssistant=new SetupAssistant(this.root,this.context,async()=>{
+        this.setupAssistant=null;
+        await this.#finishBoot(detail);
+      });
+      this.setupAssistant.mount();
+    },450);
+  }
+  #finishBoot({restored}={}){
+    if(this.bootFinished||this.bootFinishPending)return;
+    this.bootFinishPending=true;
+    this.#bootStage({label:'systemReady',progress:100,mode:restored?'restore':'install'});
+    clearInterval(this.bootHeartbeatTimer);
+    setTimeout(()=>{
+      const desktop=this.root.querySelector('.desktop');
+      desktop?.removeAttribute('inert');
+      desktop?.removeAttribute('aria-hidden');
+      document.body.classList.add('system-ready');
+      this.bootFinishPending=false;
+      this.bootFinished=true;
+      this.toast(this.context.i18n.t('systemReady'));
+    },450);
+  }
   #bootError(error){const screen=this.root.querySelector('[data-boot-screen]');if(!screen)return;const message=error?.message||String(error),technical=error?.technicalDetails||error?.cause?.stack||error?.cause?.message||'',report=[message,technical&&`${this.context.i18n.t('technicalCause')}:\n${technical}`,error?.code&&`Code: ${error.code}`].filter(Boolean).join('\n\n'),i18n=this.context.i18n,isRestore=screen.dataset.mode==='restore'||this.context.machine.bootMode==='restore'||String(error?.code||'').startsWith('SNAPSHOT_');clearInterval(this.bootHeartbeatTimer);screen.dataset.mode=isRestore?'restore':'install';screen.classList.remove('boot-stalled');screen.classList.add('boot-error');screen.querySelector('[data-boot-stall]').hidden=true;screen.querySelector('[data-boot-title]').textContent=i18n.t(isRestore?'recoveryFailed':'installationFailed');screen.querySelector('[data-boot-mode-label]').textContent=i18n.t('attentionRequired');screen.querySelector('[data-boot-stage]').textContent=message;screen.querySelector('[data-boot-progress-label]').textContent=i18n.t(isRestore?'restoreStatus':'installationStatus');const detail=screen.querySelector('[data-boot-detail]');detail.innerHTML=`${this.#escape(i18n.t(isRestore?'recoveryFailedHint':'installationFailedHint'))}${technical?`<span class="boot-error-cause"><strong>${this.#escape(i18n.t('technicalCause'))}</strong><code>${this.#escape(technical)}</code></span>`:''}<span class="boot-recovery-actions"><button data-boot-copy-error>${icon('copy',13)} ${i18n.t('copyError')}</button><button data-boot-retry>${i18n.t('tryAgain')}</button><button class="danger" data-boot-reset>${i18n.t('eraseReinstall')}</button></span>`;detail.querySelector('[data-boot-copy-error]').onclick=async event=>{if(await this.context.clipboard.copyText(report)){event.currentTarget.classList.add('copied');event.currentTarget.innerHTML=`${icon('check',13)} ${i18n.t('copiedToClipboard')}`}};detail.querySelector('[data-boot-retry]').onclick=async()=>{screen.classList.remove('boot-error');this.bootActivities=[];detail.textContent=i18n.t(isRestore?'restoreHint':'firstInstallHint');try{await this.context.machine.stop(false);await this.context.machine.start()}catch(reason){this.#bootError(reason)}};detail.querySelector('[data-boot-reset]').onclick=async()=>{const approved=await this.context.dialog.confirm({title:i18n.t('eraseReinstall'),message:i18n.t('eraseReinstallWarning'),confirmLabel:i18n.t('eraseReinstall'),danger:true});if(!approved)return;await this.context.machine.stop(false);await this.context.machine.clearPersistedState();this.context.settings.set('setupComplete',false);localStorage.removeItem('aeris.window-session');localStorage.removeItem('aeris.setup.draft');location.reload()};this.#bootActivity({message,kind:'error'})}
 }
