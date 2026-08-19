@@ -8,13 +8,18 @@ export class SystemMetricsService {
   }
 
   start() {
-    this.kernel.bus.on('system:ready', () => {
+    this.offReady=this.kernel.bus.on('system:ready', () => {
       this.refresh().catch(() => {});
       this.#schedule();
     });
-    this.kernel.bus.on('machine:status', status => {
+    this.offStatus=this.kernel.bus.on('machine:status', status => {
       if (status !== 'running') {
-        this.state = this.#empty();
+        // Pauses, checkpoints, restarts and restore transitions must not erase
+        // the last trustworthy sample. Keep it visible and mark it stale until
+        // Linux can be sampled again.
+        this.state = this.state.ready
+          ? { ...this.state, stale: true, online: false }
+          : this.#empty();
         this.kernel.bus.emit('metrics:update', this.snapshot());
       }
     });
@@ -24,7 +29,7 @@ export class SystemMetricsService {
     }
   }
 
-  stop() { clearInterval(this.timer);clearTimeout(this.retryTimer); }
+  stop() { clearInterval(this.timer);clearTimeout(this.retryTimer);this.offReady?.();this.offStatus?.(); }
 
   snapshot() { return structuredClone(this.state); }
 
@@ -45,8 +50,9 @@ export class SystemMetricsService {
       const { output } = await this.system.exec(command, 12000);
       const payload = output.split('__AERIS_METRICS__').at(-1)?.trim() || '';
       const [totalKb, availableKb, buffersKb, cachedKb, swapTotalKb, swapFreeKb, uptimeSeconds, loadAverage] = payload.split('|');
-      const total = Number(totalKb) || this.machine.settings.get('memory') * 1024;
-      const available = Math.max(0, Number(availableKb) || 0);
+      const total = Number(totalKb), rawAvailable = Number(availableKb);
+      if (!payload.includes('|') || !Number.isFinite(total) || total <= 0 || !Number.isFinite(rawAvailable) || rawAvailable < 0) throw new Error('Linux returned an incomplete system metrics sample.');
+      const available = Math.min(total, rawAvailable);
       const used = Math.max(0, total - available);
       const swapTotal = Number(swapTotalKb) || 0, swapFree = Number(swapFreeKb) || 0;
       this.state = {
@@ -62,13 +68,18 @@ export class SystemMetricsService {
         uptimeSeconds: Number.parseFloat(uptimeSeconds) || 0,
         loadAverage: Number.parseFloat(loadAverage) || 0,
         updatedAt: Date.now(),
+        stale: false,
+        online: true,
+        error: '',
       };
       this.#saveCache();
       clearTimeout(this.retryTimer);
       this.kernel.bus.emit('metrics:update', this.snapshot());
       return this.snapshot();
     })().catch(error => {
+      if (this.state.ready) this.state = { ...this.state, stale: true, online: Boolean(this.system.ready), error: error.message };
       this.kernel.bus.emit('metrics:error', { error: error.message });
+      this.kernel.bus.emit('metrics:update', this.snapshot());
       clearTimeout(this.retryTimer);this.retryTimer=setTimeout(()=>this.refresh().catch(()=>{}),2500);
       return this.snapshot();
     }).finally(() => { this.inflight = null; });
@@ -82,9 +93,9 @@ export class SystemMetricsService {
 
   #empty() {
     const totalKb = (this.machine?.settings.get('memory') || 256) * 1024;
-    return { ready: false, totalKb, usedKb: 0, availableKb: totalKb, buffersKb: 0, cachedKb: 0, swapTotalKb: 0, swapUsedKb: 0, percent: 0, uptimeSeconds: 0, loadAverage: 0, updatedAt: 0 };
+    return { ready: false, totalKb, usedKb: 0, availableKb: totalKb, buffersKb: 0, cachedKb: 0, swapTotalKb: 0, swapUsedKb: 0, percent: 0, uptimeSeconds: 0, loadAverage: 0, updatedAt: 0, stale: false, online: false, error: '' };
   }
 
-  #loadCache(){try{const value=JSON.parse(localStorage.getItem('aeris.metrics.last-sample')||'null');return value?.ready&&value.totalKb?value:null}catch{return null}}
+  #loadCache(){try{const value=JSON.parse(localStorage.getItem('aeris.metrics.last-sample')||'null');return value?.ready&&value.totalKb?{...value,stale:true,online:false,error:''}:null}catch{return null}}
   #saveCache(){try{localStorage.setItem('aeris.metrics.last-sample',JSON.stringify(this.state))}catch{}}
 }

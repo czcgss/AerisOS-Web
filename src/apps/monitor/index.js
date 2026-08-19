@@ -11,7 +11,7 @@ const duration = seconds => {
 export default {
   id: 'monitor', title: 'monitor', icon: 'memory', color: 'aqua', width: 940, height: 640, singleInstance: true,
   mount(root, { machine, system, metrics, i18n, kernel }) {
-    let query = '', rows = [], processLoading = false;
+    let query = '', rows = [], processLoading = false, processError = '';
     const processState = status => {
       const code = String(status || '').charAt(0).toUpperCase();
       return { R: i18n.t('processRunning'), S: i18n.t('processSleeping'), D: i18n.t('processWaiting'), T: i18n.t('processStopped'), Z: i18n.t('processZombie'), W: i18n.t('processWaiting') }[code] || i18n.t('processUnknown');
@@ -31,14 +31,15 @@ export default {
           <div><span>${icon('vm',18)}</span><small>${i18n.t('architecture')}</small><strong>i686</strong></div>
         </article>
       </section>
-      <section class="monitor-process-section"><header><div><strong>${i18n.t('processes')}</strong><small>${i18n.t('processesCopy')}</small></div><span data-process-count>0</span></header><div class="process-table"><header><span>${i18n.t('processName')}</span><span>${i18n.t('pid')}</span><span>${i18n.t('processState')}</span></header><main data-process-list></main></div></section>
+      <section class="monitor-process-section"><header><div><strong>${i18n.t('processes')}</strong><small data-process-status>${i18n.t('processesCopy')}</small></div><span data-process-count>0</span></header><div class="process-table"><header><span>${i18n.t('processName')}</span><span>${i18n.t('pid')}</span><span>${i18n.t('processState')}</span></header><main data-process-list></main></div></section>
       <footer class="app-statusbar"><span data-monitor-status>${i18n.t('memoryRefreshInterval')}</span><span>${i18n.t('processRefreshInterval')}</span></footer>
     </div>`;
 
     const drawProcesses = () => {
       const shown = rows.filter(row => `${row.name} ${row.pid}`.toLowerCase().includes(query.toLowerCase())), list = root.querySelector('[data-process-list]');
       root.querySelector('[data-process-count]').textContent = i18n.t('processCount').replace('{count}', shown.length);
-      list.innerHTML = shown.length ? shown.map(process => `<div><strong>${esc(process.name)}</strong><span>${process.pid}</span><span class="process-state"><i class="state-${String(process.status).charAt(0).toLowerCase()}"></i><b>${processState(process.status)}</b><small>${esc(process.status)}</small></span></div>`).join('') : `<div class="empty-state">${i18n.t(query ? 'noSearchResults' : 'noMachine')}</div>`;
+      root.querySelector('[data-process-status]').textContent = processError ? i18n.t(rows.length ? 'showingLastProcessSample' : 'processesUnavailable') : i18n.t('processesCopy');
+      list.innerHTML = shown.length ? shown.map(process => `<div><strong>${esc(process.name)}</strong><span>${process.pid}</span><span class="process-state"><i class="state-${String(process.status).charAt(0).toLowerCase()}"></i><b>${processState(process.status)}</b><small>${esc(process.status)}</small></span></div>`).join('') : `<div class="empty-state">${i18n.t(query ? 'noSearchResults' : processError ? 'processesUnavailable' : 'noMachine')}</div>`;
     };
     const drawMetrics = sample => {
       const percent = Math.max(0, Math.min(100, sample.percent || 0));
@@ -49,15 +50,15 @@ export default {
       root.querySelector('[data-memory-total]').textContent = mb(sample.totalKb);
       root.querySelector('[data-uptime]').textContent = sample.ready ? duration(sample.uptimeSeconds) : '—';
       root.querySelector('[data-system-load]').textContent = sample.ready ? sample.loadAverage.toFixed(2) : '—';
-      root.querySelector('[data-memory-updated]').textContent = sample.updatedAt ? `${i18n.t('updated')} ${new Intl.DateTimeFormat(i18n.t('dateFormat'), { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(sample.updatedAt)}` : i18n.t('waitingForMemorySample');
+      root.querySelector('[data-memory-updated]').textContent = sample.updatedAt ? `${sample.stale?i18n.t('showingLastMemorySample'):i18n.t('updated')} ${new Intl.DateTimeFormat(i18n.t('dateFormat'), { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(sample.updatedAt)}` : i18n.t('waitingForMemorySample');
     };
     const updateFastStats = () => { root.querySelector('[data-instructions]').textContent = machine.instructionCount().toLocaleString(); };
     const updateProcesses = async () => {
       if (processLoading) return;
-      if (!system.ready) { rows = []; drawProcesses(); return; }
+      if (!system.ready) { processError = 'offline';drawProcesses();return; }
       processLoading = true;
-      try { rows = await system.processes(); drawProcesses(); }
-      catch { root.querySelector('[data-process-list]').innerHTML = `<div class="empty-state">${i18n.t('processesUnavailable')}</div>`; }
+      try { rows = await system.processes();processError='';drawProcesses(); }
+      catch(error) { processError=error.message||'unavailable';drawProcesses(); }
       finally { processLoading = false; }
     };
     root.querySelector('[data-process-search]').oninput = event => { query = event.target.value; drawProcesses(); };
