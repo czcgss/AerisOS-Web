@@ -6,7 +6,7 @@ const textOf=message=>typeof message?.content==='string'?message.content:(messag
 const blocksOf=message=>typeof message?.content==='string'?[{type:'text',text:message.content}]:(Array.isArray(message?.content)?message.content:[]);
 
 export class CompactAgentPanel {
-  constructor(host,context){this.host=host;this.context=context;this.activeId=null;this.opened=false;this.menu='';this.draft='';this.error='';this.frame=0;this.follow=true;this.editingId=null;this.editDraft='';this.expandedTools=new Set()}
+  constructor(host,context){this.host=host;this.context=context;this.activeId=null;this.opened=false;this.menu='';this.draft='';this.error='';this.frame=0;this.follow=true;this.editingId=null;this.editDraft='';this.expandedTools=new Set();this.skillCommandQuery=null;this.skillCommandIndex=0;this.selectedSkillName=''}
 
   mount(){
     this.node=document.createElement('section');this.node.className='compact-agent-panel';this.node.hidden=true;this.host.appendChild(this.node);
@@ -21,24 +21,46 @@ export class CompactAgentPanel {
       bus.on('agent:query-user',detail=>{if(this.opened&&detail?.sessionId===this.activeId)this.#schedule()}),
       bus.on('notification:changed',()=>this.opened&&this.render()),
       bus.on('agent:context-changed',()=>this.opened&&this.render()),
+      bus.on('skill:changed',()=>{if(!this.opened)return;if(this.selectedSkillName&&!this.#selectedSkill())this.selectedSkillName='';this.render()}),
       bus.on('settings:change',({key})=>{if(this.opened&&key==='locale')this.render()}),
     ];
+    this.onDocumentPointerDown=event=>{
+      if(!this.opened)return;
+      const target=event.target;
+      if(this.menu&&!target.closest('.compact-agent-popover,[data-compact-menu],[data-compact-context]'))this.#closeMenu();
+      if(this.skillCommandQuery!==null&&!target.closest('[data-compact-composer],[data-compact-skill-command]'))this.#closeSkillCommand();
+    };
+    document.addEventListener('pointerdown',this.onDocumentPointerDown,true);
   }
 
   open(detail={}){
     const sessions=this.context.aiAgent.snapshot().sessions;
-    if(!this.activeId||!sessions.some(item=>item.id===this.activeId))this.activeId=sessions[0]?.id||this.context.aiAgent.createSession();
+    const requested=String(detail.sessionId||'');
+    if(requested&&sessions.some(item=>item.id===requested))this.activeId=requested;
+    else if(!this.activeId||!sessions.some(item=>item.id===this.activeId))this.activeId=sessions[0]?.id||this.context.aiAgent.createSession();
     const current=this.#session();
-    if(detail.prompt&&current?.turns?.length)this.activeId=this.context.aiAgent.createSession();
-    this.draft=String(detail.prompt||'');this.error='';this.menu='';this.editingId=null;this.editDraft='';this.opened=true;this.node.hidden=false;this.render({focus:true});
+    if(!requested&&detail.prompt&&current?.turns?.length)this.activeId=this.context.aiAgent.createSession();
+    this.draft=String(detail.prompt||'');this.selectedSkillName=this.#enabledSkills().some(skill=>skill.name===detail.skillName)?detail.skillName:'';this.skillCommandQuery=null;this.skillCommandIndex=0;this.error='';this.menu='';this.editingId=null;this.editDraft='';this.opened=true;this.node.hidden=false;this.render({focus:true});
     if(detail.autoSend&&this.draft)this.#send();
   }
 
-  close(){this.opened=false;this.menu='';this.node.hidden=true}
+  close(){this.opened=false;this.menu='';this.skillCommandQuery=null;this.node.hidden=true}
   #session(){try{return this.activeId?this.context.aiAgent.sessionState(this.activeId):null}catch{return null}}
   #schedule(){if(this.frame)return;this.frame=requestAnimationFrame(()=>{this.frame=0;this.render()})}
   #configured(){try{return Boolean(this.context.aiAgent.config().apiKey)}catch{return false}}
   #modelOptions(){try{return this.context.aiAgent.modelOptions()}catch{return[]}}
+  #enabledSkills(){try{return this.context.skillRegistry.list().filter(skill=>skill.enabled)}catch{return[]}}
+  #matchingSkills(){return this.#enabledSkills().filter(skill=>!this.skillCommandQuery||skill.name.includes(this.skillCommandQuery.toLowerCase()))}
+  #selectedSkill(){return this.#enabledSkills().find(skill=>skill.name===this.selectedSkillName)||null}
+  #selectedSkillMarkup(){const skill=this.#selectedSkill();return skill?`<button class="compact-agent-selected-skill" data-compact-remove-skill title="${this.context.i18n.t('removeSkill')}"><strong>/${esc(skill.name)}</strong>${icon('close',8)}</button>`:''}
+  #skillCommandMarkup(){if(this.skillCommandQuery===null)return'';const skills=this.#matchingSkills();return`<section class="compact-agent-skill-command" data-compact-skill-command>${skills.length?skills.map((skill,index)=>`<button data-compact-select-skill="${esc(skill.name)}" class="${index===this.skillCommandIndex?'selected':''}"><strong>/${esc(skill.name)}</strong><small>${esc(skill.description)}</small></button>`).join(''):`<p>${this.context.i18n.t('noMatchingSkills')}</p>`}</section>`}
+  #syncSkillCommand(composer=this.node.querySelector('[data-compact-composer]')){if(!composer)return;const match=composer.value.match(/^\/([a-z0-9-]*)$/i);this.skillCommandQuery=match?match[1]:null;this.skillCommandIndex=0;this.#renderSkillCommand()}
+  #renderSkillCommand(){const host=this.node.querySelector('[data-compact-skill-command-host]');if(!host)return;host.innerHTML=this.#skillCommandMarkup();this.#bindSkillChoices()}
+  #closeSkillCommand(){if(this.skillCommandQuery===null)return;this.skillCommandQuery=null;this.skillCommandIndex=0;this.#renderSkillCommand()}
+  #closeMenu(){if(!this.menu)return;this.menu='';this.node.querySelector('.compact-agent-popover')?.remove();this.node.querySelectorAll('[data-compact-menu],[data-compact-context]').forEach(button=>button.classList.remove('selected'))}
+  #bindSkillChoices(){this.node.querySelectorAll('[data-compact-select-skill]').forEach(button=>button.onpointerdown=event=>{event.preventDefault();this.#chooseSkill(button.dataset.compactSelectSkill)})}
+  #chooseSkill(name){const skill=this.#enabledSkills().find(item=>item.name===name);if(!skill)return;this.selectedSkillName=skill.name;this.draft=this.draft.replace(/^\/[a-z0-9-]*\s*/i,'');const composer=this.node.querySelector('[data-compact-composer]');if(composer)composer.value=this.draft;this.#closeSkillCommand();this.render({focus:true})}
+  #switchToFull(){const detail={mode:'full',source:'view-switch',sessionId:this.activeId,prompt:this.node.querySelector('[data-compact-composer]')?.value??this.draft,skillName:this.selectedSkillName};this.close();this.context.agentEntry.open(detail)}
   #messageText(message){return textOf(message)}
 
   #toolMarkup(block,result,turn){
@@ -77,19 +99,20 @@ export class CompactAgentPanel {
   render({focus=false}={}){
     if(!this.opened)return;const {aiAgent,i18n,notifications,agentContext}=this.context,session=this.#session(),state=aiAgent.snapshot(),busy=Boolean(session?.busy),draft=this.node.querySelector('[data-compact-composer]')?.value??this.draft;this.draft=draft;
     const models=this.#modelOptions(),config=this.#configured()?aiAgent.config():null,context=agentContext.snapshot(),contextApp=context?.appId?this.context.registry.get(context.appId):null,contextIcon=contextApp?.icon||(context?.resource?.kind==='desktop'?'desktop':'focus'),contextColor=contextApp?.color||'blue',unread=notifications.snapshot().unread;
-    this.node.innerHTML=`<header class="compact-agent-header"><div><span>${icon('aerisAi',17)}</span><strong>${esc(session?.title||i18n.t('newChat'))}</strong></div><nav><button data-compact-menu="history" class="${this.menu==='history'?'selected':''}" title="${i18n.t('conversations')}">${icon('history',14)}</button><button data-compact-new title="${i18n.t('newChat')}">${icon('plus',14)}</button><button data-compact-menu="notifications" class="${this.menu==='notifications'?'selected':''}" title="${i18n.t('notifications')}">${icon('bell',14)}${unread?'<i></i>':''}</button><button data-compact-close title="${i18n.t('close')}">${icon('close',14)}</button></nav>${this.menu==='history'?this.#historyMenu():this.menu==='notifications'?this.#notificationMenu():''}</header><main data-compact-conversation>${this.#conversation(session)}</main><footer class="compact-agent-footer">${this.error?`<p class="compact-agent-error">${esc(this.error)}</p>`:''}${this.#query()}${this.#approval(session)}<div class="compact-agent-composer"><textarea data-compact-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready||!this.#configured()||busy||this.editingId?'disabled':''}>${esc(draft)}</textarea><div><button data-compact-context class="${this.menu==='context'?'selected':''}"><span class="app-icon app-icon-${contextColor}">${icon(contextIcon,11)}</span><span>${esc(context?.label||context?.resource?.name||i18n.t('chooseContext'))}</span>${icon('chevron',8)}</button><label>${icon('sparkles',10)}<select data-compact-model ${busy?'disabled':''}>${models.map(model=>`<option value="${esc(model.key)}" ${model.key===config?.activeModelKey?'selected':''}>${esc(model.label)}</option>`).join('')}</select><em>${config?i18n.t(`reasoning_${config.reasoningEffort||'medium'}`):''}</em></label><span></span><button class="compact-agent-send" data-compact-send ${!state.ready||!this.#configured()||this.editingId?'disabled':''}>${icon(busy?'stopSquare':'arrowUp',15)}</button></div>${this.menu==='context'?this.#contextMenu():''}</div><small>${i18n.t('aiMayMakeMistakes')}</small></footer>`;
+    this.node.innerHTML=`<header class="compact-agent-header"><div><span>${icon('aerisAi',17)}</span><strong>${esc(session?.title||i18n.t('newChat'))}</strong></div><nav><button data-compact-full title="${i18n.t('fullAgentView')}">${icon('maximize',14)}</button><button data-compact-menu="history" class="${this.menu==='history'?'selected':''}" title="${i18n.t('conversations')}">${icon('history',14)}</button><button data-compact-new title="${i18n.t('newChat')}">${icon('plus',14)}</button><button data-compact-menu="notifications" class="${this.menu==='notifications'?'selected':''}" title="${i18n.t('notifications')}">${icon('bell',14)}${unread?'<i></i>':''}</button><button data-compact-close title="${i18n.t('close')}">${icon('close',14)}</button></nav>${this.menu==='history'?this.#historyMenu():this.menu==='notifications'?this.#notificationMenu():''}</header><main data-compact-conversation>${this.#conversation(session)}</main><footer class="compact-agent-footer">${this.error?`<p class="compact-agent-error">${esc(this.error)}</p>`:''}${this.#query()}${this.#approval(session)}<div class="compact-agent-composer"><div data-compact-skill-command-host>${this.#skillCommandMarkup()}</div><div class="compact-agent-input-row">${this.#selectedSkillMarkup()}<textarea data-compact-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready||!this.#configured()||busy||this.editingId?'disabled':''}>${esc(draft)}</textarea></div><div class="compact-agent-composer-toolbar"><button data-compact-context class="${this.menu==='context'?'selected':''}"><span class="app-icon app-icon-${contextColor}">${icon(contextIcon,11)}</span><span>${esc(context?.label||context?.resource?.name||i18n.t('chooseContext'))}</span>${icon('chevron',8)}</button><label>${icon('sparkles',10)}<select data-compact-model ${busy?'disabled':''}>${models.map(model=>`<option value="${esc(model.key)}" ${model.key===config?.activeModelKey?'selected':''}>${esc(model.label)}</option>`).join('')}</select><em>${config?i18n.t(`reasoning_${config.reasoningEffort||'medium'}`):''}</em></label><span></span><button class="compact-agent-send" data-compact-send ${!state.ready||!this.#configured()||this.editingId?'disabled':''}>${icon(busy?'stopSquare':'arrowUp',15)}</button></div>${this.menu==='context'?this.#contextMenu():''}</div><small>${i18n.t('aiMayMakeMistakes')}</small></footer>`;
     this.#bind();const conversation=this.node.querySelector('[data-compact-conversation]');if(conversation&&this.follow)requestAnimationFrame(()=>{conversation.scrollTop=conversation.scrollHeight});if(focus&&!busy)requestAnimationFrame(()=>this.node.querySelector('[data-compact-composer]')?.focus())
   }
 
   #bind(){
     const {aiAgent,notifications,agentContext,shell,tools,queryUser,i18n,clipboard}=this.context;
     this.node.querySelector('[data-compact-close]')?.addEventListener('click',()=>this.close());
-    this.node.querySelectorAll('[data-compact-menu]').forEach(button=>button.onclick=()=>{this.menu=this.menu===button.dataset.compactMenu?'':button.dataset.compactMenu;this.render()});
+    this.node.querySelector('[data-compact-full]')?.addEventListener('click',()=>this.#switchToFull());
+    this.node.querySelectorAll('[data-compact-menu]').forEach(button=>button.onclick=()=>{this.#closeSkillCommand();this.menu=this.menu===button.dataset.compactMenu?'':button.dataset.compactMenu;this.render()});
     this.node.querySelector('[data-compact-new]')?.addEventListener('click',()=>{this.activeId=aiAgent.createSession();this.draft='';this.menu='';this.error='';this.editingId=null;this.editDraft='';this.render({focus:true})});
     this.node.querySelectorAll('[data-compact-session]').forEach(button=>button.onclick=()=>{this.activeId=button.dataset.compactSession;this.menu='';this.error='';this.editingId=null;this.editDraft='';this.render({focus:true})});
     this.node.querySelector('[data-compact-clear-notifications]')?.addEventListener('click',()=>notifications.clear());
     this.node.querySelectorAll('[data-compact-notification]').forEach(button=>button.onclick=()=>{const item=notifications.snapshot().items.find(entry=>entry.id===button.dataset.compactNotification);if(!item)return;notifications.markRead(item.id);if(item.context)agentContext.set(item.context);this.draft=i18n.t('prepareWithAerisPrompt').replace('{title}',item.title);this.menu='';this.render({focus:true})});
-    this.node.querySelector('[data-compact-context]')?.addEventListener('click',()=>{this.menu=this.menu==='context'?'':'context';this.render()});
+    this.node.querySelector('[data-compact-context]')?.addEventListener('click',()=>{this.#closeSkillCommand();this.menu=this.menu==='context'?'':'context';this.render()});
     this.node.querySelector('[data-compact-context-desktop]')?.addEventListener('click',()=>{agentContext.focusDesktop();this.menu='';this.render({focus:true})});
     this.node.querySelectorAll('[data-compact-context-window]').forEach(button=>button.onclick=()=>{const target=shell.windowManager.contextWindows().find(item=>item.id===button.dataset.compactContextWindow);if(target)agentContext.focusWindow(target);this.menu='';this.render({focus:true})});
     this.node.querySelectorAll('[data-compact-model]').forEach(select=>select.addEventListener('change',event=>aiAgent.updateConfig({activeModelKey:event.target.value}).catch(error=>{this.error=error.message;this.render()})));
@@ -99,8 +122,9 @@ export class CompactAgentPanel {
     this.node.querySelector('[data-compact-cancel-edit]')?.addEventListener('click',()=>{this.editingId=null;this.editDraft='';this.render({focus:true})});
     const editor=this.node.querySelector('[data-compact-inline-edit]');if(editor){editor.oninput=()=>{this.editDraft=editor.value;editor.style.height='auto';editor.style.height=`${editor.scrollHeight}px`};editor.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();this.editingId=null;this.editDraft='';this.render({focus:true})}else if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();this.#submitEdit()}}}
     this.node.querySelector('[data-compact-submit-edit]')?.addEventListener('click',()=>this.#submitEdit());
-    this.node.querySelector('[data-compact-composer]')?.addEventListener('input',event=>{this.draft=event.target.value;event.target.style.height='auto';event.target.style.height=`${Math.min(112,event.target.scrollHeight)}px`});
-    this.node.querySelector('[data-compact-composer]')?.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.#send()}});
+    this.#bindSkillChoices();
+    this.node.querySelector('[data-compact-remove-skill]')?.addEventListener('click',()=>{this.selectedSkillName='';this.render({focus:true})});
+    const composer=this.node.querySelector('[data-compact-composer]');if(composer){composer.addEventListener('input',event=>{this.draft=event.target.value;this.#syncSkillCommand(event.target);event.target.style.height='auto';event.target.style.height=`${Math.min(112,event.target.scrollHeight)}px`});composer.addEventListener('focus',()=>this.#syncSkillCommand(composer));composer.addEventListener('keydown',event=>{const skills=this.#matchingSkills();if(this.skillCommandQuery!==null&&event.key==='Escape'){event.preventDefault();this.#closeSkillCommand();return}if(this.skillCommandQuery!==null&&skills.length&&['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();this.skillCommandIndex=(this.skillCommandIndex+(event.key==='ArrowDown'?1:-1)+skills.length)%skills.length;this.#renderSkillCommand();this.node.querySelector('[data-compact-skill-command] .selected')?.scrollIntoView({block:'nearest'});return}if(this.skillCommandQuery!==null&&event.key==='Enter'&&!event.shiftKey){const selected=skills[this.skillCommandIndex]||skills[0];if(selected){event.preventDefault();this.#chooseSkill(selected.name);return}}if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.#send()}})}
     this.node.querySelector('[data-compact-send]')?.addEventListener('click',()=>this.#session()?.busy?aiAgent.abort(this.activeId):this.#send());
     this.node.querySelector('[data-compact-deny]')?.addEventListener('click',event=>tools.resolveApproval(event.currentTarget.dataset.compactDeny,false));
     this.node.querySelector('[data-compact-approve]')?.addEventListener('click',event=>tools.resolveApproval(event.currentTarget.dataset.compactApprove,true));
@@ -109,5 +133,5 @@ export class CompactAgentPanel {
   }
 
   #submitEdit(){const text=this.node.querySelector('[data-compact-inline-edit]')?.value.trim()||this.editDraft.trim(),turnId=this.editingId;if(!text||!turnId)return;this.editingId=null;this.editDraft='';this.error='';this.follow=true;this.context.aiAgent.editAndResend(this.activeId,turnId,text).catch(error=>{this.error=error.message||String(error);this.render()});this.render()}
-  #send(){const composer=this.node.querySelector('[data-compact-composer]'),text=composer?.value.trim()||this.draft.trim();if(!text||this.#session()?.busy)return;if(composer){composer.value='';composer.style.height='auto'}this.draft='';this.error='';this.follow=true;this.context.aiAgent.send(this.activeId,text).catch(error=>{this.error=error.message||String(error);this.render()});this.render()}
+  #send(){const composer=this.node.querySelector('[data-compact-composer]'),text=composer?.value.trim()||this.draft.trim();if(!text||this.#session()?.busy)return;const skillName=this.selectedSkillName;this.selectedSkillName='';this.skillCommandQuery=null;if(composer){composer.value='';composer.style.height='auto'}this.draft='';this.error='';this.follow=true;this.context.aiAgent.send(this.activeId,text,{skillName}).catch(error=>{this.error=error.message||String(error);this.render()});this.render()}
 }

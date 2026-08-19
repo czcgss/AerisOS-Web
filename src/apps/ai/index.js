@@ -203,7 +203,7 @@ export default {
           <footer><button data-ai-settings>${icon('settings', 16)}<span><strong>${i18n.t('settings')}</strong></span></button></footer>
         </aside>
         <section class="ai-workspace">
-          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button class="ai-workspace-toggle ${workspaceVisible?'selected':''}" data-ai-toggle-workspace aria-pressed="${workspaceVisible}" title="${i18n.t(workspaceVisible?'closeWorkspace':'openWorkspace')}">${icon('panelRight', 17)}</button><button class="ai-applications-button ${activityAppsOpen?'selected':''}" data-ai-applications aria-pressed="${activityAppsOpen}" title="${i18n.t('openApplication')}">${icon('grid', 17)}</button><button class="ai-notification-button ${notificationOpen?'selected':''} ${notificationState.unread?'has-unread':''}" data-ai-notifications title="${i18n.t('notifications')}" aria-label="${notificationState.unread?`${i18n.t('notifications')}, ${notificationState.unread}`:i18n.t('notifications')}">${icon('bell', 17)}<i class="${notificationState.unread?'visible':''}" data-ai-notification-dot></i></button></header>
+          <header class="ai-toolbar"><div><strong>${session ? esc(session.title) : i18n.t('aerisAI')}</strong><small>${configured ? esc(aiAgent.config().model) : i18n.t('notConnected')}</small></div><span class="ai-local-badge">${icon('lock', 12)} ${i18n.t('storedOnThisComputer')}</span><button data-ai-switch-compact title="${i18n.t('compactAgentView')}">${icon('compactView',17)}</button><button class="ai-workspace-toggle ${workspaceVisible?'selected':''}" data-ai-toggle-workspace aria-pressed="${workspaceVisible}" title="${i18n.t(workspaceVisible?'closeWorkspace':'openWorkspace')}">${icon('panelRight', 17)}</button><button class="ai-applications-button ${activityAppsOpen?'selected':''}" data-ai-applications aria-pressed="${activityAppsOpen}" title="${i18n.t('openApplication')}">${icon('grid', 17)}</button><button class="ai-notification-button ${notificationOpen?'selected':''} ${notificationState.unread?'has-unread':''}" data-ai-notifications title="${i18n.t('notifications')}" aria-label="${notificationState.unread?`${i18n.t('notifications')}, ${notificationState.unread}`:i18n.t('notifications')}">${icon('bell', 17)}<i class="${notificationState.unread?'visible':''}" data-ai-notification-dot></i></button></header>
           <main class="ai-conversation" data-ai-conversation data-ai-conversation-signature="${esc(currentConversationSignature)}">
             ${conversationMarkup(state,session,configured)}
           </main>
@@ -430,6 +430,11 @@ export default {
       if (search) search.oninput = event => { query = event.target.value; render({ preserveComposer: true, focusSearch: true }); };
       root.querySelector('[data-ai-toggle-search]')?.addEventListener('click',()=>{searchOpen=!searchOpen;if(!searchOpen)query='';render({preserveComposer:true,focusSearch:searchOpen,focusComposer:false})});
       root.querySelector('[data-ai-notifications]')?.addEventListener('click',toggleNotificationPanel);
+      root.querySelector('[data-ai-switch-compact]')?.addEventListener('click',()=>{
+        const prompt=root.querySelector('[data-ai-composer]')?.value??composerDraft;
+        agentEntry.open({mode:'compact',source:'view-switch',sessionId:activeId,prompt,skillName:selectedSkillName});
+        shell.windowManager.closeApp('ai');
+      });
       bindNotificationControls();
       bindContextControls();
       root.querySelector('[data-ai-deny-approval]')?.addEventListener('click',event=>{event.currentTarget.closest('.ai-inline-approval')?.classList.add('resolving');tools.resolveApproval(event.currentTarget.dataset.aiDenyApproval,false)});
@@ -507,7 +512,7 @@ export default {
     const offQuery = kernel.bus.on('agent:query-user',detail=>{if(detail?.sessionId===activeId&&!settingsOpen)render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offNotifications = kernel.bus.on('notification:changed',refreshNotificationPanel);
     const offContext = kernel.bus.on('agent:context-changed',updateContextUi);
-    const offEntry = kernel.bus.on('ai:entry',detail=>{if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';settingsOpen=Boolean(detail.settings);if(detail.settings)settingsSection='model';notificationOpen=false;followConversation=true;render({focusComposer:!detail.settings});if(detail.autoSend&&composerDraft)send()});
+    const offEntry = kernel.bus.on('ai:entry',detail=>{const sessions=aiAgent.snapshot().sessions,requested=String(detail.sessionId||'');if(requested&&sessions.some(item=>item.id===requested))activeId=requested;else if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';selectedSkillName=enabledSkills().some(skill=>skill.name===detail.skillName)?detail.skillName:'';skillCommandQuery=null;settingsOpen=Boolean(detail.settings);if(detail.settings)settingsSection='model';notificationOpen=false;followConversation=true;render({focusComposer:!detail.settings});if(detail.autoSend&&composerDraft)send()});
     const offOpenApp = kernel.bus.on('agent:open-app',detail=>{activateApp(detail?.appId,detail?.path,detail);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offAppBeforeUpdate = kernel.bus.on('app-runtime:before-update',({appId})=>{if(activitySurface?.appId===appId)unmountActivitySurface()});
     const offAppUpdated = kernel.bus.on('app-runtime:updated',({appId})=>{if(activityAppIds.includes(appId))render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
