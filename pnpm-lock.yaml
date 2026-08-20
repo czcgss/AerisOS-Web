@@ -20,6 +20,9 @@ importers:
       '@xterm/xterm':
         specifier: ^6.0.0
         version: 6.0.0
+      pyodide:
+        specifier: 314.0.5
+        version: 314.0.5
     devDependencies:
       vite:
         specifier: ^7.0.0
@@ -546,6 +549,9 @@ packages:
     resolution: {integrity: sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A==}
     engines: {node: '>=14.0.0'}
 
+  '@types/emscripten@1.41.5':
+    resolution: {integrity: sha512-cMQm7pxu6BxtHyqJ7mQZ2kXWV5SLmugybFdHCBbJ5eHzOo6VhBckEgAT3//rP5FwPHNPeEiq4SmQ5ucBwsOo4Q==}
+
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
@@ -721,6 +727,10 @@ packages:
   protobufjs@7.6.5:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
     engines: {node: '>=12.0.0'}
+
+  pyodide@314.0.5:
+    resolution: {integrity: sha512-Dl5rvbSMQP0hC3Yp61F+lr4o1vwrWZpapmJajt4KTlGWTeso7WLAp6HOIMC+26NeXjCCEF8dXw7FJ0nfQRTyPg==}
+    engines: {node: '>=18.0.0'}
 
   retry@0.13.1:
     resolution: {integrity: sha512-XQBQ3I8W1Cge0Seh+6gjj03LbmRFWuoszgK9ooCpwYIrhhoO80pfq4cUkU5DkknwfOfFteRwlZ56PYOGYyFWdg==}
@@ -1350,6 +1360,8 @@ snapshots:
       '@smithy/util-buffer-from': 2.2.0
       tslib: 2.8.1
 
+  '@types/emscripten@1.41.5': {}
+
   '@types/estree@1.0.9': {}
 
   '@types/node@26.1.2':
@@ -1545,6 +1557,14 @@ snapshots:
       '@protobufjs/utf8': 1.1.2
       '@types/node': 26.1.2
       long: 5.3.2
+
+  pyodide@314.0.5:
+    dependencies:
+      '@types/emscripten': 1.41.5
+      ws: 8.21.2
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   retry@0.13.1: {}
 
