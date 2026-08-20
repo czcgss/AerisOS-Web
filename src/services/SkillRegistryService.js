@@ -39,6 +39,7 @@ export class SkillRegistryService {
   }
 
   setApprovalService(service){this.approvalService=service}
+  registerBundled(skill){if(!skill?.name)throw new Error('Built-in Skill requires a name.');if(this.skills.has(skill.name))throw new Error(`Skill is already registered: ${skill.name}`);this.skills.set(skill.name,{...skill,bundled:true,enabled:true,files:null,pythonScripts:[],legacy:false});return skill}
   list(){return [...this.skills.values()].map(skill=>({name:skill.name,description:skill.description,filePath:skill.filePath,bundled:skill.bundled,enabled:skill.enabled,toolCount:(skill.tools?.length||0)+(this.#hasResources(skill)?1:0)+(skill.pythonScripts?.length?1:0),fileCount:skill.files?Object.keys(skill.files).length:1,python:!!skill.pythonScripts?.length}));}
   toolMetadata(name){
     if(name==='aeris_load_skill')return{kind:'loader',skillName:'',label:'Load Skill'};
@@ -95,6 +96,14 @@ export class SkillRegistryService {
 
   async readText(name,path){
     const skill=this.skills.get(String(name));if(!skill)throw new Error(`Unknown skill: ${name}`);const relative=safePath(path),metadata=skill.files?.[relative];if(!metadata)throw new Error(`Skill resource was not found: ${relative}`);if(!TEXT_FILE.test(relative))throw new Error(`Skill resource is not a text file: ${relative}`);const file=await this.packageStore?.read(skill.name,relative);if(!file)throw new Error(`Skill resource was not found: ${relative}`);return new TextDecoder().decode(file.bytes);
+  }
+
+  async inspectPackage(name,path=''){
+    const skill=this.skills.get(String(name));if(!skill)throw new Error(`Unknown skill: ${name}`);const relative=String(path||'').trim();
+    if(relative){if(relative==='SKILL.md'){if(skill.content)return`---\nname: ${skill.name}\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${skill.content}`;return this.readText(skill.name,'SKILL.md')}if(!skill.files)throw new Error(`Built-in Skill resource inspection is unavailable: ${relative}`);return this.readText(skill.name,relative)}
+    if(skill.bundled||skill.legacy)return{name:skill.name,description:skill.description,instructions:skill.content,files:{},builtIn:skill.bundled};
+    const stored=await this.packageStore.readAll(skill.name),files={};for(const [file,entry] of Object.entries(stored)){if(file==='SKILL.md')continue;files[file]=TEXT_FILE.test(file)?new TextDecoder().decode(entry.bytes):{binary:true,type:entry.type,size:entry.size}}
+    return{name:skill.name,description:skill.description,instructions:skill.content||parseSkill(new TextDecoder().decode(stored['SKILL.md']?.bytes||new Uint8Array())).content,files,builtIn:false};
   }
 
   agentTools(sessionId,onChanged){
