@@ -216,8 +216,8 @@ export class AiAgentService {
     const selected=this.#selectedModelConfig();
     if (!selected.provider.apiKey) throw new Error('Add an API key in AI settings first.');
     if (!selected.provider.baseUrl || !selected.model.id) throw new Error('The AI provider configuration is incomplete.');
-    if(skillName)this.skillRegistry?.load(id,skillName);
-    const agent = this.#agent(id), session=this.#session(id);if(skillName)this.#refreshAgentTools(id);
+    if(skillName)await this.skillRegistry?.load(id,skillName);else await this.skillRegistry?.ensureSession(id);
+    const agent = this.#agent(id), session=this.#session(id);if(this.skillRegistry){agent.state.systemPrompt=this.#systemPrompt(this.state.config.systemPrompt,id);this.#refreshAgentTools(id)}
     // A follow-up queued after Pi has performed its final queue poll but before
     // isStreaming is cleared will never be consumed. Treat each visible user
     // turn as a separate run and wait for the previous run to become truly idle.

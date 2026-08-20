@@ -13,6 +13,8 @@ const alpineProxy={
 };
 
 export default defineConfig({
+  optimizeDeps:{exclude:['pyodide']},
+  worker:{format:'es'},
   server:{proxy:{'/alpine':alpineProxy}},
   preview:{proxy:{'/alpine':alpineProxy}},
 });
