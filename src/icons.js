@@ -49,6 +49,13 @@ const paths = {
   check: '<path d="m5 12 4 4L19 6"/>',
   lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  agentMain: '<circle cx="12" cy="7" r="3.3"/><path d="M5.5 20c.5-4.2 2.7-6.4 6.5-6.4s6 2.2 6.5 6.4"/><path d="m18.2 5 .6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z"/>',
+  agentPlanner: '<circle cx="10" cy="6.5" r="3"/><path d="M4.5 19c.5-4 2.3-6.1 5.5-6.1 1.3 0 2.4.3 3.2 1"/><rect x="14" y="10.5" width="7" height="9.5" rx="1.5"/><path d="M16.5 10.5v-1h2v1M16 14h3M16 17h3"/>',
+  agentProductivity: '<circle cx="9.5" cy="6.5" r="3"/><path d="M4 19c.5-4 2.3-6.1 5.5-6.1 1.4 0 2.5.4 3.4 1.1"/><rect x="14" y="11" width="7" height="8" rx="1.5"/><path d="M16 9.8V12M19 9.8V12M14 14h7M16.5 16.5h.01M19 16.5h.01"/>',
+  agentWorkspace: '<circle cx="10" cy="6.5" r="3"/><path d="M4.5 19c.5-4 2.3-6.1 5.5-6.1 1.4 0 2.6.4 3.5 1.2"/><path d="M13.5 13.5h3l1-1h4v7h-8z"/><path d="M13.5 15h8"/>',
+  agentComputer: '<circle cx="9.5" cy="6.5" r="3"/><path d="M4 19c.5-4 2.3-6.1 5.5-6.1 1.2 0 2.3.3 3.1.9"/><rect x="14" y="11" width="8" height="7" rx="1.3"/><path d="M16.5 21h3M18 18v3M16 13.5l1.5 1.3-1.5 1.3M19 16.1h1"/>',
+  agentCreator: '<circle cx="9.5" cy="7" r="3"/><path d="M4 20c.5-4.2 2.3-6.3 5.5-6.3 1.5 0 2.7.5 3.6 1.4"/><path d="m17.5 9 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7zM20.5 4l.35 1.05L22 5.4l-1.15.4-.35 1.05-.35-1.05L19 5.4l1.15-.35z"/>',
+  agentGeneral: '<circle cx="12" cy="7" r="3.4"/><path d="M5 20c.6-4.4 3-6.6 7-6.6s6.4 2.2 7 6.6"/><path d="M8.7 16.5 12 19l3.3-2.5"/>',
   moon: '<path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 9 9 0 1 0 20.5 14.2Z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   cloud: '<path d="M6.5 19h11a4.5 4.5 0 0 0 .6-9A7 7 0 0 0 5 8.2 5.5 5.5 0 0 0 6.5 19Z"/>',
@@ -80,8 +87,26 @@ const paths = {
   disk: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   preview: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 15s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4Z"/><circle cx="12" cy="15" r="1.5"/>',
   display: '<rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 22h8M12 18v4"/>',
+  paperclip: '<path d="m20.5 11.5-8.9 8.9a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
 };
 
+export const iconNames=Object.freeze(Object.keys(paths));
+
+let themedIcons={mode:'outline',strokeWidth:1.8,linecap:'round',linejoin:'round',glyphs:{}};
+const esc=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const customGlyph=name=>themedIcons.glyphs?.[name]||'';
+const appearance=name=>customGlyph(name)?{fill:themedIcons.mode==='solid'?'currentColor':'none',stroke:themedIcons.mode==='solid'?'none':'currentColor',strokeWidth:themedIcons.strokeWidth,linecap:themedIcons.linecap,linejoin:themedIcons.linejoin}:{fill:'none',stroke:'currentColor',strokeWidth:1.8,linecap:'round',linejoin:'round'};
+const glyph=(name,label='')=>`${label?`<title>${esc(label)}</title>`:''}${customGlyph(name)?`<path d="${esc(customGlyph(name))}"/>`:paths[name]||paths.grid}`;
+
+export function setIconTheme(value={}){
+  themedIcons={mode:value?.mode==='solid'?'solid':'outline',strokeWidth:Number(value?.strokeWidth)||1.8,linecap:['round','square','butt'].includes(value?.linecap)?value.linecap:'round',linejoin:['round','bevel','miter'].includes(value?.linejoin)?value.linejoin:'round',glyphs:value?.glyphs&&typeof value.glyphs==='object'?{...value.glyphs}:{}};
+}
+
+export function refreshThemedIcons(root=globalThis.document){
+  root?.querySelectorAll?.('svg[data-icon-name]').forEach(svg=>{const name=svg.dataset.iconName,label=svg.dataset.iconLabel||'',style=appearance(name);svg.setAttribute('fill',style.fill);svg.setAttribute('stroke',style.stroke);svg.setAttribute('stroke-width',String(style.strokeWidth));svg.setAttribute('stroke-linecap',style.linecap);svg.setAttribute('stroke-linejoin',style.linejoin);svg.innerHTML=glyph(name,label)});
+}
+
 export function icon(name, size = 20, label = '') {
-  return `<svg class="icon icon-${name}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="${label ? 'false' : 'true'}">${label ? `<title>${label}</title>` : ''}${paths[name] || paths.grid}</svg>`;
+  const style=appearance(name);
+  return `<svg class="icon icon-${esc(name)}" data-icon-name="${esc(name)}" data-icon-label="${esc(label)}" width="${Number(size)||20}" height="${Number(size)||20}" viewBox="0 0 24 24" fill="${style.fill}" stroke="${style.stroke}" stroke-width="${style.strokeWidth}" stroke-linecap="${style.linecap}" stroke-linejoin="${style.linejoin}" aria-hidden="${label?'false':'true'}">${glyph(name,label)}</svg>`;
 }
