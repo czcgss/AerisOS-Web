@@ -378,20 +378,35 @@ const activityViewMarkup = (apps, activeAppId, i18n) => {
   </section>`;
 };
 
-export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '', view = 'activity', context = null, windows = [], activityApps = [], activityAppId = '' } = {}) {
+const workflowViewMarkup=(workflows,i18n,expandedWorkflowIds)=>{
+  if(!workflows.length)return`<section class="ai-workflow-empty"><span>${icon('list',28)}</span><strong>${esc(i18n.t('noAgentWorkflow'))}</strong><p>${esc(i18n.t('noAgentWorkflowCopy'))}</p></section>`;
+  const workflowTree=workflow=>{
+    const nodes=workflow.nodes||[],children=new Map();for(const node of nodes){const list=children.get(node.parentId)||[];list.push(node);children.set(node.parentId,list)}
+    const renderNode=(node,level=0)=>`<article class="ai-workflow-node status-${esc(node.status)}" style="--agent-depth:${level}">
+      <div class="ai-workflow-rail"><i></i></div><span class="app-icon app-icon-${node.agentId==='main'?'ai':esc(node.color||'blue')}">${icon(node.agentId==='main'?'agentMain':node.icon||'agentGeneral',16)}</span>
+      <div><header><strong>${esc(node.agentName)}</strong><em>${esc(i18n.t(`agentStatus_${node.phase||node.status}`))}</em></header><p>${esc(node.task)}</p>${node.currentTool?`<small>${icon('wrench',10)} ${esc(node.currentTool)}</small>`:''}${node.error?`<small class="error">${esc(node.error)}</small>`:''}<div class="ai-workflow-node-progress"><i style="width:${Math.max(0,Math.min(100,node.progress||0))}%"></i></div></div>
+    </article>${(children.get(node.id)||[]).map(child=>renderNode(child,level+1)).join('')}`;
+    const root=nodes.find(node=>!node.parentId)||nodes[0];
+    return root?renderNode(root):'';
+  };
+  return`<section class="ai-workflow-view ai-workflow-history"><header><div><strong>${esc(i18n.t('workflowHistory'))}</strong><small>${esc(i18n.t('workflowHistoryCount').replace('{count}',workflows.length))}</small></div></header><div class="ai-workflow-records">${workflows.map(workflow=>`<details class="ai-workflow-record" data-ai-workflow-record="${esc(workflow.id)}" ${expandedWorkflowIds.has(workflow.id)?'open':''}><summary><span>${icon('message',13)}</span><div><small>${esc(i18n.t('userRequest'))}</small><strong>${esc(shortText(workflow.task,120))}</strong></div><em class="status-${esc(workflow.status)}">${esc(i18n.t(`agentStatus_${workflow.status}`))} · ${Math.max(0,Math.min(100,workflow.progress||0))}%</em><i>${icon('chevron',10)}</i></summary><div class="ai-workflow-record-body"><div class="ai-workflow-progress"><i style="width:${Math.max(0,Math.min(100,workflow.progress||0))}%"></i></div><div class="ai-workflow-tree">${workflowTree(workflow)}</div></div></details>`).join('')}</div></section>`;
+};
+
+export function workspaceMarkup(activity, activities, tools, i18n, { animate = true, signature: suppliedSignature = '', view = 'activity', viewMenuOpen = false, context = null, windows = [], activityApps = [], activityAppId = '', workflows = [], expandedWorkflowIds = new Set() } = {}) {
   const resizeHandle = `<div class="ai-workspace-resize" data-ai-workspace-resize role="separator" aria-orientation="vertical" aria-label="${esc(i18n.t('resizeWorkspace'))}" tabindex="0"><i></i></div>`;
   const signature=suppliedSignature||workspaceSignature(activity);
   const countCopy=i18n.t('workspaceToolCallCount').replace('{count}',activities.length);
+  const views=[['workflow','list','agentWorkflow'],['activity','maximize','workspaceActivity'],['context','focus','workspaceContextView'],['results','sparkles','workspaceResults']],activeView=views.find(item=>item[0]===view)||views[0];
   return `<aside class="ai-app-workspace ${activity?`ai-app-workspace-${esc(activity.phase)}`:'ai-app-workspace-empty'} ${animate?'':'ai-app-workspace-stable'}" data-ai-app-workspace data-workspace-tool-id="${esc(activity?.id||'')}" data-workspace-signature="${esc(signature||'empty')}">
     ${resizeHandle}
     <header>
       <div><strong>${esc(i18n.t('agentWorkspace'))}</strong><small>${esc(activities.length?countCopy:i18n.t('workspaceReady'))}</small></div>
       <button data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}">${icon('close', 15)}</button>
     </header>
-    <nav class="ai-workspace-view-switch" aria-label="${esc(i18n.t('agentWorkspace'))}"><button class="${view==='activity'?'selected':''}" data-ai-workspace-view="activity" aria-pressed="${view==='activity'}">${icon('maximize',12)} ${esc(i18n.t('workspaceActivity'))}</button><button class="${view==='context'?'selected':''}" data-ai-workspace-view="context" aria-pressed="${view==='context'}">${icon('focus',12)} ${esc(i18n.t('workspaceContextView'))}</button><button class="${view==='results'?'selected':''}" data-ai-workspace-view="results" aria-pressed="${view==='results'}">${icon('sparkles',12)} ${esc(i18n.t('workspaceResults'))}</button></nav>
+    <nav class="ai-workspace-view-picker ${viewMenuOpen?'open':''}" data-ai-workspace-picker aria-label="${esc(i18n.t('agentWorkspace'))}"><button data-ai-workspace-view-menu aria-expanded="${viewMenuOpen}">${icon(activeView[1],13)}<span>${esc(i18n.t(activeView[2]))}</span>${icon('chevron',10)}</button><div class="ai-workspace-view-menu">${views.map(([value,viewIcon,label])=>`<button class="${view===value?'selected':''}" data-ai-workspace-view="${value}" aria-pressed="${view===value}">${icon(viewIcon,12)}<span>${esc(i18n.t(label))}</span>${view===value?icon('check',10):''}</button>`).join('')}</div></nav>
     <main class="ai-workspace-content-layout">
-      ${view==='activity'?activityViewMarkup(activityApps,activityAppId,i18n):view==='context'?contextViewMarkup(context,windows,tools,i18n,activityApps):resultsViewMarkup(activities,tools,i18n)}
+      ${view==='workflow'?workflowViewMarkup(workflows,i18n,expandedWorkflowIds):view==='activity'?activityViewMarkup(activityApps,activityAppId,i18n):view==='context'?contextViewMarkup(context,windows,tools,i18n,activityApps):resultsViewMarkup(activities,tools,i18n)}
     </main>
-    <footer><span>${icon(view==='context'?'lock':view==='results'?'sparkles':'maximize',14)} ${esc(i18n.t(view==='context'?'contextManagedByAeris':view==='results'?'resultsManagedByAeris':'activityManagedByAeris'))}</span></footer>
+    <footer><span>${icon(view==='workflow'?'list':view==='context'?'lock':view==='results'?'sparkles':'maximize',14)} ${esc(i18n.t(view==='workflow'?'workflowManagedByAeris':view==='context'?'contextManagedByAeris':view==='results'?'resultsManagedByAeris':'activityManagedByAeris'))}</span></footer>
   </aside>`;
 }
