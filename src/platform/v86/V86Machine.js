@@ -32,6 +32,7 @@ export class V86Machine {
     this.saving = false;
     this.lastBootLabel = null;
     this.lastConsoleSignature = '';
+    this.restoreOverride = null;
   }
 
   get profile() { return `${IMAGE_VERSION}-${this.settings.get('memory')}mb`; }
@@ -45,7 +46,7 @@ export class V86Machine {
     let loadingProgress=3;
     const loadingPulse=setInterval(()=>this.#bootStage('checkingSystem',Math.min(17,++loadingProgress),'checking'),700);
     let V86,snapshotRecord;
-    const snapshotLoad=this.stateStore.load(this.profile).catch(error=>{throw new MachineRestoreError('The saved virtual computer state could not be read. Your saved state has not been erased.',error,'SNAPSHOT_READ_FAILED')});
+    const snapshotLoad=(this.restoreOverride?Promise.resolve(this.restoreOverride):this.stateStore.load(this.profile)).catch(error=>{throw new MachineRestoreError('The saved virtual computer state could not be read. Your saved state has not been erased.',error,'SNAPSHOT_READ_FAILED')});this.restoreOverride=null;
     try{[V86,snapshotRecord]=await Promise.all([this.#loadRuntime(),snapshotLoad])}
     finally{clearInterval(loadingPulse)}
     this.bootMode = snapshotRecord ? 'restore' : 'install';
@@ -92,6 +93,7 @@ export class V86Machine {
           this.#bootStage('validatingRestoredSystem',97,'restore');
           this.#setStatus('running');
           await this.#emitGuestReady(true);
+          if(snapshotRecord?.fallback)await this.stateStore.promotePrevious(this.profile).catch(error=>this.kernel.bus.emit('machine:checkpoint-error',error));
         } else {
           this.#bootStage('startingInstaller', 58, 'install');
           this.emulator.run();
@@ -101,10 +103,8 @@ export class V86Machine {
         }
         this.#startPersistence();
       } catch (error) {
-        if (snapshot) {
-          try { this.emulator?.stop(); } catch {}
-          this.#setStatus('stopped');
-        }
+        if(snapshot&&await this.#retrySnapshot(snapshotRecord))return;
+        if(snapshot)await this.#disposeFailedRestore();
         this.kernel.bus.emit('guest:error', error);
       }
     });
@@ -199,6 +199,26 @@ export class V86Machine {
   }
 
   #isSnapshotRestoreFailure(reason){return /(?:set_state|restore_state|saved (?:machine|computer)|snapshot|virtual hardware)/i.test(reason?.message||String(reason||''))}
+
+  async #retrySnapshot(record){
+    const attempt=Number(record?.restoreAttempt)||0;
+    let next=null;
+    if(attempt===0)next={...record,restoreAttempt:1};
+    else if(attempt===1&&record?.hasPrevious){const previous=await this.stateStore.loadPrevious(this.profile).catch(()=>null);if(previous)next={...previous,restoreAttempt:2,fallback:true}}
+    if(!next)return false;
+    await this.#disposeFailedRestore();
+    this.restoreOverride=next;
+    queueMicrotask(()=>this.start().catch(error=>{this.#setStatus('stopped');this.kernel.bus.emit('guest:error',error)}));
+    return true;
+  }
+
+  async #disposeFailedRestore(){
+    clearInterval(this._checkpointInterval);clearTimeout(this._checkpointTimer);this.#stopBootActivityMonitor();clearInterval(this._promptTimer);
+    const emulator=this.emulator;this.emulator=null;
+    try{emulator?.stop()}catch{}
+    try{await emulator?.destroy()}catch{}
+    this.serial=null;this.terminals.clear();this.terminalResets.clear();this.guestReady=false;this.controlReady=false;this.#setStatus('stopped');
+  }
 
   #validateSnapshot(record){
     if(!record?.metadata)return;

@@ -2,6 +2,7 @@ import { Agent } from '@earendil-works/pi-agent-core';
 import { createModels, createProvider } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { compactAgentEvent, compactAgentMessage, compactAgentMessages, shouldCompactLiveProtocol } from './AgentMessageCompaction.js';
+import { agentAttachmentInput, attachmentMetadata, compactAttachmentMessages, compactAttachmentsForStorage } from './AgentAttachments.js';
 
 export const AI_STATE_STORAGE_KEY = 'aeris.ai.state.v1';
 
@@ -209,9 +210,10 @@ export class AiAgentService {
     return run;
   }
 
-  async #sendTurn(id, text, {skillName=''}={}) {
+  async #sendTurn(id, text, {skillName='',attachments=[]}={}) {
     const prompt = String(text).trim();
-    if (!prompt) return;
+    const files=Array.isArray(attachments)?attachments:[];
+    if (!prompt&&!files.length) return;
     if (!this.ready) throw new Error('The AI service is waiting for the Linux system.');
     const selected=this.#selectedModelConfig();
     if (!selected.provider.apiKey) throw new Error('Add an API key in AI settings first.');
@@ -229,8 +231,8 @@ export class AiAgentService {
       stale.status='stopped';stale.error='';stale.updatedAt=now();
     }
     this.activeTurns.delete(id);
-    const timestamp=now(),context=this.agentContext?.snapshot()||null,contextBlock=this.agentContext?.promptBlock()||'';
-    const visibleUserMessage={role:'user',content:prompt,timestamp},userMessage={...visibleUserMessage,content:contextBlock?`${prompt}\n\n${contextBlock}`:prompt};
+    const timestamp=now(),context=this.agentContext?.snapshot()||null,contextBlock=this.agentContext?.promptBlock()||'',modelPrompt=contextBlock?`${prompt||'Analyze the attached file or files.'}\n\n${contextBlock}`:prompt,input=agentAttachmentInput(modelPrompt,files);
+    const visibleUserMessage={role:'user',content:prompt,timestamp,attachments:attachmentMetadata(files)},userMessage={role:'user',content:input.content,timestamp};
     const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:'running',user:clone(visibleUserMessage),responses:[],messageIndex:null,error:''};
     session.turns.push(turn);session.updatedAt=userMessage.timestamp;
     this.activeTurns.set(id,turn.id);
@@ -292,7 +294,7 @@ export class AiAgentService {
   #loadState(){try{const saved=this.storage?.getItem(AI_STATE_STORAGE_KEY);return saved?this.#normalise(JSON.parse(saved)):null}catch{return null}}
   #saveState(){
     this.state.updatedAt=now();
-    try{this.storage?.setItem(AI_STATE_STORAGE_KEY,JSON.stringify(this.state));this.error='';return true}
+    try{this.storage?.setItem(AI_STATE_STORAGE_KEY,JSON.stringify(compactAttachmentsForStorage(this.state)));this.error='';return true}
     catch(error){this.error=error.message||String(error);this.#emit('ai:storage-error',{error:this.error});return false}
   }
 
@@ -362,7 +364,7 @@ export class AiAgentService {
         // before the next model turn summarizes the result, not only when the
         // conversation is later persisted.
         if(shouldCompactLiveProtocol(event.message))agent.state.messages=compactAgentMessages(agent.state.messages);
-        session.messages=compactAgentMessages(agent.state.messages);session.updatedAt=now();this.#saveState();
+        session.messages=compactAttachmentMessages(compactAgentMessages(agent.state.messages));session.updatedAt=now();this.#saveState();
       }
       if (event.type === 'agent_end') {
         this.settlingSessions.add(id);
@@ -377,7 +379,7 @@ export class AiAgentService {
         this.activeTurns.delete(id);
         this.streamingAssistantMessages.delete(id);
         agent.state.messages=compactAgentMessages(agent.state.messages);
-        session.messages = clone(agent.state.messages);
+        session.messages = compactAttachmentMessages(agent.state.messages);
         session.updatedAt = now();
         if (session.title === 'New chat') {
           const first = session.messages.find(message => message.role === 'user');
@@ -459,7 +461,7 @@ export class AiAgentService {
     return{provider,model,key:modelKey(provider.id,model.id)};
   }
 
-  #piModel(provider,model) { return{id:model.id,name:model.name,api:'openai-completions',provider:provider.id,baseUrl:provider.baseUrl,reasoning:model.reasoning!==false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:model.contextWindow,maxTokens:model.maxTokens}; }
+  #piModel(provider,model) { return{id:model.id,name:model.name,api:'openai-completions',provider:provider.id,baseUrl:provider.baseUrl,reasoning:model.reasoning!==false,input:['text','image'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:model.contextWindow,maxTokens:model.maxTokens}; }
   #addUsage(target,usage) { for(const key of ['input','output','cacheRead','cacheWrite','totalTokens'])target[key]=(Number(target[key])||0)+(Number(usage?.[key])||0);return target; }
   #recordUsage(message) { if(!message?.usage)return;const key=modelKey(message.provider||'unknown',message.model||'unknown'),entry=this.state.usage[key]||{key,providerId:message.provider||'unknown',modelId:message.model||'unknown',...emptyUsage(),requests:0,daily:{}};this.#addUsage(entry,message.usage);entry.requests+=1;entry.daily||={};const date=dayKey(),daily=entry.daily[date]||{...emptyUsage(),requests:0};this.#addUsage(daily,message.usage);daily.requests+=1;entry.daily[date]=daily;this.state.usage[key]=entry; }
 
