@@ -3,6 +3,7 @@ import { AI_STATE_STORAGE_KEY } from '../../services/AiAgentService.js';
 import { collectToolActivities, contextViewMarkup, workspaceMarkup, workspaceSignature } from './AgentWorkspace.js';
 import { renderMarkdown } from './MarkdownRenderer.js';
 import { compactToolArguments } from '../../services/AgentMessageCompaction.js';
+import { AGENT_ATTACHMENT_ACCEPT, attachmentErrorMessage, readAgentAttachments, validateAgentAttachments } from '../../services/AgentAttachments.js';
 
 const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const messageText = message => typeof message?.content === 'string'
@@ -36,7 +37,7 @@ export default {
   singleInstance: true, dockLeading: true,
   mount(root, { aiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, queryUser, userdata, system, settings, weather, music, metrics, machine, skillRegistry }) {
     const workspacePrefs = readWorkspacePrefs();
-    let activeId = null, query = '', searchOpen = false, settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [], skillCommandQuery = null, skillCommandIndex = 0, selectedSkillName = '';
+    let activeId = null, query = '', searchOpen = false, settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [], skillCommandQuery = null, skillCommandIndex = 0, selectedSkillName = '', composerAttachments=[];
     let workspaceSelectedId = null, activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastObservedToolId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0, followConversation = true, conversationResizeObserver = null;
     let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, workspaceView = workspacePrefs.view;
 
@@ -45,6 +46,9 @@ export default {
     };
 
     const visibleSessions = () => aiAgent.snapshot().sessions.filter(session => session.title.toLowerCase().includes(query.toLowerCase()));
+    const attachmentSize=size=>size<1024?`${size} B`:size<1024*1024?`${Math.ceil(size/1024)} KB`:`${(size/1024/1024).toFixed(1)} MB`;
+    const attachmentVisual=item=>item.kind==='image'&&item.data?`<img src="data:${esc(item.mimeType)};base64,${item.data}" alt="">`:`<span>${icon(item.kind==='image'?'image':'document',13)}</span>`;
+    const attachmentListMarkup=(items,{removable=false}={})=>items?.length?`<div class="ai-attachment-list ${removable?'composer':''}">${items.map(item=>`<div class="ai-attachment" title="${esc(item.name)}">${attachmentVisual(item)}<span><strong>${esc(item.name)}</strong><small>${attachmentSize(item.size||0)}</small></span>${removable?`<button data-ai-remove-attachment="${esc(item.id)}" title="${i18n.t('removeAttachment')}">${icon('close',9)}</button>`:''}</div>`).join('')}</div>`:'';
     const current = () => activeId ? aiAgent.sessionState(activeId) : null;
     const activityApp=()=>activityAppId?tools.registry.get(activityAppId):null;
     const activityContextWindows=()=>activityAppIds.map(id=>{const app=tools.registry.get(id);return app?{id:`activity:${id}`,appId:id,title:i18n.t(app.title),icon:app.icon,color:app.color||'grey',path:i18n.t('activityCompactView'),activity:true}:null}).filter(Boolean);
@@ -155,7 +159,7 @@ export default {
       const actionsAvailable=turn.status!=='running'&&!(index===lastTurnIndex&&session.busy);
       const userActions=actionsAvailable?`<footer class="ai-message-actions"><button data-ai-copy-turn="${esc(turn.id)}" data-ai-copy-role="user" title="${i18n.t('copyMessage')}">${icon('copy',14)}</button>${index===lastTurnIndex&&!session.busy?`<button data-ai-edit-turn="${esc(turn.id)}" title="${i18n.t('editMessage')}">${icon('textedit',14)}</button>`:''}</footer>`:'';
       const assistantActions=actionsAvailable?`<footer class="ai-message-actions"><button data-ai-copy-turn="${esc(turn.id)}" data-ai-copy-role="assistant" title="${i18n.t('copyMessage')}">${icon('copy',14)}</button>${usageMarkup(turn)}</footer>`:'';
-      const userBody=editing?`<div class="ai-inline-editor"><textarea data-ai-inline-edit rows="2">${esc(editDraft)}</textarea><footer><button data-ai-cancel-inline-edit>${i18n.t('cancel')}</button><button class="ai-primary" data-ai-submit-inline-edit>${i18n.t('send')}</button></footer></div>`:`<div class="ai-message-content" data-copyable>${renderText(userText)}</div>${userActions}`;
+      const userBody=editing?`<div class="ai-inline-editor"><textarea data-ai-inline-edit rows="2">${esc(editDraft)}</textarea><footer><button data-ai-cancel-inline-edit>${i18n.t('cancel')}</button><button class="ai-primary" data-ai-submit-inline-edit>${i18n.t('send')}</button></footer></div>`:`${attachmentListMarkup(turn.user?.attachments)}${userText?`<div class="ai-message-content" data-copyable>${renderText(userText)}</div>`:''}${userActions}`;
       return `<section class="ai-turn ${actionsAvailable?'':'ai-turn-running'}" data-ai-turn="${esc(turn.id)}">
         <article class="ai-message ai-message-user"><span class="ai-message-avatar">${icon('user',16)}</span><div class="ai-message-body ${editing?'editing':''}">${userBody}</div></article>
         ${showAnswer?`<article class="ai-message ai-message-assistant" data-ai-turn-answer="${esc(turn.id)}"><span class="ai-message-avatar">${icon('aerisAi',17)}</span><div class="ai-message-body"><header>${i18n.t('aerisAI')}</header><div class="ai-turn-response">${answer}</div>${assistantActions}</div></article>`:''}
@@ -211,7 +215,7 @@ export default {
             ${localError ? errorMarkup(localError,'ai-composer-error') : ''}
             ${clarificationMarkup()}
             ${approvalMarkup()}
-            <div class="ai-composer-shell ${taskActive ? 'streaming' : ''}"><div data-ai-skill-command-host>${skillCommandMarkup()}</div><div class="ai-composer-input">${selectedSkillMarkup()}<textarea data-ai-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready || !configured || editingTurnId !== null || taskActive ? 'disabled' : ''}>${esc(draft)}</textarea></div><div class="ai-composer-toolbar">${contextMarkup()}<label class="ai-composer-model" title="${i18n.t('aiModel')}">${icon('sparkles',12)}<select data-ai-composer-model ${taskActive?'disabled':''}>${aiAgent.modelOptions().map(model=>`<option value="${esc(model.key)}" ${model.key===aiAgent.config().activeModelKey?'selected':''}>${esc(model.label)}</option>`).join('')}<option value="__settings__">${i18n.t('modelSettings')}…</option></select><em>${i18n.t(`reasoning_${aiAgent.config().reasoningEffort||'medium'}`)}</em>${icon('chevron',9)}</label><span></span><button data-ai-send ${!state.ready || !configured || editingTurnId !== null ? 'disabled' : ''} aria-label="${i18n.t(taskActive ? 'stopGenerating' : 'send')}">${icon(taskActive ? 'stopSquare' : 'arrowUp', 17)}</button></div></div>
+            <div class="ai-composer-shell ${taskActive ? 'streaming' : ''}"><div data-ai-skill-command-host>${skillCommandMarkup()}</div>${attachmentListMarkup(composerAttachments,{removable:true})}<div class="ai-composer-input">${selectedSkillMarkup()}<textarea data-ai-composer rows="1" placeholder="${i18n.t('messageAerisAI')}" ${!state.ready || !configured || editingTurnId !== null || taskActive ? 'disabled' : ''}>${esc(draft)}</textarea></div><div class="ai-composer-toolbar"><button class="ai-attach-button" data-ai-attach title="${i18n.t('attachFiles')}" ${taskActive?'disabled':''}>${icon('paperclip',15)}</button><input data-ai-attachment-input type="file" accept="${AGENT_ATTACHMENT_ACCEPT}" multiple hidden><span></span>${contextMarkup()}<label class="ai-composer-model" title="${i18n.t('aiModel')}">${icon('sparkles',12)}<select data-ai-composer-model ${taskActive?'disabled':''}>${aiAgent.modelOptions().map(model=>`<option value="${esc(model.key)}" ${model.key===aiAgent.config().activeModelKey?'selected':''}>${esc(model.label)}</option>`).join('')}<option value="__settings__">${i18n.t('modelSettings')}…</option></select><em>${i18n.t(`reasoning_${aiAgent.config().reasoningEffort||'medium'}`)}</em>${icon('chevron',9)}</label><button data-ai-send ${!state.ready || !configured || editingTurnId !== null ? 'disabled' : ''} aria-label="${i18n.t(taskActive ? 'stopGenerating' : 'send')}">${icon(taskActive ? 'stopSquare' : 'arrowUp', 17)}</button></div></div>
             <small>${i18n.t('aiMayMakeMistakes')}</small>
           </footer>
           ${settingsOpen ? settingsMarkup() : ''}
@@ -330,12 +334,12 @@ export default {
 
     const send = async () => {
       const input = root.querySelector('[data-ai-composer]'), text = input?.value.trim();
-      if (!text) return;
+      if (!text&&!composerAttachments.length) return;
       if(!activeId)activeId=await aiAgent.createSession();
-      const skillName=selectedSkillName;selectedSkillName='';skillCommandQuery=null;
+      const skillName=selectedSkillName,attachments=composerAttachments;selectedSkillName='';skillCommandQuery=null;composerAttachments=[];
       localError = '';liveExecution=null;liveExecutionTurnId=null;
       input.value = '';composerDraft='';followConversation=true;
-      const run=aiAgent.send(activeId, text,{skillName});
+      const run=aiAgent.send(activeId, text,{skillName,attachments});
       render();
       run.catch(error => { localError = friendlyError(error); render(); });
     };
@@ -423,8 +427,8 @@ export default {
     };
 
     const bind = () => {
-      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession();query='';searchOpen=false;selectedSkillName='';skillCommandQuery=null; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); });
-      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession;selectedSkillName='';skillCommandQuery=null; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
+      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession();query='';searchOpen=false;selectedSkillName='';skillCommandQuery=null;composerAttachments=[]; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); });
+      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession;selectedSkillName='';skillCommandQuery=null;composerAttachments=[]; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
       root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
       bindConversationControls();
       const search = root.querySelector('[data-ai-search]');
@@ -433,7 +437,7 @@ export default {
       root.querySelector('[data-ai-notifications]')?.addEventListener('click',toggleNotificationPanel);
       root.querySelector('[data-ai-switch-compact]')?.addEventListener('click',()=>{
         const prompt=root.querySelector('[data-ai-composer]')?.value??composerDraft;
-        agentEntry.open({mode:'compact',source:'view-switch',sessionId:activeId,prompt,skillName:selectedSkillName});
+        agentEntry.open({mode:'compact',source:'view-switch',sessionId:activeId,prompt,skillName:selectedSkillName,attachments:composerAttachments});composerAttachments=[];
         shell.windowManager.closeApp('ai');
       });
       bindNotificationControls();
@@ -468,6 +472,9 @@ export default {
         resizeHandle.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home'].includes(event.key))return;event.preventDefault();applyWidth(event.key==='Home'?DEFAULT_WORKSPACE_WIDTH:workspaceWidth+(event.key==='ArrowLeft'?24:-24));persistWorkspacePrefs()};
       }
       root.querySelector('[data-ai-composer-model]')?.addEventListener('change',async event=>{const key=event.target.value;if(key==='__settings__'){settingsSection='model';settingsOpen=true;notificationOpen=false;render({preserveComposer:true,focusComposer:false});return}if(!key||key===aiAgent.config().activeModelKey)return;try{await aiAgent.updateConfig({activeModelKey:key});localError='';shell.toast(i18n.t('aiSettingsSaved'));render({preserveComposer:true,focusComposer:false})}catch(error){localError=friendlyError(error);render({preserveComposer:true})}});
+      root.querySelector('[data-ai-attach]')?.addEventListener('click',()=>root.querySelector('[data-ai-attachment-input]')?.click());
+      const attachmentInput=root.querySelector('[data-ai-attachment-input]');if(attachmentInput)attachmentInput.onchange=async()=>{try{const added=await readAgentAttachments(attachmentInput.files);composerAttachments=validateAgentAttachments([...composerAttachments,...added]);localError='';render({preserveComposer:true,focusComposer:true})}catch(error){localError=attachmentErrorMessage(error,i18n);render({preserveComposer:true,focusComposer:true})}};
+      root.querySelectorAll('[data-ai-remove-attachment]').forEach(button=>button.onclick=()=>{composerAttachments=composerAttachments.filter(item=>item.id!==button.dataset.aiRemoveAttachment);render({preserveComposer:true,focusComposer:true})});
       const bindSkillChoices=()=>root.querySelectorAll('[data-ai-select-skill]').forEach(button=>button.onpointerdown=event=>{event.preventDefault();chooseComposerSkill(button.dataset.aiSelectSkill)});bindSkillChoices();
       root.querySelector('[data-ai-remove-skill]')?.addEventListener('click',()=>{selectedSkillName='';syncComposerSkill();root.querySelector('[data-ai-composer]')?.focus()});
       const composer = root.querySelector('[data-ai-composer]');
@@ -513,7 +520,7 @@ export default {
     const offQuery = kernel.bus.on('agent:query-user',detail=>{if(detail?.sessionId===activeId&&!settingsOpen)render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offNotifications = kernel.bus.on('notification:changed',refreshNotificationPanel);
     const offContext = kernel.bus.on('agent:context-changed',updateContextUi);
-    const offEntry = kernel.bus.on('ai:entry',detail=>{const sessions=aiAgent.snapshot().sessions,requested=String(detail.sessionId||'');if(requested&&sessions.some(item=>item.id===requested))activeId=requested;else if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';selectedSkillName=enabledSkills().some(skill=>skill.name===detail.skillName)?detail.skillName:'';skillCommandQuery=null;settingsOpen=Boolean(detail.settings);if(detail.settings)settingsSection='model';notificationOpen=false;followConversation=true;render({focusComposer:!detail.settings});if(detail.autoSend&&composerDraft)send()});
+    const offEntry = kernel.bus.on('ai:entry',detail=>{const sessions=aiAgent.snapshot().sessions,requested=String(detail.sessionId||'');if(requested&&sessions.some(item=>item.id===requested))activeId=requested;else if(!activeId||current()?.turns?.length)activeId=aiAgent.createSession();composerDraft=detail.prompt||'';composerAttachments=Array.isArray(detail.attachments)?detail.attachments:[];selectedSkillName=enabledSkills().some(skill=>skill.name===detail.skillName)?detail.skillName:'';skillCommandQuery=null;settingsOpen=Boolean(detail.settings);if(detail.settings)settingsSection='model';notificationOpen=false;followConversation=true;render({focusComposer:!detail.settings});if(detail.autoSend&&(composerDraft||composerAttachments.length))send()});
     const offOpenApp = kernel.bus.on('agent:open-app',detail=>{activateApp(detail?.appId,detail?.path,detail);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offAppBeforeUpdate = kernel.bus.on('app-runtime:before-update',({appId})=>{if(activitySurface?.appId===appId)unmountActivitySurface()});
     const offAppUpdated = kernel.bus.on('app-runtime:updated',({appId})=>{if(activityAppIds.includes(appId))render({preserveComposer:true,preserveConversation:true,focusComposer:false})});

@@ -28,11 +28,18 @@ export class MachineStateStore {
       const request = database.transaction(this.storeName, 'readonly').objectStore(this.storeName).get(profile);
       request.onsuccess = async () => {
         const record=request.result;if(!record)return resolve(null);
-        try{resolve({state:await this.#decode(record.state,record.compressed),metadata:record.metadata||null,updatedAt:record.updatedAt||0,legacy:!record.metadata})}
+        try{resolve({state:await this.#decode(record.state,record.compressed),metadata:record.metadata||null,updatedAt:record.updatedAt||0,legacy:!record.metadata,hasPrevious:Boolean(record.previousState)})}
         catch(error){reject(error)}
       };
       request.onerror = () => reject(request.error);
     });
+  }
+
+  async loadPrevious(profile) {
+    const database=await this.open();
+    const record=await new Promise((resolve,reject)=>{const request=database.transaction(this.storeName,'readonly').objectStore(this.storeName).get(profile);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error)});
+    if(!record?.previousState)return null;
+    return{state:await this.#decode(record.previousState,record.previousCompressed),metadata:record.previousMetadata||null,updatedAt:record.previousUpdatedAt||0,legacy:!record.previousMetadata,hasPrevious:false};
   }
 
   async save(profile, state, metadata = null) {
@@ -61,6 +68,24 @@ export class MachineStateStore {
       const request = database.transaction(this.storeName, 'readwrite').objectStore(this.storeName).delete(profile);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
+    });
+  }
+
+  async promotePrevious(profile) {
+    const database=await this.open();
+    return new Promise((resolve,reject)=>{
+      let promoted=false;const transaction=database.transaction(this.storeName,'readwrite'),store=transaction.objectStore(this.storeName),read=store.get(profile);
+      read.onerror=()=>reject(read.error);
+      read.onsuccess=()=>{
+        const record=read.result;if(!record?.previousState)return;
+        const current={state:record.state,compressed:!!record.compressed,metadata:record.metadata||null,updatedAt:record.updatedAt||0};
+        record.state=record.previousState;record.compressed=!!record.previousCompressed;record.metadata=record.previousMetadata||null;record.updatedAt=record.previousUpdatedAt||Date.now();
+        record.previousState=current.state;record.previousCompressed=current.compressed;record.previousMetadata=current.metadata;record.previousUpdatedAt=current.updatedAt;
+        const write=store.put(record);write.onerror=()=>reject(write.error);promoted=true;
+      };
+      transaction.oncomplete=()=>resolve(promoted);
+      transaction.onerror=()=>reject(transaction.error);
+      transaction.onabort=()=>reject(transaction.error||new Error('The machine snapshot recovery transaction was aborted.'));
     });
   }
 

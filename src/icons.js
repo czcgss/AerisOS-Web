@@ -80,6 +80,7 @@ const paths = {
   disk: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   preview: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 15s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4Z"/><circle cx="12" cy="15" r="1.5"/>',
   display: '<rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 22h8M12 18v4"/>',
+  paperclip: '<path d="m20.5 11.5-8.9 8.9a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
 };
 
 export const iconNames=Object.freeze(Object.keys(paths));
