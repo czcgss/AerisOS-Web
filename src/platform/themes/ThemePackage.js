@@ -3,6 +3,8 @@ export const THEME_PACKAGE_FORMAT_VERSION=1;
 const ID=/^[a-z][a-z0-9-]{1,47}$/;
 const VERSION=/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const HEX=/^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
+const ICON_ID=/^[A-Za-z][A-Za-z0-9]{0,47}$/;
+const SVG_PATH=/^[MmZzLlHhVvCcSsQqTtAaEe0-9+.,\-\s]+$/;
 const plain=value=>value&&typeof value==='object'&&!Array.isArray(value);
 const fail=message=>{throw new Error(`Invalid Aeris theme package: ${message}`)};
 const localized=(value,field)=>{if(!plain(value))fail(`${field} must be a localized object`);const result=Object.fromEntries(Object.entries(value).map(([locale,text])=>[String(locale),String(text||'').trim()]).filter(([,text])=>text));if(!result.en||!result.zh)fail(`${field} requires en and zh values`);return result};
@@ -10,6 +12,7 @@ const color=(value,field)=>{const result=String(value||'').trim();if(!HEX.test(r
 const number=(value,field,min,max,fallback)=>{const result=value==null?fallback:Number(value);if(!Number.isFinite(result)||result<min||result>max)fail(`${field} must be between ${min} and ${max}`);return result};
 const text=(value,field,max=120)=>{const result=String(value||'').trim();if(!result||result.length>max)fail(`${field} is required and may contain at most ${max} characters`);return result};
 const background=value=>{const result=String(value||'').trim();if(!result||result.length>500)fail('wallpaper.background is required and may contain at most 500 characters');if(/url\s*\(|@import|expression\s*\(|javascript:|[<>"';{}]/i.test(result)||!/^[#(),.%\-\s\da-zA-Z]+$/.test(result))fail('wallpaper.background must be a safe color or gradient without resources, markup, or declarations');return result};
+const iconGlyphs=value=>{if(value==null)return{};if(!plain(value))fail('icons.glyphs must be an object of icon id to SVG path data');const entries=Object.entries(value);if(entries.length>128)fail('icons.glyphs may contain at most 128 icons');let total=0;const result={};for(const [id,source]of entries){const path=String(source||'').trim();if(!ICON_ID.test(id))fail(`icons.glyphs contains an invalid icon id “${id}”`);if(!path||path.length>1600||!SVG_PATH.test(path)||!/^[Mm]/.test(path))fail(`icons.glyphs.${id} must be safe SVG path data beginning with M`);total+=path.length;if(total>64000)fail('icons.glyphs exceeds 64 KiB');result[id]=path}return result};
 
 export function validateThemePackage(source){
   if(!plain(source)||!plain(source.manifest)||!plain(source.tokens))fail('manifest and tokens are required');
@@ -24,7 +27,7 @@ export function validateThemePackage(source){
     colors:{accent:color(colors.accent,'colors.accent'),surface:color(colors.surface,'colors.surface'),surfaceElevated:color(colors.surfaceElevated,'colors.surfaceElevated'),text:color(colors.text,'colors.text'),muted:color(colors.muted,'colors.muted'),border:color(colors.border,'colors.border'),positive:color(colors.positive||'#4c9a72','colors.positive'),warning:color(colors.warning||'#cf8a45','colors.warning'),danger:color(colors.danger||'#c65d6d','colors.danger')},
     typography:{uiFont:text(typography.uiFont||'Manrope, "SF Pro Display", "Segoe UI", sans-serif','typography.uiFont',180),monoFont:text(typography.monoFont||'"Ubuntu Mono", ui-monospace, monospace','typography.monoFont',180),scale:number(typography.scale,'typography.scale',.85,1.25,1)},
     shape:{small:number(shape.small,'shape.small',2,16,7),medium:number(shape.medium,'shape.medium',6,24,12),large:number(shape.large,'shape.large',10,36,18),window:number(shape.window,'shape.window',8,32,18)},
-    icons:{shape:['rounded','squircle','circle'].includes(icons.shape)?icons.shape:'squircle',scale:number(icons.scale,'icons.scale',.8,1.15,1)},
+    icons:{shape:['rounded','squircle','circle'].includes(icons.shape)?icons.shape:'squircle',scale:number(icons.scale,'icons.scale',.8,1.15,1),mode:icons.mode==='solid'?'solid':'outline',strokeWidth:number(icons.strokeWidth,'icons.strokeWidth',.8,3,1.8),linecap:['round','square','butt'].includes(icons.linecap)?icons.linecap:'round',linejoin:['round','bevel','miter'].includes(icons.linejoin)?icons.linejoin:'round',glyphs:iconGlyphs(icons.glyphs)},
     material:{blur:number(material.blur,'material.blur',0,48,24),saturation:number(material.saturation,'material.saturation',.6,1.8,1.2),transparency:number(material.transparency,'material.transparency',.65,1,.92),shadowStrength:number(material.shadowStrength,'material.shadowStrength',0,1.5,1)},
     motion:{scale:number(motion.scale,'motion.scale',0,1.5,1)},
   };
