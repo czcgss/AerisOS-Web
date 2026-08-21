@@ -82,6 +82,23 @@ const paths = {
   display: '<rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 22h8M12 18v4"/>',
 };
 
+export const iconNames=Object.freeze(Object.keys(paths));
+
+let themedIcons={mode:'outline',strokeWidth:1.8,linecap:'round',linejoin:'round',glyphs:{}};
+const esc=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const customGlyph=name=>themedIcons.glyphs?.[name]||'';
+const appearance=name=>customGlyph(name)?{fill:themedIcons.mode==='solid'?'currentColor':'none',stroke:themedIcons.mode==='solid'?'none':'currentColor',strokeWidth:themedIcons.strokeWidth,linecap:themedIcons.linecap,linejoin:themedIcons.linejoin}:{fill:'none',stroke:'currentColor',strokeWidth:1.8,linecap:'round',linejoin:'round'};
+const glyph=(name,label='')=>`${label?`<title>${esc(label)}</title>`:''}${customGlyph(name)?`<path d="${esc(customGlyph(name))}"/>`:paths[name]||paths.grid}`;
+
+export function setIconTheme(value={}){
+  themedIcons={mode:value?.mode==='solid'?'solid':'outline',strokeWidth:Number(value?.strokeWidth)||1.8,linecap:['round','square','butt'].includes(value?.linecap)?value.linecap:'round',linejoin:['round','bevel','miter'].includes(value?.linejoin)?value.linejoin:'round',glyphs:value?.glyphs&&typeof value.glyphs==='object'?{...value.glyphs}:{}};
+}
+
+export function refreshThemedIcons(root=globalThis.document){
+  root?.querySelectorAll?.('svg[data-icon-name]').forEach(svg=>{const name=svg.dataset.iconName,label=svg.dataset.iconLabel||'',style=appearance(name);svg.setAttribute('fill',style.fill);svg.setAttribute('stroke',style.stroke);svg.setAttribute('stroke-width',String(style.strokeWidth));svg.setAttribute('stroke-linecap',style.linecap);svg.setAttribute('stroke-linejoin',style.linejoin);svg.innerHTML=glyph(name,label)});
+}
+
 export function icon(name, size = 20, label = '') {
-  return `<svg class="icon icon-${name}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="${label ? 'false' : 'true'}">${label ? `<title>${label}</title>` : ''}${paths[name] || paths.grid}</svg>`;
+  const style=appearance(name);
+  return `<svg class="icon icon-${esc(name)}" data-icon-name="${esc(name)}" data-icon-label="${esc(label)}" width="${Number(size)||20}" height="${Number(size)||20}" viewBox="0 0 24 24" fill="${style.fill}" stroke="${style.stroke}" stroke-width="${style.strokeWidth}" stroke-linecap="${style.linecap}" stroke-linejoin="${style.linejoin}" aria-hidden="${label?'false':'true'}">${glyph(name,label)}</svg>`;
 }
