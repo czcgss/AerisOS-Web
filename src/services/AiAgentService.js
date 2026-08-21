@@ -295,7 +295,7 @@ export class AiAgentService {
     const workerSessionId=`worker:${workflowId}:${nodeId}`;
     for(const skillName of profile.skills||[])try{await this.skillRegistry?.load(workerSessionId,skillName)}catch{}
     const selected=this.#selectedModelByKey(profile.modelKey),models=this.#models(),appIds=new Set(profile.toolApps||[]);
-    const appTools=(this.toolService?.agentTools()||[]).filter(tool=>appIds.has(this.toolService?.metadata(tool.name)?.appId||tool.name.replace(/^aeris_/,'')));
+    const appTools=(this.toolService?.agentTools()||[]).filter(tool=>{const appId=this.toolService?.metadata(tool.name)?.appId||tool.name.replace(/^aeris_/,'');return appIds.has(appId)&&this.isToolAppEnabled(appId)});
     const skillTools=(this.skillRegistry?.agentTools(workerSessionId)||[]).filter(tool=>tool.name!=='aeris_load_skill');
     const delegate=depth<2?this.multiAgent?.workerTool({sessionId,turnId,workflowId,parentNodeId:nodeId,depth,excludeAgentId:profile.id}):null,skillPrompt=this.skillRegistry?.loadedPrompt(workerSessionId)||'';
     const workerPrompt=`${profile.systemPrompt||`You are the ${profile.name} specialist.`}\n\nYou are an isolated worker Agent inside Aeris. You cannot see the Main Agent conversation. Work only from the assignment and explicit handoff context. Use only registered tools, never invent results, and return a concise self-contained delivery for the parent Agent. Current local date and time: ${new Date().toString()}.${skillPrompt?`\n\nActive specialist instructions:\n${skillPrompt}`:''}`;
@@ -428,11 +428,12 @@ export class AiAgentService {
   }
 
   #activeTools(sessionId='') {
-    const disabled=new Set(this.state.config.disabledToolApps||[]);
-    const appTools=(this.toolService?.agentTools()||[]).filter(tool=>!disabled.has(tool.name.replace(/^aeris_/,'')));
-    const skillTools=this.skillRegistry?.agentTools(sessionId,()=>this.#refreshAgentTools(sessionId))||[];
+    // The Main Agent is an orchestrator, not an application operator. It may
+    // inspect/load a Skill to understand its workflow, but all capability
+    // execution belongs to an isolated registered worker Agent.
+    const skillTools=(this.skillRegistry?.agentTools(sessionId,()=>this.#refreshAgentTools(sessionId))||[]).filter(tool=>tool.name==='aeris_load_skill');
     const delegate=this.multiAgent?.mainTool(sessionId,()=>this.activeTurns.get(sessionId));
-    return [...appTools,...skillTools,...(delegate?[delegate]:[])];
+    return [...skillTools,...(delegate?[delegate]:[])];
   }
 
   #refreshAgentTools(sessionId='') {

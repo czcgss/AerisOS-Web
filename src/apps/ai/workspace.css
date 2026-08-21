@@ -180,6 +180,15 @@
   color: var(--accent);
 }
 
+.ai-workspace-view-picker{position:relative;z-index:4;display:flex;align-items:center;justify-content:flex-start;flex:0 0 43px;padding:0 10px;border-bottom:1px solid color-mix(in srgb,var(--muted) 11%,transparent);background:color-mix(in srgb,var(--surface) 48%,transparent)}
+.ai-workspace-view-picker>button{display:grid;grid-template-columns:16px minmax(0,1fr) 12px;align-items:center;min-width:148px;gap:7px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--muted) 14%,transparent);border-radius:9px;background:var(--surface);box-shadow:var(--small-shadow);color:var(--text);font-family:inherit;font-size:9px;font-weight:700;text-align:left}
+.ai-workspace-view-picker>button>.icon-chevron{color:var(--muted);transition:transform .16s}.ai-workspace-view-picker.open>button>.icon-chevron{transform:rotate(90deg)}
+.ai-workspace-view-menu{position:absolute;z-index:8;top:38px;left:10px;display:none;width:180px;padding:5px;border:1px solid color-mix(in srgb,var(--muted) 15%,transparent);border-radius:11px;background:color-mix(in srgb,var(--surface) 96%,transparent);box-shadow:0 14px 34px rgba(35,43,68,.2),var(--inset);backdrop-filter:blur(18px)}
+.ai-workspace-view-picker.open .ai-workspace-view-menu{display:block;animation:aiWorkspaceMenuIn .14s ease-out}
+.ai-workspace-view-menu button{display:grid;width:100%;grid-template-columns:18px minmax(0,1fr) 12px;align-items:center;gap:7px;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--text);font-family:inherit;font-size:9px;text-align:left}
+.ai-workspace-view-menu button:hover,.ai-workspace-view-menu button.selected{background:color-mix(in srgb,var(--accent) 9%,var(--surface-2));color:var(--accent)}
+@keyframes aiWorkspaceMenuIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
 .ai-app-workspace>main {
   display: flex;
   min-width: 0;
