@@ -18,7 +18,7 @@ export class MultiAgentOrchestratorService{
     this.workflows.unshift(flow);this.workflows=this.workflows.slice(0,80);this.#changed(flow);return clone(flow);
   }
   finishTurn(turnId,status='completed',error=''){const flow=this.workflows.find(item=>item.turnId===turnId);if(!flow||flow.status==='cancelled'&&status==='completed')return;const root=flow.nodes[0];root.status=status;root.phase=status;root.progress=100;root.finishedAt=now();root.error=String(error||'');flow.status=status;flow.progress=100;flow.updatedAt=now();this.controllers.delete(flow.id);this.#changed(flow)}
-  workflows(sessionId=''){return this.workflows.filter(item=>!sessionId||item.sessionId===sessionId).map(clone)}
+  listWorkflows(sessionId=''){return this.workflows.filter(item=>!sessionId||item.sessionId===sessionId).map(clone)}
   active(sessionId=''){return this.workflows.find(item=>(!sessionId||item.sessionId===sessionId)&&item.status==='running')||this.workflows.find(item=>!sessionId||item.sessionId===sessionId)||null}
   abortSession(sessionId){for(const flow of this.workflows.filter(item=>item.sessionId===sessionId&&item.status==='running')){this.controllers.get(flow.id)?.abort();for(const node of flow.nodes.filter(item=>!TERMINAL.has(item.status))){node.status='cancelled';node.phase='cancelled';node.finishedAt=now()}flow.status='cancelled';flow.progress=100;flow.updatedAt=now();this.#changed(flow)}}
   deleteSession(sessionId){for(const flow of this.workflows.filter(item=>item.sessionId===sessionId))this.controllers.get(flow.id)?.abort();this.workflows=this.workflows.filter(item=>item.sessionId!==sessionId);this.#persist();this.kernel?.bus.emit('multi-agent:workflow',{sessionId,removed:true})}

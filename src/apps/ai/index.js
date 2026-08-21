@@ -39,6 +39,7 @@ export default {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', searchOpen = false, settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [], skillCommandQuery = null, skillCommandIndex = 0, selectedSkillName = '', composerAttachments=[];
     let workspaceSelectedId = null, activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastObservedToolId = null, lastOpenedWorkflowId = null, liveExecution = null, liveExecutionTurnId = null, displayedActivities = [], composerDraft = '', workspaceHighlightTimer = 0, followConversation = true, conversationResizeObserver = null;
+    const workflowFoldState=new Map();
     let workspaceOpen = workspacePrefs.open, workspaceWidth = workspacePrefs.width, workspaceView = workspacePrefs.view, workspaceViewMenuOpen = false;
 
     const persistWorkspacePrefs = () => {
@@ -73,7 +74,7 @@ export default {
     const activateApp=(appId,path='',target=null)=>{
       const app=selectActivityApp(appId,target||{path});
       if(!app)return null;
-      activityAppsOpen=false;workspaceOpen=true;workspaceView='activity';persistWorkspacePrefs();
+      activityAppsOpen=false;workspaceOpen=true;if(workspaceView!=='workflow'||multiAgent.active(activeId)?.status!=='running')workspaceView='activity';persistWorkspacePrefs();
       return app;
     };
     const closeActivityApp=id=>{const wasActive=activityAppId===id;if(wasActive)unmountActivitySurface();activityAppIds=activityAppIds.filter(value=>value!==id);if(wasActive){activityAppId=activityAppIds[0]||null;activityTarget=null}};
@@ -192,11 +193,11 @@ export default {
       if(workspaceActivity)workspaceSelectedId=workspaceActivity.id;
       displayedActivities=activities;
       const workspaceVisible=workspaceOpen;
-      const workspaceContext=agentContext.snapshot(),contextWindows=shell.windowManager.contextWindows(),agentWorkflow=multiAgent.active(activeId);
+      const workspaceContext=agentContext.snapshot(),contextWindows=shell.windowManager.contextWindows(),sessionWorkflows=multiAgent.listWorkflows(activeId).filter(item=>item.nodes?.length>1),expandedWorkflowIds=new Set(sessionWorkflows.filter((workflow,index)=>workflowFoldState.has(workflow.id)?workflowFoldState.get(workflow.id):workflow.status==='running'||index===0).map(workflow=>workflow.id));
       if(workspaceView==='activity'&&!activityAppIds.includes(activityAppId))activityAppId=activityAppIds[0]||null;
       const activityApps=activityAppIds.map(id=>tools.registry.get(id)).filter(Boolean);
       const localeSignature=i18n.t('dateFormat'),historySignature=activities.map(item=>`${item.id}:${item.phase}:${item.finishedAt||0}`).join('|'),contextSignature=workspaceView==='context'?JSON.stringify({context:workspaceContext,windows:contextWindows.map(item=>({id:item.id,title:item.title,path:item.path,minimized:item.minimized}))}):workspaceView==='activity'?JSON.stringify({activityAppId,activityAppIds,target:activityTarget?.id||activityTarget?.result?.id||activityTarget?.path||''}):'';
-      const workflowSignature=agentWorkflow?`${agentWorkflow.id}:${agentWorkflow.updatedAt}:${agentWorkflow.progress}`:'empty',signature=workspaceView==='workflow'?`workflow:${workflowSignature}`:workspaceView==='activity'?`activity:${localeSignature}:${contextSignature}`:workspaceView==='context'?`context:${localeSignature}:${contextSignature}`:workspaceSignature(workspaceActivity,`${localeSignature}:results:${historySignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
+      const workflowSignature=sessionWorkflows.map(workflow=>`${workflow.id}:${workflow.updatedAt}:${workflow.progress}:${expandedWorkflowIds.has(workflow.id)?1:0}`).join('|')||'empty',signature=workspaceView==='workflow'?`workflow:${workflowSignature}`:workspaceView==='activity'?`activity:${localeSignature}:${contextSignature}`:workspaceView==='context'?`context:${localeSignature}:${contextSignature}`:workspaceSignature(workspaceActivity,`${localeSignature}:results:${historySignature}`),reuseWorkspace=Boolean(previousWorkspace&&workspaceVisible&&previousWorkspace.dataset.workspaceSignature===signature),animateWorkspace=!previousWorkspace||previousWorkspace.dataset.workspaceToolId!==(workspaceActivity?.id||'');
       const shellMarkup=`<div class="system-app ai-system-app ${workspaceVisible?'has-app-workspace':''}" style="--agent-workspace-width:${workspaceWidth}px">
         <aside class="ai-sidebar">
           <header><span class="ai-brand-icon">${icon('aerisAi', 21)}</span><strong>${i18n.t('aerisAI')}</strong></header>
@@ -222,7 +223,7 @@ export default {
           ${activityAppsOpen ? applicationsMarkup() : ''}
           ${notificationOpen ? notificationMarkup() : ''}
         </section>
-        ${workspaceVisible?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,view:workspaceView,viewMenuOpen:workspaceViewMenuOpen,context:workspaceContext,windows:contextWindows,activityApps,activityAppId,workflow:agentWorkflow}):''}
+        ${workspaceVisible?workspaceMarkup(workspaceActivity,activities,tools,i18n,{animate:animateWorkspace,signature,view:workspaceView,viewMenuOpen:workspaceViewMenuOpen,context:workspaceContext,windows:contextWindows,activityApps,activityAppId,workflows:sessionWorkflows,expandedWorkflowIds}):''}
       </div>`;
       const currentShell=root.querySelector(':scope > .ai-system-app'),template=document.createElement('template');template.innerHTML=shellMarkup.trim();const nextShell=template.content.firstElementChild;
       if(!currentShell){root.replaceChildren(nextShell)}else{
@@ -432,8 +433,8 @@ export default {
     };
 
     const bind = () => {
-      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession();query='';searchOpen=false;selectedSkillName='';skillCommandQuery=null;composerAttachments=[]; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); });
-      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession;selectedSkillName='';skillCommandQuery=null;composerAttachments=[]; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;unmountActivitySurface();render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
+      root.querySelectorAll('[data-ai-new]').forEach(button => button.onclick = () => { activeId = aiAgent.createSession();query='';searchOpen=false;selectedSkillName='';skillCommandQuery=null;composerAttachments=[]; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;workflowFoldState.clear();unmountActivitySurface();render(); });
+      root.querySelectorAll('[data-ai-session]').forEach(button => { button.onclick = () => { activeId = button.dataset.aiSession;selectedSkillName='';skillCommandQuery=null;composerAttachments=[]; localError = '';liveExecution=null;liveExecutionTurnId=null;workspaceSelectedId=null;lastObservedToolId=null;activityAppId=null;activityAppIds=[];activityTarget=null;followConversation=true;workflowFoldState.clear();unmountActivitySurface();render(); }; button.ondblclick = async () => { const session = aiAgent.sessionState(button.dataset.aiSession), title = await dialog.prompt({ title: i18n.t('renameChat'), value: session.title }); if (title) await aiAgent.renameSession(session.id, title); }; });
       root.querySelectorAll('[data-ai-delete]').forEach(button => button.onclick = async event => { event.stopPropagation(); const session = aiAgent.sessionState(button.dataset.aiDelete), approved = await dialog.confirm({ title: i18n.t('deleteChat'), message: i18n.t('deleteChatConfirm').replace('{name}', session.title), confirmLabel: i18n.t('delete'), danger: true }); if (!approved) return; await aiAgent.deleteSession(session.id); if (activeId === session.id) activeId = aiAgent.snapshot().sessions[0]?.id || null; render(); });
       bindConversationControls();
       const search = root.querySelector('[data-ai-search]');
@@ -452,6 +453,7 @@ export default {
       root.querySelectorAll('[data-ai-query-choice]').forEach(button=>button.addEventListener('click',event=>{const card=event.currentTarget.closest('[data-ai-query]');if(!card)return;card.classList.add('resolving');card.querySelectorAll('button').forEach(item=>item.disabled=true);queryUser.resolve(card.dataset.aiQuery,event.currentTarget.dataset.aiQueryChoice)}));
       bindSettingsControls();
       root.querySelectorAll('[data-ai-workspace-turn]').forEach(button=>button.onclick=()=>{const target=[...root.querySelectorAll('[data-ai-turn]')].find(turn=>turn.dataset.aiTurn===button.dataset.aiWorkspaceTurn);if(!target)return;target.scrollIntoView({block:'center',behavior:document.documentElement.dataset.reduceMotion==='true'?'auto':'smooth'});target.classList.remove('workspace-linked');requestAnimationFrame(()=>target.classList.add('workspace-linked'));clearTimeout(workspaceHighlightTimer);workspaceHighlightTimer=setTimeout(()=>target.classList.remove('workspace-linked'),1500);});
+      root.querySelectorAll('[data-ai-workflow-record]').forEach(record=>record.ontoggle=()=>{workflowFoldState.set(record.dataset.aiWorkflowRecord,record.open)});
       root.querySelector('[data-ai-workspace-view-menu]')?.addEventListener('click',event=>{event.stopPropagation();workspaceViewMenuOpen=!workspaceViewMenuOpen;const picker=event.currentTarget.closest('[data-ai-workspace-picker]');picker?.classList.toggle('open',workspaceViewMenuOpen);event.currentTarget.setAttribute('aria-expanded',String(workspaceViewMenuOpen))});
       root.querySelectorAll('[data-ai-workspace-view]').forEach(button=>button.onclick=()=>{workspaceView=button.dataset.aiWorkspaceView;workspaceViewMenuOpen=false;persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
       root.querySelectorAll('[data-ai-activity-app]').forEach(button=>button.onclick=()=>{selectActivityApp(button.dataset.aiActivityApp);workspaceView='activity';persistWorkspacePrefs();render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
@@ -533,7 +535,7 @@ export default {
     const offAppBeforeUninstall = kernel.bus.on('app-runtime:before-uninstall',({appId})=>{if(!activityAppIds.includes(appId))return;closeActivityApp(appId);render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const offLocale = kernel.bus.on('settings:change', ({ key }) => { if (key === 'locale') render({ preserveComposer: true }); });
     const offSkills = kernel.bus.on('skill:changed',()=>{if(selectedSkillName&&!selectedSkill())selectedSkillName='';if(!settingsOpen&&skillCommandQuery!==null)render({preserveComposer:true,focusComposer:false})});
-    const offWorkflow = kernel.bus.on('multi-agent:workflow',detail=>{if(detail?.sessionId!==activeId||settingsOpen)return;if(detail.workflow?.nodes?.length>1&&detail.workflow.id!==lastOpenedWorkflowId){lastOpenedWorkflowId=detail.workflow.id;workspaceOpen=true;workspaceView='workflow';persistWorkspacePrefs()}render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
+    const offWorkflow = kernel.bus.on('multi-agent:workflow',detail=>{if(detail?.sessionId!==activeId||settingsOpen)return;if(detail.workflow?.nodes?.length>1&&detail.workflow.id!==lastOpenedWorkflowId){lastOpenedWorkflowId=detail.workflow.id;workflowFoldState.set(detail.workflow.id,true);workspaceOpen=true;workspaceView='workflow';persistWorkspacePrefs()}render({preserveComposer:true,preserveConversation:true,focusComposer:false})});
     const closeContextOnClick=event=>{const selector=event.target.closest('[data-ai-context-selector]');if(selector){event.preventDefault();setContextMenuOpen(selector.getAttribute('aria-expanded')!=='true');return}const active=root.querySelector('[data-ai-context-selector]');if(active?.getAttribute('aria-expanded')==='true'&&!event.target.closest('.ai-native-context-wrap'))setContextMenuOpen(false)};
     const closeContextOnEscape=event=>{const selector=root.querySelector('[data-ai-context-selector]');if(selector?.getAttribute('aria-expanded')==='true'&&event.key==='Escape'){event.stopPropagation();setContextMenuOpen(false)}};
     const closeSkillOnPointerDown=event=>{if(skillCommandQuery!==null&&!event.target.closest('[data-ai-composer],[data-ai-skill-command-host]'))closeSkillCommand()};
