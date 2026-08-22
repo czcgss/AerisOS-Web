@@ -349,6 +349,7 @@ export class AiAgentService {
     });
     agent.subscribe(async event => {
       let publishedEvent=event;
+      if(event.type?.startsWith('tool_execution_'))this.multiAgent?.recordMainEvent(this.activeTurns.get(id),event);
       if(event.type==='message_start'&&event.message?.role==='user'){
         let turn=session.turns.find(item=>item.user?.timestamp===event.message.timestamp);
         const previous=session.turns.find(item=>item.id===this.activeTurns.get(id));if(previous&&previous!==turn&&previous.status==='running'){previous.status='completed';previous.updatedAt=now()}
