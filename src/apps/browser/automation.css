@@ -1,0 +1,18 @@
+.browser-automation-status{display:inline-flex;align-items:center;gap:5px}
+.browser-automation-status i{width:6px;height:6px;border-radius:50%;background:#94a3b8}
+.browser-automation-status.connecting i{background:#f59e0b;animation:browser-pulse 1s ease-in-out infinite}
+.browser-automation-status.ready i{background:#22c55e}
+.browser-automation-status.failed i{background:#ef4444}
+@keyframes browser-pulse{50%{opacity:.3;transform:scale(.8)}}
+.browser-remote-view{position:absolute;inset:0;overflow:hidden;outline:0;background:#eef1f5;cursor:default;user-select:none}
+.browser-remote-view>img{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none}
+.browser-remote-view .browser-loading{display:none}
+.browser-remote-view.loading .browser-loading{display:grid}
+.browser-remote-hint{position:absolute;right:10px;bottom:9px;padding:4px 7px;border-radius:7px;background:rgba(15,23,42,.68);color:#fff;font-size:7px;opacity:0;transition:opacity .16s;pointer-events:none}
+.browser-remote-view:focus .browser-remote-hint{opacity:1}
+.browser-inline-error{position:absolute;z-index:8;left:50%;bottom:18px;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:9px;width:min(620px,calc(100% - 32px));padding:10px 11px;border:1px solid rgba(185,28,28,.16);border-radius:12px;background:rgba(255,248,248,.96);box-shadow:0 12px 32px rgba(30,41,59,.16);color:#7f1d1d;backdrop-filter:blur(18px);transform:translateX(-50%);user-select:text}
+.browser-inline-error[hidden]{display:none}
+.browser-inline-error>span{display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:#fee2e2;color:#dc2626}
+.browser-inline-error p{min-width:0;margin:0;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.browser-inline-error button{display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:7px;background:transparent;color:#9f1239;cursor:default}
+.browser-inline-error button:hover{background:rgba(190,24,93,.09)}

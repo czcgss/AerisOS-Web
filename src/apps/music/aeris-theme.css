@@ -336,8 +336,6 @@
 .activity-music-body .activity-music-record { width: min(158px, 43%); margin-top: 0; }
 .activity-music-body > section > input { width: min(250px, 88%); }
 
-.ai-result-music { background: color-mix(in srgb, var(--accent) 7%, var(--surface-2)); color: var(--accent); }
-.ai-result-music > span { background: var(--surface); box-shadow: var(--small-shadow); color: #d8798f; }
 
 [data-theme="dark"] .music-app,
 [data-theme="dark"] .music-stage,
