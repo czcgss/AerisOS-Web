@@ -1,0 +1,6 @@
+.browser-automation-status{display:inline-flex;align-items:center;gap:5px}
+.browser-automation-status i{width:6px;height:6px;border-radius:50%;background:#94a3b8}
+.browser-automation-status.connecting i{background:#f59e0b;animation:browser-pulse 1s ease-in-out infinite}
+.browser-automation-status.ready i{background:#22c55e}
+.browser-automation-status.failed i{background:#ef4444}
+@keyframes browser-pulse{50%{opacity:.3;transform:scale(.8)}}

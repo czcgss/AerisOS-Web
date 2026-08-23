@@ -17,6 +17,7 @@ import { WeatherService } from '../services/WeatherService.js';
 import { NotificationService } from '../services/NotificationService.js';
 import { MusicService } from '../services/MusicService.js';
 import { BrowserService } from '../services/BrowserService.js';
+import { BrowserAutomationService } from '../services/BrowserAutomationService.js';
 import { AgentContextService } from '../services/AgentContextService.js';
 import { AgentEntryService } from '../services/AgentEntryService.js';
 import { AgentQueryService } from '../services/AgentQueryService.js';
@@ -77,6 +78,7 @@ export async function createSystem(root) {
   const weather=kernel.register('weather',new WeatherService(settings));
   const music=kernel.register('music',new MusicService(system));
   const browser=kernel.register('browser',new BrowserService({storage:localStorage}));
+  const browserAutomation=kernel.register('browserAutomation',new BrowserAutomationService());
   const registry=new AppRegistry();
   const widgetRegistry=new WidgetRegistry();
   builtinWidgets.forEach(widget=>widgetRegistry.register(widget));
@@ -95,7 +97,7 @@ export async function createSystem(root) {
   const agentContext=kernel.register('agentContext',new AgentContextService(registry,i18n));
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
-  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,themeRuntime,weather,metrics,machine,music,browser,registry,i18n}));
+  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,themeRuntime,weather,metrics,machine,music,browser,browserAutomation,registry,i18n}));
   skillRegistry.setApprovalService(tools);
   skillStudio.setApprovalService(tools);
   appStudio.setApprovalService(tools);
@@ -105,7 +107,7 @@ export async function createSystem(root) {
   const multiAgent=kernel.register('multiAgent',new MultiAgentOrchestratorService({registry:agentRegistry,storage:localStorage}));
   const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent));
   multiAgent.setRunner(options=>aiAgent.runIsolatedAgent(options));
-  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,system,metrics,tools,aiAgent,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,notifications,registry,appRuntime,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
+  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,system,metrics,tools,aiAgent,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,registry,appRuntime,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
   window.aeris={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,shell};
   await kernel.boot();
