@@ -69,14 +69,15 @@ export class AiAgentService {
     const saved=this.#loadState();if(saved)this.state=saved;
     for(const session of this.state.sessions){session.skills=this.skillRegistry?.restoreSession(session.id,[...(session.skills||[]),...loadedSkillsFromMessages(session.messages)])||[]}
     if(saved)this.#saveState();
-    this.offToolsChanged=this.kernel.bus.on('tools:changed',detail=>{this.#refreshAgentTools();this.#emit('ai:tools-changed',detail)});
+    this.offToolsChanged=this.kernel.bus.on('tools:changed',detail=>{this.#refreshAgentRuntime();this.#emit('ai:tools-changed',detail)});
+    this.offAgentsChanged=this.kernel.bus.on('agents:changed',detail=>{this.#refreshAgentRuntime();this.#emit('ai:agents-changed',detail)});
     this.offSkillsChanged=this.kernel.bus.on('skill:changed',detail=>{if(detail?.enabled===false)for(const session of this.state.sessions)session.skills=(session.skills||[]).filter(name=>name!==detail.name);this.agents.forEach((agent,id)=>{agent.state.systemPrompt=this.#systemPrompt(this.state.config.systemPrompt,id);agent.state.tools=this.#activeTools(id)});this.#saveState();this.#emit('ai:skills-changed',detail)});
     this.offSkillLoaded=this.kernel.bus.on('skill:loaded',detail=>{const session=this.state.sessions.find(item=>item.id===detail?.sessionId);if(!session)return;session.skills=[...new Set([...(session.skills||[]),String(detail.name)])];this.#saveState()});
     this.ready=true;
     queueMicrotask(()=>this.#emit('ai:ready',{source:saved?'browser':'new'}));
   }
 
-  stop() { this.offToolsChanged?.();this.offSkillsChanged?.();this.offSkillLoaded?.();this.offToolsChanged=null;this.offSkillsChanged=null;this.offSkillLoaded=null; }
+  stop() { this.offToolsChanged?.();this.offAgentsChanged?.();this.offSkillsChanged?.();this.offSkillLoaded?.();this.offToolsChanged=null;this.offAgentsChanged=null;this.offSkillsChanged=null;this.offSkillLoaded=null; }
 
   snapshot() {
     const safeConfig=clone(this.state.config);safeConfig.providers=safeConfig.providers.map(provider=>({...provider,apiKey:provider.apiKey?'••••••••':''}));
@@ -126,7 +127,7 @@ export class AiAgentService {
     const disabled=new Set(this.state.config.disabledToolApps||[]);
     enabled?disabled.delete(appId):disabled.add(appId);
     this.state.config.disabledToolApps=[...disabled];
-    this.#refreshAgentTools();
+    this.#refreshAgentRuntime();
     await this.persist();
     this.#emit('ai:tools-changed',{appId,enabled});
   }
@@ -441,6 +442,8 @@ export class AiAgentService {
     if(sessionId){const agent=this.agents.get(sessionId);if(agent)agent.state.tools=this.#activeTools(sessionId);return}
     this.agents.forEach((agent,id)=>{agent.state.tools=this.#activeTools(id)});
   }
+
+  #refreshAgentRuntime(){this.agents.forEach((agent,id)=>{agent.state.systemPrompt=this.#systemPrompt(this.state.config.systemPrompt,id);agent.state.tools=this.#activeTools(id)})}
 
   #normalise(saved) {
     const source=saved?.config||{},legacyProvider={...defaultProvider(),baseUrl:String(source.baseUrl||defaultProvider().baseUrl),apiKey:String(source.apiKey||''),models:[{...defaultProvider().models[0],id:String(source.model||LEGACY_DEFAULT_MODEL),name:String(source.model||LEGACY_DEFAULT_MODEL),reasoningEffort:REASONING_EFFORTS.has(source.reasoningEffort)?source.reasoningEffort:'medium'}]};

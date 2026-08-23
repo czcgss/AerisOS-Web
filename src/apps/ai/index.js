@@ -35,7 +35,7 @@ const readWorkspacePrefs = () => {
 export default {
   id: 'ai', title: 'aiAssistant', icon: 'aerisAi', color: 'ai', width: 1280, height: 760,
   singleInstance: true, dockLeading: true,
-  mount(root, { aiAgent, agentRegistry, multiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, queryUser, userdata, system, settings, weather, music, metrics, machine, skillRegistry }) {
+  mount(root, { aiAgent, agentRegistry, multiAgent, i18n, kernel, dialog, shell, clipboard, tools, notifications, agentContext, agentEntry, queryUser, userdata, system, settings, weather, music, browser, browserAutomation, metrics, machine, skillRegistry }) {
     const workspacePrefs = readWorkspacePrefs();
     let activeId = null, query = '', searchOpen = false, settingsOpen = false, notificationOpen = false, contextMenuOpen = false, settingsSection = 'model', localError = '', editingTurnId = null, editDraft = '', displayedTurns = [], skillCommandQuery = null, skillCommandIndex = 0, selectedSkillName = '', composerAttachments=[];
     let activityAppId = null, activityAppIds = [], activityTarget = null, activityAppsOpen = false, activitySurface = null, lastOpenedWorkflowId = null, liveExecution = null, liveExecutionTurnId = null, composerDraft = '', workspaceHighlightTimer = 0, followConversation = true, conversationResizeObserver = null;
@@ -61,7 +61,7 @@ export default {
       if(!app||!host||!app.activity?.mount)return;
       if(activitySurface?.appId===app.id&&activitySurface.host===host)return;
       unmountActivitySurface();
-      const context={app,i18n,kernel,dialog,shell,clipboard,tools,notifications,agentContext,agentEntry,userdata,system,settings,weather,music,metrics,machine,openFullApp:(appId,path='')=>shell.open(appId,path||undefined)};
+      const context={app,i18n,kernel,dialog,shell,clipboard,tools,notifications,agentContext,agentEntry,userdata,system,settings,weather,music,browser,browserAutomation,metrics,machine,openFullApp:(appId,path='')=>shell.open(appId,path||undefined)};
       activitySurface={appId:app.id,host,cleanup:app.activity.mount(host,context,activityTarget||{})||null};
     };
     const selectActivityApp=(id,target=null)=>{

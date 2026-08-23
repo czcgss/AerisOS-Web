@@ -11,7 +11,7 @@ const alpineProxy={
     proxy.on('proxyReq',request=>request.setHeader('accept-encoding','identity'));
   },
 };
-const backendProxy={target:'http://127.0.0.1:4318',changeOrigin:false};
+const backendProxy={target:'http://127.0.0.1:4318',changeOrigin:false,ws:true};
 
 export default defineConfig({
   optimizeDeps:{exclude:['pyodide']},

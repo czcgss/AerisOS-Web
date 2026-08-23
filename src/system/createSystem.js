@@ -104,8 +104,9 @@ export async function createSystem(root) {
   widgetStudio.setApprovalService(tools);
   themeStudio.setApprovalService(tools);
   const agentRegistry=kernel.register('agentRegistry',new AgentRegistryService({storage:localStorage}));
-  const multiAgent=kernel.register('multiAgent',new MultiAgentOrchestratorService({registry:agentRegistry,storage:localStorage}));
+  const multiAgent=kernel.register('multiAgent',new MultiAgentOrchestratorService({registry:agentRegistry,storage:localStorage,toolService:tools,skillRegistry}));
   const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent));
+  multiAgent.setCapabilitySources({isToolAppEnabled:appId=>aiAgent.isToolAppEnabled(appId)});
   multiAgent.setRunner(options=>aiAgent.runIsolatedAgent(options));
   const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,system,metrics,tools,aiAgent,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,registry,appRuntime,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();

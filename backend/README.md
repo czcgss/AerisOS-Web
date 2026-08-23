@@ -8,8 +8,8 @@ Browser Use, connect through this service when available.
 
 ```text
 Aeris Agent -> registered Aeris tool -> frontend service -> HTTP API
-                                                    -> Browser Use MCP -> Chromium
-Aeris Browser App <--------------- shared browser state and presentation
+                                                    -> Browser Use MCP --+
+Aeris Browser App <-> screenshot/input API -> Chromium CDP <------------+
 Skill ---------------------------- usage policy and workflow only
 ```
 
@@ -17,20 +17,29 @@ Skill ---------------------------- usage policy and workflow only
 - `src/mcp/` owns the reusable stdio MCP client.
 - `src/http/` owns HTTP parsing and response helpers.
 - `src/config.js` is the only place that reads environment configuration.
-- Browser Use is started lazily on the first explicit connect or tool call.
+- Chromium is started lazily on the first Browser navigation.
+- Chromium runs headlessly by default, so no extra host browser window appears.
+- Browser Use is started lazily on the first explicit Agent tool call and
+  connects to the same Chromium CDP session used by the Browser App.
 
-The Agent never receives a generic Node.js execution endpoint. Only allowlisted
-browser operations are exposed. Browser interactions that can submit or mutate
-remote data remain protected Aeris tools and require user approval.
+The Browser App renders the Chromium CDP screencast over WebSocket and forwards
+pointer, keyboard, scroll, history, and navigation input through the backend.
+Frames are acknowledged immediately and stale frames are dropped under
+backpressure. It no longer embeds external pages in an iframe. The Agent never receives a generic Node.js
+execution endpoint. Only allowlisted browser operations are exposed. Browser
+interactions that can submit or mutate remote data remain protected Aeris tools
+and require user approval.
 
 ## Development
 
-Start the backend and frontend in separate terminals:
+The normal development command starts both the backend and Vite:
 
 ```bash
-pnpm backend:dev
 pnpm dev
 ```
+
+Use `pnpm backend:dev` and `pnpm dev:frontend` in separate terminals when the
+two processes need to be inspected independently.
 
 Vite proxies `/api` to `http://127.0.0.1:4318`. Copy `.env.example` to `.env`
 only when configuration changes are needed. Browser Use itself is not bundled;

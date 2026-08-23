@@ -24,6 +24,7 @@ export class CompactAgentPanel {
       bus.on('agent:context-changed',()=>this.opened&&this.render()),
       bus.on('skill:changed',()=>{if(!this.opened)return;if(this.selectedSkillName&&!this.#selectedSkill())this.selectedSkillName='';this.render()}),
       bus.on('multi-agent:workflow',detail=>{if(this.opened&&detail?.sessionId===this.activeId)this.#schedule()}),
+      bus.on('agent:open-app',detail=>{if(!this.opened)return;this.#switchToFull();queueMicrotask(()=>bus.emit('agent:open-app',detail))}),
       bus.on('settings:change',({key})=>{if(this.opened&&key==='locale')this.render()}),
     ];
     this.onDocumentPointerDown=event=>{

@@ -14,15 +14,22 @@ const OPERATIONS={
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value)?value:{};
 
 export class BrowserAutomationService{
-  constructor(client){this.client=client}
-  status(){return{...this.client.status(),operations:Object.keys(OPERATIONS)}}
-  async connect(){await this.client.connect();return this.status()}
+  constructor(client,chromium=null){this.client=client;this.chromium=chromium}
+  status(){return{...this.client.status(),chromium:this.chromium?.status()||null,operations:Object.keys(OPERATIONS)}}
+  async connect(){await this.chromium?.connect();await this.client.connect();return this.status()}
   async execute(operation,args={}){
     const tool=OPERATIONS[operation];if(!tool)throw new Error(`Unsupported browser operation: ${operation}`);
-    const result=await this.client.callTool(tool,object(args));
-    return{operation,tool,result};
+    await this.chromium?.connect();const result=await this.client.callTool(tool,object(args));
+    return{operation,tool,result,browser:this.chromium?.status()||null};
   }
-  stop(){return this.client.stop()}
+  view(){if(!this.chromium)throw new Error('Chromium view service is unavailable.');return this.chromium.view()}
+  navigate(url){if(!this.chromium)throw new Error('Chromium view service is unavailable.');return this.chromium.navigate(url)}
+  pointer(input){if(!this.chromium)throw new Error('Chromium view service is unavailable.');return this.chromium.pointer(object(input))}
+  key(input){if(!this.chromium)throw new Error('Chromium view service is unavailable.');return this.chromium.key(object(input))}
+  history(direction){if(!this.chromium)throw new Error('Chromium view service is unavailable.');return direction==='forward'?this.chromium.forward():this.chromium.back()}
+  reload(){if(!this.chromium)throw new Error('Chromium view service is unavailable.');return this.chromium.reload()}
+  subscribe(listener){if(!this.chromium)throw new Error('Chromium view service is unavailable.');return this.chromium.subscribe(listener)}
+  async stop(){await this.client.stop();await this.chromium?.stop()}
 }
 
 export const BROWSER_OPERATIONS=Object.freeze({...OPERATIONS});
