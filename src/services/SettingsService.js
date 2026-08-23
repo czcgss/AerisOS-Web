@@ -1,7 +1,7 @@
 const DEFAULTS = {
   locale: 'en', theme: 'light', accent: '#5f87d7', wallpaper: 'aurora',
   memory: 256, autoBoot: true, restoreSession: true,
-  dockApps: ['files','music','photos','calendar','weather','notes','terminal','settings'],
+  dockApps: ['files','browser','music','photos','calendar','weather','notes','terminal','settings'],
   setupComplete: false, fullName: 'Aeris User', region: 'US', timezone: 'America/New_York',
   keyboardLayout: 'us', analytics: false, location: false, reduceMotion: false,
 };
@@ -17,6 +17,7 @@ export class SettingsService {
     if (!Array.isArray(this.values.dockApps)) this.values.dockApps = [...DEFAULTS.dockApps];
     if(!this.values.appSuiteVersion||this.values.appSuiteVersion<2){for(const id of ['photos','weather'])if(!this.values.dockApps.includes(id))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,id);this.values.appSuiteVersion=2;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
     if(this.values.appSuiteVersion<3){if(!this.values.dockApps.includes('music'))this.values.dockApps.splice(Math.min(2,this.values.dockApps.length),0,'music');this.values.appSuiteVersion=3;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
+    if(this.values.appSuiteVersion<4){if(!this.values.dockApps.includes('browser'))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,'browser');this.values.appSuiteVersion=4;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
   }
   get(key) { return this.values[key]; }
   all() { return { ...this.values }; }

@@ -29,8 +29,8 @@ const mutableAerisPath = value => {
 };
 
 export class SystemToolService {
-  constructor({ userdata, system, settings, themeRuntime, weather, metrics, machine, music, registry, i18n }) {
-    Object.assign(this, { userdata, system, settings, themeRuntime, weather, metrics, machine, music, registry, i18n });
+  constructor({ userdata, system, settings, themeRuntime, weather, metrics, machine, music, browser, registry, i18n }) {
+    Object.assign(this, { userdata, system, settings, themeRuntime, weather, metrics, machine, music, browser, registry, i18n });
     this.definitions = new Map();
     this.executions = new Map();
     this.approvals = new Map();
@@ -207,6 +207,13 @@ export class SystemToolService {
     this.#register({ name:'music_list',appId:'music',operation:'list',label:'List local music',description:'List songs imported into the Aeris Music library.',parameters:object({query:optionalString('Optional song title, artist, or category')}),execute:async({query})=>{await this.music.refresh();const needle=String(query||'').toLowerCase();return this.music.snapshot().tracks.filter(track=>!needle||`${track.title} ${track.artist} ${track.category}`.toLowerCase().includes(needle)).slice(0,100)},success:tracks=>tracks.length?JSON.stringify(tracks):'No matching local songs.' });
     this.#register({ name:'music_play',appId:'music',operation:'play',label:'Play local music',description:'Play a local song by title or path in the real Aeris Music player.',parameters:object({song:Type.String({description:'Song title, partial title, or Aeris path'})}),execute:async({song})=>{if(!this.music.snapshot().tracks.length)await this.music.refresh();return this.music.play(song)},success:track=>`Now playing “${track.title}” by ${track.artist}.` });
     this.#register({ name:'music_pause',appId:'music',operation:'pause',label:'Pause music',description:'Pause the song currently playing in Aeris Music.',parameters:object({}),execute:async()=>{this.music.pause();return this.music.snapshot().current},success:track=>track?`Paused “${track.title}”.`:'Music is paused.' });
+
+    this.#register({name:'browser_new_tab',appId:'browser',operation:'new_tab',label:'Open browser tab',description:'Open a URL or search query in a new Aeris Browser tab.',parameters:object({url:Type.String()}),execute:async({url})=>this.browser.newTab(url),success:tab=>`Opened ${tab.url} in a new Browser tab.`});
+    this.#register({name:'browser_navigate',appId:'browser',operation:'navigate',label:'Navigate browser',description:'Navigate the active Aeris Browser tab to a URL or search query.',parameters:object({url:Type.String()}),execute:async({url})=>this.browser.navigate(url),success:tab=>`Navigated Browser to ${tab.url}.`});
+    this.#register({name:'browser_current_page',appId:'browser',operation:'current_page',label:'Read current browser page',description:'Read the active Aeris Browser tab URL and metadata. This does not extract cross-origin page content.',parameters:object({}),execute:async()=>this.browser.active(),success:tab=>tab?JSON.stringify(tab):'No active Browser tab.'});
+    this.#register({name:'browser_list_tabs',appId:'browser',operation:'list_tabs',label:'List browser tabs',description:'List the tabs currently open in Aeris Browser.',parameters:object({}),execute:async()=>this.browser.snapshot().tabs,success:tabs=>JSON.stringify(tabs)});
+    this.#register({name:'browser_back',appId:'browser',operation:'back',label:'Browser back',description:'Navigate the active Aeris Browser tab backward in its Aeris navigation history.',parameters:object({}),execute:async()=>this.browser.back(),success:tab=>`Navigated back to ${tab.url}.`});
+    this.#register({name:'browser_forward',appId:'browser',operation:'forward',label:'Browser forward',description:'Navigate the active Aeris Browser tab forward in its Aeris navigation history.',parameters:object({}),execute:async()=>this.browser.forward(),success:tab=>`Navigated forward to ${tab.url}.`});
 
     for(const app of this.registry.list())this.#registerOpenApp(app);
   }
