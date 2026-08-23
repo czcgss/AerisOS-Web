@@ -65,16 +65,16 @@ npm install --global pnpm@11.9.0
 
 Open **Aeris AI → Settings → Model** and configure an OpenAI-compatible base URL, API key, and model. Model credentials are intended only for local development or trusted endpoints.
 
-The Agent is integrated with operating-system concepts rather than presented only as a chat window:
+Aeris AI is designed as an operating-system capability, not an assistant layered on top of the desktop. It shares the system's application model, context, permissions, notifications, persistence, and live interface surfaces, allowing a request to become an observable system workflow instead of an opaque chat response.
 
-- Apps register validated tools that can be enabled or disabled by the user.
-- The selected window, resource, file, date, or text can become explicit Agent context.
-- High-risk actions, including terminal commands and destructive file operations, require Aeris approval.
-- The Activity workspace hosts live, task-focused App surfaces that the user and Agent can operate together.
-- Active Apps can be opened, switched, closed, or continued in their full desktop window.
-- Tool cards show the application, action, state, risk, parameters, and output without replacing the conversation.
-- Results preserve created, queried, modified, moved, or deleted resources with App-specific actions.
-- Conversations and Agent state persist locally and recover after refresh.
+- **System context:** invoke the Agent globally or from an App, then explicitly attach the active window, file, resource, date, text, or another open App.
+- **Native App actions:** Apps expose validated tools for querying and changing real application data. Users control which Apps the Agent may operate.
+- **Dynamic capabilities:** enabled Agents, App tools, imported Skills, and generated extensions are discovered at runtime rather than hard-coded into a single prompt.
+- **Multi-Agent orchestration:** a Main Agent plans and delegates isolated work to capability-specific Agents. The Worktree shows ownership, progress, tool activity, and results for each task.
+- **Visible execution:** the Agent workspace can host compact, live App views, so users can watch and continue the work in either the Agent or the full desktop App.
+- **System safety:** risky terminal, file, and destructive operations pause for an in-system approval without blocking the rest of the desktop.
+- **Shared system state:** conversations, usage, notifications, read state, workflows, Skills, and settings persist locally across refreshes.
+- **Extensibility:** Agent Skills can create and validate Aeris Apps, widgets, themes, and other Skills against the system's runtime contracts.
 
 Approval reduces accidental actions but is not a security boundary against malicious same-origin code or compromised dependencies. Never commit API keys or use production secrets in the browser client.
 
