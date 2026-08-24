@@ -1,0 +1,81 @@
+.ai-session-row small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ai-session-row small > span { flex: 0 0 auto; }
+.ai-session-row small > em {
+  overflow: hidden;
+  color: var(--accent);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-session-row [data-ai-session-indicator][hidden],
+.ai-session-row [data-ai-session-status][hidden] { display: none; }
+.ai-session-row [data-ai-session-indicator][data-state="approval"],
+.ai-session-row [data-ai-session-indicator][data-state="input"] {
+  background: #d28a34;
+  animation: aiPulse 1.2s infinite;
+}
+.ai-session-row [data-ai-session-indicator][data-state="unread"] {
+  background: #42a36d;
+  animation: none;
+}
+
+.agent-notification-target { animation: agentNotificationTarget 1.8s ease-out; }
+@keyframes agentNotificationTarget {
+  0%, 25% {
+    filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 55%, transparent));
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  100% { filter: none; background: transparent; }
+}
+
+.ai-notification-menu article:has(.ai-notification-actions) > button:first-child { padding-bottom: 31px; }
+.ai-notification-actions {
+  position: absolute;
+  left: 56px;
+  bottom: 7px;
+  display: flex;
+  gap: 5px;
+}
+.ai-notification-actions button,
+.compact-agent-notifications article > footer button {
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 7px/1.2 var(--font-ui);
+}
+.ai-notification-actions button.primary,
+.compact-agent-notifications article > footer button.primary {
+  background: var(--accent);
+  color: #fff;
+}
+.notification-approval-actions { display: flex !important; gap: 5px; }
+.notification-approval-actions button { padding: 3px 6px !important; text-decoration: none !important; }
+.notification-approval-actions button:last-child { background: var(--accent) !important; color: #fff !important; }
+
+.compact-agent-notifications > div > article { border-radius: 9px; }
+.compact-agent-notifications > div > article.unread { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.compact-agent-notifications > div > article > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border-radius: 9px;
+  text-align: left;
+}
+.compact-agent-notifications > div > article > button:hover { background: var(--surface-2); }
+.compact-agent-notifications > div > article > button > span:nth-child(2) { display: flex; min-width: 0; flex-direction: column; }
+.compact-agent-notifications > div > article > footer { display: flex; justify-content: flex-end; gap: 5px; padding: 0 7px 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-notification-target { animation: none; }
+}

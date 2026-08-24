@@ -47,7 +47,7 @@ export class WindowManager {
   }
   isOpen(appId) { return [...this.windows.values()].some(record => record.app.id === appId); }
   closeApp(appId) { [...this.windows.values()].filter(record => record.app.id === appId).forEach(record => this.close(record.id)); }
-  minimize(id) { const record = this.windows.get(id); if (record) { if(record.fullscreen)this.maximize(id);record.element.hidden=true;this.#syncFullscreenChrome();this.#persistSession(); } }
+  minimize(id) { const record = this.windows.get(id); if (record) { if(record.fullscreen)this.maximize(id);record.element.hidden=true;this.context.kernel.bus.emit('window:minimized',{id,appId:record.app.id});this.#syncFullscreenChrome();this.#persistSession(); } }
   focus(id) { const record = this.windows.get(id); if (!record) return; document.querySelectorAll('.window').forEach(el => el.classList.remove('focused')); record.element.classList.add('focused'); record.element.style.zIndex = ++this.z; this.context.kernel.bus.emit('window:focused', record.app.id);this.context.kernel.bus.emit('window:context-focused',this.#contextWindow(record)); }
   contextWindows(){return [...this.windows.values()].filter(record=>record.app.id!=='ai').map(record=>this.#contextWindow(record)).sort((a,b)=>Number(a.minimized)-Number(b.minimized)||Number(b.focused)-Number(a.focused)||b.zIndex-a.zIndex)}
   snapshotApp(appId){
