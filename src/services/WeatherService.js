@@ -3,8 +3,9 @@ const LOCATION_KEY='aeris.weather.location';
 const DEFAULT_LOCATION={name:'New York',admin1:'New York',country:'United States',latitude:40.7128,longitude:-74.006,timezone:'America/New_York'};
 
 export class WeatherService{
-  constructor(settings,storage=localStorage){this.settings=settings;this.storage=storage;this.location=this.#read(LOCATION_KEY,DEFAULT_LOCATION);this.data=this.#read(CACHE_KEY,null);this.loading=false;this.error=''}
+  constructor(settings,storage=localStorage){this.settings=settings;this.storage=storage;this.location=this.#read(LOCATION_KEY,DEFAULT_LOCATION);this.data=this.#read(CACHE_KEY,null);this.loading=false;this.error='';this.requests=new Set()}
   start(){if(!this.data||Date.now()-(this.data.fetchedAt||0)>30*60*1000)this.refresh().catch(()=>{});}
+  clearData(){for(const controller of this.requests)controller.abort();this.requests.clear();this.location={...DEFAULT_LOCATION};this.data=null;this.loading=false;this.error='';this.storage.removeItem(CACHE_KEY);this.storage.removeItem(LOCATION_KEY);this.#emit()}
   #read(key,fallback){try{return JSON.parse(this.storage.getItem(key))||fallback}catch{return fallback}}
   snapshot(){return{location:{...this.location},data:this.data?structuredClone(this.data):null,loading:this.loading,error:this.error}}
   async search(query,{signal,language}={}){
@@ -44,11 +45,11 @@ export class WeatherService{
     return{...(await response.json()),fetchedAt:Date.now()};
   }
   #request(parent,timeout){
-    const controller=new AbortController();let timeoutId=0,didTimeout=false;
+    const controller=new AbortController();this.requests.add(controller);let timeoutId=0,didTimeout=false;
     const abort=()=>controller.abort(parent?.reason);
     if(parent?.aborted)abort();else parent?.addEventListener('abort',abort,{once:true});
     if(timeout)timeoutId=setTimeout(()=>{didTimeout=true;controller.abort()},timeout);
-    return{signal:controller.signal,timedOut:()=>didTimeout,close:()=>{clearTimeout(timeoutId);parent?.removeEventListener('abort',abort)}};
+    return{signal:controller.signal,timedOut:()=>didTimeout,close:()=>{this.requests.delete(controller);clearTimeout(timeoutId);parent?.removeEventListener('abort',abort)}};
   }
   #emit(){this.kernel?.bus.emit('weather:update',this.snapshot())}
 }

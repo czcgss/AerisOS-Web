@@ -196,7 +196,7 @@
 
 .boot-progress-meta output {
   color: var(--boot-accent);
-  font: 600 9px "DM Mono", ui-monospace, monospace;
+  font: 600 9px var(--font-mono);
 }
 
 .boot-content .boot-progress {
@@ -254,7 +254,7 @@
 .boot-content .boot-step.completed {
   min-height: 25px;
   padding: 2px 8px;
-  font: 500 9px/1.4 "DM Mono", ui-monospace, monospace;
+  font: 500 9px/1.4 var(--font-mono);
 }
 
 .boot-content .boot-step.completed > i {
@@ -281,12 +281,12 @@
 
 .boot-content .boot-step.current strong {
   color: #43586b;
-  font: 650 10px/1.35 "DM Mono", ui-monospace, monospace;
+  font: 650 10px/1.35 var(--font-mono);
 }
 
 .boot-content .boot-step.current em {
   color: #8494a3;
-  font: 500 8px/1.3 Manrope, sans-serif;
+  font: 500 8px/1.3 var(--font-ui);
 }
 
 .boot-content .boot-step.current > b {
@@ -364,7 +364,7 @@
 .boot-details .boot-log-row {
   min-height: 20px;
   color: #5d7182;
-  font: 500 8px/1.45 "DM Mono", ui-monospace, monospace;
+  font: 500 8px/1.45 var(--font-mono);
 }
 
 .boot-details .boot-log-row i { background: #63a57e; }

@@ -68,6 +68,15 @@ export class NotificationService {
     await this.#save();
   }
 
+  bySource(sourceKey){const item=this.state.items.find(entry=>entry.sourceKey===String(sourceKey));return item?structuredClone(item):null}
+
+  async publish(value){
+    const sourceKey=String(value?.sourceKey||''),existing=sourceKey?this.state.items.find(item=>item.sourceKey===sourceKey):null,stamp=Date.now();
+    if(existing){Object.assign(existing,structuredClone(value),{id:existing.id,createdAt:existing.createdAt,updatedAt:stamp});await this.#save();return structuredClone(existing)}
+    const item={id:crypto.randomUUID(),appId:'ai',type:'system',title:'',message:'',...structuredClone(value),createdAt:stamp,updatedAt:stamp,read:false};
+    this.state.items.unshift(item);this.state.items=this.state.items.slice(0,MAX_ITEMS);await this.#save(false);this.kernel.bus.emit('notification:added',structuredClone(item));this.#emit();return structuredClone(item)
+  }
+
   async scan(now = new Date()) {
     if (this.scanning) return;
     this.scanning = true;

@@ -1,10 +1,10 @@
-:root{font-family:var(--font-ui,Manrope,"SF Pro Display","Segoe UI",sans-serif);font-size:calc(16px * var(--font-scale,1))}
+:root{font-family:var(--font-ui,sans-serif);font-size:calc(16px * var(--font-scale,1))}
 .desktop{background:var(--theme-wallpaper)!important}
 .window{border-radius:var(--window-radius,18px);background:color-mix(in srgb,var(--surface) calc(var(--glass-opacity,.92) * 100%),transparent);backdrop-filter:blur(var(--glass-blur,24px)) saturate(var(--glass-saturation,1.2))}
 .window,.floating-panel,.desktop-widget,.dock,.system-bar{border-color:var(--line,rgba(96,122,138,.14))}
 .floating-panel,.dock,.system-bar{backdrop-filter:blur(var(--glass-blur,24px)) saturate(var(--glass-saturation,1.2))}
 button,input,textarea,select{font-family:var(--font-ui,inherit)}
-code,pre,.terminal-root{font-family:var(--font-mono,"Ubuntu Mono",monospace)}
+code,pre,kbd,samp,.terminal-root{font-family:var(--font-mono,monospace)}
 .app-icon{border-radius:var(--icon-radius,12px)!important}.app-icon>svg{transform:scale(var(--icon-scale,1))}
 ::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:inherit}
 @media(prefers-reduced-motion:reduce){:root{--motion-scale:0}}

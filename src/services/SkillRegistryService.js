@@ -106,14 +106,19 @@ export class SkillRegistryService {
     return{name:skill.name,description:skill.description,instructions:skill.content||parseSkill(new TextDecoder().decode(stored['SKILL.md']?.bytes||new Uint8Array())).content,files,builtIn:false};
   }
 
-  agentTools(sessionId,onChanged){
+  agentTools(sessionId,onChanged,owner={}){
     const loaded=this.loadedBySession.get(sessionId)||new Set();this.loadedBySession.set(sessionId,loaded);
     const loadTool={name:'aeris_load_skill',label:'Load Aeris skill',description:'Load the full instructions and native tools for one enabled Aeris skill before performing the matching specialized task.',parameters:Type.Object({name:Type.String({description:'Exact skill name from available_skills.'})},{additionalProperties:false}),executionMode:'sequential',execute:async(_toolCallId,{name})=>{const skill=await this.load(sessionId,name);onChanged?.();const tools=[...(skill.tools||[]).map(tool=>tool.name),...(this.#hasResources(skill)?[this.#resourceToolName(skill)]:[]),...(skill.pythonScripts?.length?[this.#pythonToolName(skill)]:[])];return result(formatSkillInvocation({...skill,content:this.#invocationContent(skill)}),{skillId:skill.name,operation:'load',phase:'completed',result:{name:skill.name,tools}})}};
     const active=[...loaded].map(name=>this.skills.get(name)).filter(skill=>skill?.enabled),owned=active.flatMap(skill=>skill.tools||[]).map(tool=>typeof tool.forSession==='function'?tool.forSession(sessionId):tool),resources=active.filter(skill=>this.#hasResources(skill)).map(skill=>this.#resourceTool(skill)),python=active.filter(skill=>skill.pythonScripts?.length).map(skill=>this.#pythonTool(skill));
-    return[loadTool,...owned,...resources,...python];
+    const tools=[loadTool,...owned,...resources,...python];return this.approvalService?.bindOwner?tools.map(tool=>this.approvalService.bindOwner(tool,{sessionId,...owner})):tools;
   }
 
   clearSession(sessionId){this.loadedBySession.delete(sessionId)}
+
+  async clearData(){
+    this.loadedBySession.clear();for(const [name,skill] of [...this.skills]){if(skill.bundled)skill.enabled=true;else this.skills.delete(name)}
+    await this.packageStore?.clear?.();this.storage?.removeItem(STORAGE_KEY);this.kernel?.bus.emit('skill:changed',{cleared:true})
+  }
 
   #pythonTool(skill){
     const name=this.#pythonToolName(skill),scripts=skill.pythonScripts.join(', '),optional=description=>Type.Optional(Type.String({description}));

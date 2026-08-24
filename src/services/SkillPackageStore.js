@@ -66,4 +66,9 @@ export class SkillPackageStore {
     request.onsuccess=()=>{const cursor=request.result;if(!cursor)return;store.delete(cursor.primaryKey);cursor.continue()};
     await transactionDone(transaction);
   }
+
+  async clear(){
+    const database=await this.open(),stores=[LEGACY_STORE,FILE_STORE].filter(name=>database.objectStoreNames.contains(name)),transaction=database.transaction(stores,'readwrite');
+    for(const name of stores)transaction.objectStore(name).clear();await transactionDone(transaction)
+  }
 }
