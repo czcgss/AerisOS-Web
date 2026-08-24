@@ -79,6 +79,12 @@ export class AiAgentService {
 
   stop() { this.offToolsChanged?.();this.offAgentsChanged?.();this.offSkillsChanged?.();this.offSkillLoaded?.();this.offToolsChanged=null;this.offAgentsChanged=null;this.offSkillsChanged=null;this.offSkillLoaded=null; }
 
+  async clearData(){
+    for(const session of this.state.sessions){this.agents.get(session.id)?.abort();this.skillRegistry?.clearSession(session.id);this.multiAgent?.deleteSession(session.id)}
+    this.agents.clear();this.activeTurns.clear();this.streamingAssistantMessages.clear();this.sessionRuns.clear();this.settlingSessions.clear();
+    await this.skillRegistry?.clearData?.();this.state={version:4,updatedAt:0,config:defaultConfig(),usage:{},sessions:[]};this.loading=false;this.error='';this.storage?.removeItem(AI_STATE_STORAGE_KEY);this.#emit('ai:changed',{cleared:true})
+  }
+
   snapshot() {
     const safeConfig=clone(this.state.config);safeConfig.providers=safeConfig.providers.map(provider=>({...provider,apiKey:provider.apiKey?'••••••••':''}));
     return {
