@@ -1,7 +1,7 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import {acquireTerminalPort,releaseTerminalPort} from './session.js';
+import {acquireTerminalPort,releaseTerminalPort,terminalFontFamily} from './session.js';
 
 const theme={
   background:'#0f181f',foreground:'#d9e2e8',cursor:'#67c58b',cursorAccent:'#0f181f',selectionBackground:'#356b7eaa',
@@ -65,7 +65,7 @@ export default{
       if(!port){shell.toast(i18n.t('terminalSessionLimit'));return}
       const id=nextId++,pane=document.createElement('section');
       pane.className='terminal-native-pane';pane.dataset.terminalPane=id;host.appendChild(pane);
-      const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:'"Ubuntu Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:0,theme});
+      const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:terminalFontFamily(),fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:0,theme});
       const fit=new FitAddon();terminal.loadAddon(fit);terminal.open(pane);
       const session={id,port,owner,pane,terminal,fit,disposables:[]};sessions.push(session);
       session.disposables.push(terminal.onData(data=>system.writeTerminal(data,port)));
@@ -92,7 +92,8 @@ export default{
     const observer=new ResizeObserver(resize);observer.observe(host);
     const offDataReady=kernel.bus.on('guest:ready',()=>{setStatus();sessions.forEach(session=>{session.terminal.reset();const replay=system.terminalReplay(session.port);if(replay)session.terminal.write(replay);system.writeTerminal('\r',session.port)});resize()});
     const offStatus=kernel.bus.on('machine:status',setStatus);
+    const offTheme=kernel.bus.on('theme:changed',()=>{sessions.forEach(session=>session.terminal.options.fontFamily=terminalFontFamily());resize()});
     createSession();setStatus();
-    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();const resets=sessions.map(session=>{session.disposables.forEach(dispose);session.terminal.dispose();releaseTerminalPort(session.port,session.owner);return system.resetTerminal(session.port)});sessions=[];return Promise.allSettled(resets)}
+    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();offTheme();const resets=sessions.map(session=>{session.disposables.forEach(dispose);session.terminal.dispose();releaseTerminalPort(session.port,session.owner);return system.resetTerminal(session.port)});sessions=[];return Promise.allSettled(resets)}
   }
 };
