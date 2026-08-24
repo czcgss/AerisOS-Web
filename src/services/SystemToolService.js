@@ -34,6 +34,7 @@ export class SystemToolService {
     this.definitions = new Map();
     this.executions = new Map();
     this.approvals = new Map();
+    this.executionOwners = new Map();
     this.#registerBuiltins();
   }
 
@@ -57,10 +58,11 @@ export class SystemToolService {
     return {name:`aeris_${appId}`,appId,operation:'app_capability',label:`${this.i18n.t(app.title)} tool`,description:definitions.map(definition=>`${definition.operation}: ${definition.description}`).join('\n'),risk:definitions.some(definition=>definition.risk==='high')?'mixed':'safe'};
   }
   execution(id) { return this.executions.get(id) ? structuredClone(this.executions.get(id)) : null; }
-  pendingApproval() { const id=[...this.approvals.keys()].at(-1);return id?this.execution(id):null; }
+  pendingApproval(sessionId='') { const pending=[...this.approvals.keys()].map(id=>this.execution(id)).filter(Boolean),match=sessionId?pending.findLast(item=>item.sessionId===sessionId):pending.at(-1);return match||null; }
   resolveApproval(id, approved) { const pending=this.approvals.get(id);if(!pending)return false;this.approvals.delete(id);pending.resolve(!!approved);return true; }
-  async runProtected({toolCallId,name,label,appId='',operation,params={},approvalMessage},signal,onUpdate,execute){
-    const state={toolCallId,name,label,appId,operation,risk:'high',params:structuredClone(params),phase:'approval',approvalMessage,startedAt:Date.now()};
+  bindOwner(tool,owner={}){if(!tool?.execute)return tool;return{...tool,execute:async(toolCallId,...args)=>{this.executionOwners.set(String(toolCallId),owner);try{return await tool.execute(toolCallId,...args)}finally{this.executionOwners.delete(String(toolCallId))}}}}
+  async runProtected({toolCallId,name,label,appId='',operation,params={},approvalMessage,sessionId='',turnId='',agentId='',agentName=''},signal,onUpdate,execute){
+    const owner=this.executionOwners.get(String(toolCallId))||{},state={toolCallId,name,label,appId,operation,risk:'high',params:structuredClone(params),phase:'approval',approvalMessage,sessionId:sessionId||owner.sessionId||'',turnId:turnId||owner.turnId||'',agentId:agentId||owner.agentId||'',agentName:agentName||owner.agentName||'',startedAt:Date.now()};
     const onAbort=()=>{if(['running','approval'].includes(state.phase)){state.phase='cancelled';state.finishedAt=Date.now();this.#setExecution(state)}};
     signal?.addEventListener('abort',onAbort,{once:true});this.#setExecution(state);onUpdate?.(toolResult('Waiting for user approval.',state));
     const approved=await this.#requestApproval(state,signal);
@@ -81,7 +83,8 @@ export class SystemToolService {
     return [...grouped.values()].map(item => ({ ...item, risks: [...item.risks] }));
   }
 
-  agentTools() {
+  agentTools(owner={}) {
+    if(typeof owner==='string')owner={sessionId:owner};
     return this.apps().map(app => {
       const definitions=[...this.definitions.values()].filter(definition=>definition.appId===app.id);
       const properties={type:Type.String({enum:definitions.map(definition=>definition.operation),description:`Operation to perform: ${definitions.map(definition=>definition.operation).join(', ')}`})};
@@ -97,7 +100,7 @@ export class SystemToolService {
         const {type,...rawParams}=input,definition=definitions.find(item=>item.operation===type);
         if(!definition)throw new Error(`Unsupported ${app.id} operation: ${type}`);
         const params=validateToolArguments({name:definition.name,parameters:definition.parameters},{id:toolCallId,name:definition.name,arguments:rawParams});
-        const state = { toolCallId, name, definitionName:definition.name, label:definition.label, appId: definition.appId, operation: definition.operation, risk: definition.risk, params: structuredClone(params), phase: 'running', startedAt: Date.now() };
+        const state = { toolCallId, name, definitionName:definition.name, label:definition.label, appId: definition.appId, operation: definition.operation, risk: definition.risk, params: structuredClone(params), sessionId:String(owner.sessionId||''),turnId:String(owner.getTurnId?.()||owner.turnId||''),agentId:String(owner.agentId||''),agentName:String(owner.agentName||''),phase: 'running', startedAt: Date.now() };
         const onAbort=()=>{if(state.phase==='running'||state.phase==='approval'){state.phase='cancelled';state.finishedAt=Date.now();this.#setExecution(state)}};
         signal?.addEventListener('abort',onAbort,{once:true});
         this.#setExecution(state); onUpdate?.(toolResult(`Preparing ${definition.label}…`, state));

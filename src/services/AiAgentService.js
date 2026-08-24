@@ -100,6 +100,7 @@ export class AiAgentService {
         updatedAt: session.updatedAt,
         messageCount: session.messages.length,
         streaming: Boolean(this.agents.get(session.id)?.state.isStreaming),
+        busy: Boolean(this.sessionRuns.has(session.id)||this.settlingSessions.has(session.id)||this.agents.get(session.id)?.state.isStreaming),
       })).sort((a, b) => b.updatedAt - a.updatedAt),
     };
   }
@@ -255,6 +256,7 @@ export class AiAgentService {
       this.multiAgent?.finishTurn(turn.id,'failed',turn.error);
       if(this.activeTurns.get(id)===turn.id)this.activeTurns.delete(id);
       this.#saveState();
+      this.kernel?.bus.emit('ai:task-status',{sessionId:id,turnId:turn.id,status:'failed',error:turn.error});
       this.#emit('ai:agent-event',{sessionId:id,turnId:turn.id,event:{type:'turn_failed',error:turn.error}});
       throw error;
     } finally {
@@ -289,7 +291,7 @@ export class AiAgentService {
   abort(id) {
     const session=this.state.sessions.find(item=>item.id===id),activeId=this.activeTurns.get(id);
     if(session){
-      const active=session.turns.find(turn=>turn.id===activeId);if(active){active.status='stopped';active.updatedAt=now()}
+      const active=session.turns.find(turn=>turn.id===activeId);if(active){active.status='stopped';active.updatedAt=now();this.kernel?.bus.emit('ai:task-status',{sessionId:id,turnId:active.id,status:'cancelled'})}
     }
     this.multiAgent?.abortSession(id);
     this.activeTurns.delete(id);this.streamingAssistantMessages.delete(id);this.sessionRuns.delete(id);this.settlingSessions.delete(id);this.#saveState();
@@ -302,8 +304,8 @@ export class AiAgentService {
     const workerSessionId=`worker:${workflowId}:${nodeId}`;
     for(const skillName of profile.skills||[])try{await this.skillRegistry?.load(workerSessionId,skillName)}catch{}
     const selected=this.#selectedModelByKey(profile.modelKey),models=this.#models(),appIds=new Set(profile.toolApps||[]);
-    const appTools=(this.toolService?.agentTools()||[]).filter(tool=>{const appId=this.toolService?.metadata(tool.name)?.appId||tool.name.replace(/^aeris_/,'');return appIds.has(appId)&&this.isToolAppEnabled(appId)});
-    const skillTools=(this.skillRegistry?.agentTools(workerSessionId)||[]).filter(tool=>tool.name!=='aeris_load_skill');
+    const appTools=(this.toolService?.agentTools({sessionId,turnId,agentId:profile.id,agentName:profile.name})||[]).filter(tool=>{const appId=this.toolService?.metadata(tool.name)?.appId||tool.name.replace(/^aeris_/,'');return appIds.has(appId)&&this.isToolAppEnabled(appId)});
+    const skillTools=(this.skillRegistry?.agentTools(workerSessionId,null,{sessionId,turnId,agentId:profile.id,agentName:profile.name})||[]).filter(tool=>tool.name!=='aeris_load_skill');
     const delegate=depth<2?this.multiAgent?.workerTool({sessionId,turnId,workflowId,parentNodeId:nodeId,depth,excludeAgentId:profile.id}):null,skillPrompt=this.skillRegistry?.loadedPrompt(workerSessionId)||'';
     const workerPrompt=`${profile.systemPrompt||`You are the ${profile.name} specialist.`}\n\nYou are an isolated worker Agent inside Aeris. You cannot see the Main Agent conversation. Work only from the assignment and explicit handoff context. Use only registered tools, never invent results, and return a concise self-contained delivery for the parent Agent. Current local date and time: ${new Date().toString()}.${skillPrompt?`\n\nActive specialist instructions:\n${skillPrompt}`:''}`;
     const agent=new Agent({sessionId:workerSessionId,initialState:{systemPrompt:workerPrompt,model:this.#piModel(selected.provider,selected.model),messages:[],thinkingLevel:selected.model.reasoningEffort,tools:[...appTools,...skillTools,...(delegate?[delegate]:[])]},streamFn:(modelValue,agentContextValue,options)=>models.streamSimple(modelValue,agentContextValue,options),followUpMode:'one-at-a-time',steeringMode:'one-at-a-time',maxRetryDelayMs:12000});
@@ -413,6 +415,7 @@ export class AiAgentService {
           const title = typeof first?.content === 'string' ? first.content : first?.content?.find(block => block.type === 'text')?.text;
           if (title) session.title = title.trim().replace(/\s+/g, ' ').slice(0, 44);
         }
+        if(turn)this.kernel?.bus.emit('ai:task-status',{sessionId:id,turnId:turn.id,status:turn.status,error:turn.error||''});
         this.persist();
         this.#emit('ai:changed', { sessionId: id });
       }
