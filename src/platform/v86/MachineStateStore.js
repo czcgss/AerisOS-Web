@@ -1,5 +1,5 @@
 export class MachineStateStore {
-  constructor(databaseName = 'aeris-machine', storeName = 'snapshots') {
+  constructor(databaseName = 'future-machine', storeName = 'snapshots') {
     this.databaseName = databaseName;
     this.storeName = storeName;
     this.database = null;

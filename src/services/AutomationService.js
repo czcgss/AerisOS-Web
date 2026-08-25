@@ -1,4 +1,4 @@
-const STORAGE_KEY='aeris.automations.v1';
+const STORAGE_KEY='future.automations.v1';
 const clone=value=>structuredClone(value);
 const terminal=new Set(['completed','failed','cancelled']);
 

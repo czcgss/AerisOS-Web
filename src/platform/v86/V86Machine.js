@@ -4,7 +4,7 @@ import { MachineStateStore } from './MachineStateStore.js';
 
 const IMAGE_VERSION = 'alpine-3.24.1-x86-native-terminal-v12';
 const SNAPSHOT_SCHEMA_VERSION = 2;
-const V86_STATE_FORMAT_VERSION = 'v86-state-v6-aeris-uart3-v1';
+const V86_STATE_FORMAT_VERSION = 'v86-state-v6-future-uart3-v1';
 const V86_ASSET_VERSION = 'b80fba71-abd51298';
 const MACHINE_CONFIGURATION_VERSION = 'virtio-9p-net-uart0-3-no-speaker-v1';
 
@@ -62,7 +62,7 @@ export class V86Machine {
       filesystem: {}, autostart: false,
       network_relay_url: 'fetch', net_device: { type: 'virtio' },
       uart1: true, uart2: true, uart3: true,
-      // Aeris does not expose guest audio yet. Leaving v86's host speaker
+      // Future does not expose guest audio yet. Leaving v86's host speaker
       // adapter enabled can restore a latched PC-speaker oscillator from a
       // snapshot, producing a continuous tone until the page is closed.
       disable_speaker: true,
@@ -132,10 +132,10 @@ export class V86Machine {
   async #bootstrapAlpine() {
     this.#bootStage('creatingAccount', 78, 'install');
     const commands = [
-      "mkdir -p /mnt/aeris /home/aeris/Desktop /home/aeris/Documents/Notes /home/aeris/Downloads /home/aeris/Pictures /home/aeris/.local/share/Trash/files",
-      "id aeris >/dev/null 2>&1 || adduser -D -h /home/aeris -s /bin/ash aeris; passwd -d aeris >/dev/null 2>&1 || true",
-      "printf \"export PS1='aeris@aeris:\\\\w\\\\$ '\\n\" > /home/aeris/.profile; chown -R aeris:aeris /home/aeris /mnt/aeris",
-      "mount -t 9p host9p /mnt/aeris -o trans=virtio,version=9p2000.L 2>/dev/null || true; mkdir -p /mnt/aeris/Music; chown aeris:aeris /mnt/aeris/Music",
+      "mkdir -p /mnt/future /home/future/Desktop /home/future/Documents/Notes /home/future/Downloads /home/future/Pictures /home/future/.local/share/Trash/files",
+      "id future >/dev/null 2>&1 || adduser -D -h /home/future -s /bin/ash future; passwd -d future >/dev/null 2>&1 || true",
+      "printf \"export PS1='future@future:\\\\w\\\\$ '\\n\" > /home/future/.profile; chown -R future:future /home/future /mnt/future",
+      "mount -t 9p host9p /mnt/future -o trans=virtio,version=9p2000.L 2>/dev/null || true; mkdir -p /mnt/future/Music; chown future:future /mnt/future/Music",
     ];
     await this.sendUserInput(`${commands.join('; ')}\n`, 3);
     await new Promise(resolve => setTimeout(resolve, 1200));
@@ -154,7 +154,7 @@ export class V86Machine {
       await this.#resumeControlPlane();
     } catch (error) {
       this.controlReady = false;
-      throw new Error(`Unable to connect to the Aeris system service: ${error.message}`);
+      throw new Error(`Unable to connect to the Future system service: ${error.message}`);
     }
   }
 
@@ -167,7 +167,7 @@ export class V86Machine {
       capturedError=reason instanceof Error?reason:new Error(String(reason));
       // v86 can report device restore failures through the browser event loop
       // instead of rejecting restore_state(). Route those failures into the
-      // Aeris recovery UI rather than leaving them as ordinary browser errors.
+      // Future recovery UI rather than leaving them as ordinary browser errors.
       event?.preventDefault?.();
       rejectDeviceFailure(capturedError);
     };
@@ -231,7 +231,7 @@ export class V86Machine {
     const mismatch=comparable.find(key=>actual[key]!==expected[key]);
     if(!mismatch)return;
     const cause=new Error(`Snapshot ${mismatch} is ${JSON.stringify(actual[mismatch])}; this build requires ${JSON.stringify(expected[mismatch])}.`);
-    throw new MachineRestoreError('The saved virtual computer was created by an incompatible Aeris runtime. Your saved state has not been erased.',cause,'SNAPSHOT_INCOMPATIBLE');
+    throw new MachineRestoreError('The saved virtual computer was created by an incompatible Future runtime. Your saved state has not been erased.',cause,'SNAPSHOT_INCOMPATIBLE');
   }
 
   async #resumeControlPlane(){
@@ -265,7 +265,7 @@ export class V86Machine {
       throw new Error('The Linux control service did not respond after serial and console recovery');
     }
 
-    await this.serial.execute('mkdir -p /home/aeris/.local/share/Trash/files; chown -R aeris:aeris /home/aeris/.local',5000,true);
+    await this.serial.execute('mkdir -p /home/future/.local/share/Trash/files; chown -R future:future /home/future/.local',5000,true);
     await this.#installControlHelpers();
     const serialService=`serial_rule='ttyS0::respawn:/bin/ash -s'; sed -i '/^ttyS0::/d' /etc/inittab; printf '%s\\n' "$serial_rule" >> /etc/inittab; kill -HUP 1; for serial_pid in $(ps -eo pid,args 2>/dev/null | awk '((/getty/ && /ttyS0/) || /\/bin\/ash -s/) && !/awk/ {print $1}'); do kill -9 "$serial_pid" 2>/dev/null || true; done; stty -F /dev/ttyS0 115200 raw -echo 2>/dev/null || true`;
     await this.serial.execute(serialService,5000,true);
@@ -306,8 +306,8 @@ export class V86Machine {
       // quick restore probe race against its respawn.
       this.emulator.serial0_send('\u0015\n');
       await new Promise(resolve=>setTimeout(resolve,120));
-      const handshake=await this.serial.execute("printf 'aeris-serial-ready'",timeout,true);
-      return handshake.code===0&&handshake.output.replace(/\s+/g,'').includes('aeris-serial-ready');
+      const handshake=await this.serial.execute("printf 'future-serial-ready'",timeout,true);
+      return handshake.code===0&&handshake.output.replace(/\s+/g,'').includes('future-serial-ready');
     }catch{return false}
   }
 
@@ -326,17 +326,17 @@ export class V86Machine {
   }
 
   async #installControlHelpers(){
-    const check='[ -x /usr/local/bin/aeris_list ]';
+    const check='[ -x /usr/local/bin/future_list ]';
     const installed=await this.#probeGuest(check,4000);
     if(installed.passed||(!installed.answered&&this.bootMode==='restore'))return;
-    const fileHelper=`#!/bin/ash\n# AERIS_LIST_V1\np="$1"\n[ -d "$p" ] || exit 44\nfor f in "$p"/*; do\n  [ -e "$f" ] || continue\n  n=\${f##*/}\n  meta=$(stat -c '%s|%Y' "$f" 2>/dev/null || printf '0|0')\n  s=\${meta%%|*}; m=\${meta#*|}\n  if [ -d "$f" ]; then t=directory; s=0; else t=file; fi\n  printf '__AERIS_FILE__%s__AERIS_FIELD__%s__AERIS_FIELD__%s__AERIS_FIELD__%s__AERIS_ROW__' "$n" "$t" "$s" "$m"\ndone`;
+    const fileHelper=`#!/bin/ash\n# FUTURE_LIST_V1\np="$1"\n[ -d "$p" ] || exit 44\nfor f in "$p"/*; do\n  [ -e "$f" ] || continue\n  n=\${f##*/}\n  meta=$(stat -c '%s|%Y' "$f" 2>/dev/null || printf '0|0')\n  s=\${meta%%|*}; m=\${meta#*|}\n  if [ -d "$f" ]; then t=directory; s=0; else t=file; fi\n  printf '__FUTURE_FILE__%s__FUTURE_FIELD__%s__FUTURE_FIELD__%s__FUTURE_FIELD__%s__FUTURE_ROW__' "$n" "$t" "$s" "$m"\ndone`;
     const fileHelperPayload=btoa(fileHelper);
-    await this.#ensureGuestSetup(`mkdir -p /usr/local/bin; printf %s '${fileHelperPayload}' | base64 -d > /usr/local/bin/.aeris_list.new; chmod 755 /usr/local/bin/.aeris_list.new; mv /usr/local/bin/.aeris_list.new /usr/local/bin/aeris_list`,check,'Linux file helper');
+    await this.#ensureGuestSetup(`mkdir -p /usr/local/bin; printf %s '${fileHelperPayload}' | base64 -d > /usr/local/bin/.future_list.new; chmod 755 /usr/local/bin/.future_list.new; mv /usr/local/bin/.future_list.new /usr/local/bin/future_list`,check,'Linux file helper');
   }
 
   async #installTerminalServices(){
     this.#activateTerminalLines();
-    const check=`[ -x /usr/local/bin/aeris-terminal-login ] && grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || exit 1; for terminal_port in 1 2 3; do grep -q "^ttyS\${terminal_port}::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login " /etc/inittab || exit 1; done`;
+    const check=`[ -x /usr/local/bin/future-terminal-login ] && grep -q FUTURE_TERMINAL_PROFILE /home/future/.profile 2>/dev/null || exit 1; for terminal_port in 1 2 3; do grep -q "^ttyS\${terminal_port}::respawn:/sbin/getty -n -l /usr/local/bin/future-terminal-login " /etc/inittab || exit 1; done`;
     const installed=await this.#probeGuest(check,5000);
     if(installed.passed)return;
     // A successfully created snapshot already contains these services. A
@@ -344,23 +344,23 @@ export class V86Machine {
     // that guest files are absent; rewriting them here can turn a transient
     // UART delay into a boot failure.
     if(!installed.answered&&this.bootMode==='restore')return;
-    const loginHelper=`#!/bin/ash\nexport TERM=xterm-256color COLORTERM=truecolor\nexec /bin/login -f aeris`;
-    const profile=`\n# AERIS_TERMINAL_PROFILE\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nalias ls='ls --color=auto'\nalias ll='ls -lah --color=auto'\nPS1='\\[\\033[38;5;75m\\]aeris@aeris \\[\\033[38;5;110m\\]\\w \\[\\033[38;5;78m\\]❯ \\[\\033[0m\\]'\n`;
+    const loginHelper=`#!/bin/ash\nexport TERM=xterm-256color COLORTERM=truecolor\nexec /bin/login -f future`;
+    const profile=`\n# FUTURE_TERMINAL_PROFILE\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nalias ls='ls --color=auto'\nalias ll='ls -lah --color=auto'\nPS1='\\[\\033[38;5;75m\\]future@future \\[\\033[38;5;110m\\]\\w \\[\\033[38;5;78m\\]❯ \\[\\033[0m\\]'\n`;
     const encode=value=>{const bytes=new TextEncoder().encode(value);return btoa(String.fromCharCode(...bytes))};
     const helperPayload=encode(loginHelper),profilePayload=encode(profile);
     await this.#ensureGuestSetup(
-      `mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/.aeris-terminal-login.new; chmod 755 /usr/local/bin/.aeris-terminal-login.new; mv /usr/local/bin/.aeris-terminal-login.new /usr/local/bin/aeris-terminal-login`,
-      '[ -x /usr/local/bin/aeris-terminal-login ]',
+      `mkdir -p /usr/local/bin; printf %s '${helperPayload}' | base64 -d > /usr/local/bin/.future-terminal-login.new; chmod 755 /usr/local/bin/.future-terminal-login.new; mv /usr/local/bin/.future-terminal-login.new /usr/local/bin/future-terminal-login`,
+      '[ -x /usr/local/bin/future-terminal-login ]',
       'terminal login helper',
     );
     await this.#ensureGuestSetup(
-      `touch /home/aeris/.profile; grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/aeris/.profile; chown aeris:aeris /home/aeris/.profile`,
-      'grep -q AERIS_TERMINAL_PROFILE /home/aeris/.profile 2>/dev/null',
+      `touch /home/future/.profile; grep -q FUTURE_TERMINAL_PROFILE /home/future/.profile 2>/dev/null || printf %s '${profilePayload}' | base64 -d >> /home/future/.profile; chown future:future /home/future/.profile`,
+      'grep -q FUTURE_TERMINAL_PROFILE /home/future/.profile 2>/dev/null',
       'terminal profile',
     );
-    const terminalRules=`for terminal_port in 1 2 3; do grep -q "^ttyS\${terminal_port}::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login " /etc/inittab || exit 1; done`;
+    const terminalRules=`for terminal_port in 1 2 3; do grep -q "^ttyS\${terminal_port}::respawn:/sbin/getty -n -l /usr/local/bin/future-terminal-login " /etc/inittab || exit 1; done`;
     await this.#ensureGuestSetup(
-      `sed '/^ttyS[123]::/d' /etc/inittab > /tmp/aeris-inittab.new; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/aeris-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /tmp/aeris-inittab.new; done; cat /tmp/aeris-inittab.new > /etc/inittab; rm -f /tmp/aeris-inittab.new`,
+      `sed '/^ttyS[123]::/d' /etc/inittab > /tmp/future-inittab.new; for terminal_port in 1 2 3; do printf 'ttyS%s::respawn:/sbin/getty -n -l /usr/local/bin/future-terminal-login 115200 ttyS%s xterm-256color\\n' "$terminal_port" "$terminal_port" >> /tmp/future-inittab.new; done; cat /tmp/future-inittab.new > /etc/inittab; rm -f /tmp/future-inittab.new`,
       terminalRules,
       'terminal service rules',
     );
@@ -387,14 +387,14 @@ export class V86Machine {
       if(await this.#guestCheck(check,6000))return;
     }
     const timedOut=/timed out/i.test(lastError?.message||'');
-    throw new Error(timedOut?`The Aeris ${label} could not be verified after the Linux guest stopped responding.`:`Unable to configure the Aeris ${label}: ${lastError?.message||'unknown error'}`);
+    throw new Error(timedOut?`The Future ${label} could not be verified after the Linux guest stopped responding.`:`Unable to configure the Future ${label}: ${lastError?.message||'unknown error'}`);
   }
 
   async #launchControlPlane() {
     this.#bootStage('startingServices', 86, 'install');
     await this.sendUserInput('chvt 2\n', 5);
     await new Promise(resolve => setTimeout(resolve, 700));
-    await this.sendUserInput('aeris\n', 5);
+    await this.sendUserInput('future\n', 5);
     await new Promise(resolve => setTimeout(resolve, 500));
     await this.sendUserInput('clear\n', 5);
     setTimeout(() => this.#emitGuestReady(false).catch(error => this.kernel.bus.emit('guest:error', error)), 500);
@@ -504,7 +504,7 @@ export class V86Machine {
   terminalPorts(){return[1].sort((a,b)=>Number(this.terminalResets.has(a))-Number(this.terminalResets.has(b)))}
   executeAgentTerminal(command,timeout,signal){
     const terminal=this.terminals.get(2);
-    if(!terminal)return Promise.reject(new Error('The Aeris agent terminal is not available.'));
+    if(!terminal)return Promise.reject(new Error('The Future agent terminal is not available.'));
     return terminal.execute(command,timeout,signal);
   }
   resizeTerminal(port,columns,rows){
@@ -574,8 +574,8 @@ export class V86Machine {
   #setStatus(status) { this.status=status;this.kernel?.bus.emit('machine:status',status); }
 
   async #loadRuntime() {
-    if(window.V86&&window.__aerisV86RuntimeVersion===V86_ASSET_VERSION){const loaded=[...document.scripts].reverse().find(script=>/\/libv86\.js(?:\?|$)/.test(script.src));this.base=window.__aerisV86Base||(loaded?new URL('.',loaded.src).pathname.replace(/\/$/,''):'/v86');return window.V86;}
-    for(const base of ['/v86','/public/v86']){try{await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=`${base}/libv86.js?v=${V86_ASSET_VERSION}`;script.onload=resolve;script.onerror=reject;document.head.appendChild(script)});this.base=base;window.__aerisV86Base=base;window.__aerisV86RuntimeVersion=V86_ASSET_VERSION;return window.V86}catch{}}
+    if(window.V86&&window.__futureV86RuntimeVersion===V86_ASSET_VERSION){const loaded=[...document.scripts].reverse().find(script=>/\/libv86\.js(?:\?|$)/.test(script.src));this.base=window.__futureV86Base||(loaded?new URL('.',loaded.src).pathname.replace(/\/$/,''):'/v86');return window.V86;}
+    for(const base of ['/v86','/public/v86']){try{await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=`${base}/libv86.js?v=${V86_ASSET_VERSION}`;script.onload=resolve;script.onerror=reject;document.head.appendChild(script)});this.base=base;window.__futureV86Base=base;window.__futureV86RuntimeVersion=V86_ASSET_VERSION;return window.V86}catch{}}
     throw new Error('Unable to load the v86 runtime');
   }
 }

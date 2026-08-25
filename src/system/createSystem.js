@@ -1,4 +1,4 @@
-import { AerisKernel } from '../kernel/AerisKernel.js';
+import { FutureKernel } from '../kernel/FutureKernel.js';
 import { SettingsService } from '../services/SettingsService.js';
 import { ThemeRuntimeService } from '../services/ThemeRuntimeService.js';
 import { builtinThemes } from '../themes/BuiltinThemes.js';
@@ -68,8 +68,8 @@ import { attachActivitySurfaces } from '../apps/activity/index.js';
 import { systemTaskCapability } from './SystemCapabilities.js';
 
 export async function createSystem(root) {
-  window.aeris={ phase:'starting' };
-  const kernel=new AerisKernel();
+  window.future={ phase:'starting' };
+  const kernel=new FutureKernel();
   const settings=kernel.register('settings',new SettingsService());
   await settings.start();
   const themeRuntime=kernel.register('themeRuntime',new ThemeRuntimeService({settings,storage:localStorage,bundledThemes:builtinThemes}));
@@ -126,7 +126,7 @@ export async function createSystem(root) {
   multiAgent.setRunner(options=>aiAgent.runIsolatedAgent(options));
   const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,system,metrics,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
-  window.aeris={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,shell};
+  window.future={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,shell};
   await kernel.boot();
-  return window.aeris;
+  return window.future;
 }

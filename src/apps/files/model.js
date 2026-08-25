@@ -1,6 +1,6 @@
-export const HOME='/home/aeris';
-export const SHARED='/mnt/aeris';
-export const TRASH='/home/aeris/.local/share/Trash/files';
+export const HOME='/home/future';
+export const SHARED='/mnt/future';
+export const TRASH='/home/future/.local/share/Trash/files';
 
 export const LOCATIONS=[
   {key:'home',path:HOME,icon:'home',section:'favorites'},

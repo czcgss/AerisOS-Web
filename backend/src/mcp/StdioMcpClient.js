@@ -1,7 +1,7 @@
 import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 
-const CLIENT={name:'aeris-browser-backend',version:'0.1.0'};
+const CLIENT={name:'future-browser-backend',version:'0.1.0'};
 
 export class StdioMcpClient{
   constructor({command,args=[],env=process.env,timeout=30000}){this.command=command;this.args=args;this.env=env;this.timeout=timeout;this.sequence=0;this.pending=new Map();this.tools=[];this.state='idle';this.stderr=[]}

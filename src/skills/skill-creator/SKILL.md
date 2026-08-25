@@ -1,11 +1,11 @@
 ---
 name: skill-creator
-description: Create, inspect, validate, install, update, enable, and disable Aeris Agent Skills when the user asks to add a reusable workflow, knowledge pack, or Python-assisted capability.
+description: Create, inspect, validate, install, update, enable, and disable Future Agent Skills when the user asks to add a reusable workflow, knowledge pack, or Python-assisted capability.
 ---
 
-# Create an Aeris Skill
+# Create a Future Skill
 
-Use this Skill only for reusable Agent instructions, knowledge resources, templates, or browser-hosted Python helpers. An Aeris Skill is not an application, desktop widget, theme, or arbitrary native system tool. Use the corresponding creator Skill for those artifacts.
+Use this Skill only for reusable Agent instructions, knowledge resources, templates, or browser-hosted Python helpers. A Future Skill is not an application, desktop widget, theme, or arbitrary native system tool. Use the corresponding creator Skill for those artifacts.
 
 The bundled `references/skill-runtime.md` contract is authoritative. Do not invent package fields, executable runtimes, native permissions, or file locations.
 
@@ -17,7 +17,7 @@ The bundled `references/skill-runtime.md` contract is authoritative. Do not inve
 4. Add a `scripts/` Python helper only when deterministic computation or transformation improves reliability. Do not add scripts for prose-only workflows.
 5. Add `assets/` only for text templates or SVG assets that belong in generated output.
 6. Reference every supporting file by its exact package-relative path from the instructions, explaining when it should be read or executed.
-7. Call `aeris_skill_studio` with type `validate` and the complete package JSON. Correct every validation error.
+7. Call `future_skill_studio` with type `validate` and the complete package JSON. Correct every validation error.
 8. Call type `install` with the returned `draftId`.
 9. Report the installed Skill name, its intended trigger, supporting resources, and whether Python is available.
 

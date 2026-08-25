@@ -1,4 +1,4 @@
-const STORAGE_KEY='aeris.system-tasks.v1';
+const STORAGE_KEY='future.system-tasks.v1';
 const MAX_TASKS=240;
 const terminal=new Set(['completed','failed','cancelled']);
 const clone=value=>structuredClone(value);

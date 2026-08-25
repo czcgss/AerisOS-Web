@@ -47,11 +47,11 @@ export class SerialBridge {
     this.buffer = '';
     const { id, command, timeout } = this.active;
     this.bus.emit('system:command-start', { id });
-    const begin = `__AERIS_BEGIN_${id}__`, end = `__AERIS_END_${id}__`;
+    const begin = `__FUTURE_BEGIN_${id}__`, end = `__FUTURE_END_${id}__`;
     this.active.begin = begin; this.active.end = end;
     const guestSeconds=Math.max(1,Math.floor((timeout-350)/1000));
     const body=this.transport==='serial'?`printf %s '${encodeCommand(command)}' | base64 -d | timeout -s KILL ${guestSeconds} /bin/ash`:command;
-    await this.write(`export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/usr/sbin:/bin:/usr/bin; printf '\\n${begin}\\n'; ${body}; __aeris_status=$?; printf '\\n${end}:%s\\n' "$__aeris_status"\n`);
+    await this.write(`export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/usr/sbin:/bin:/usr/bin; printf '\\n${begin}\\n'; ${body}; __future_status=$?; printf '\\n${end}:%s\\n' "$__future_status"\n`);
     if(!this.active||this.active.id!==id)return;
     this.active.timer = setTimeout(() => this.#finish(new Error(`Guest command timed out: ${command}`)), timeout);
     if (this.transport !== 'serial') this.active.poll = setInterval(() => this.#inspect(this.machine.screenRows().join('\n')), 80);

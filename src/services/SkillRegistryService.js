@@ -1,7 +1,7 @@
 import { Type } from '@earendil-works/pi-ai';
 import { formatSkillInvocation, formatSkillsForSystemPrompt } from '@earendil-works/pi-agent-core';
 
-const STORAGE_KEY='aeris.ai.skills.v1';
+const STORAGE_KEY='future.ai.skills.v1';
 const MAX_FILES=250;
 const MAX_FILE_BYTES=5*1024*1024;
 const MAX_PACKAGE_BYTES=15*1024*1024;
@@ -42,7 +42,7 @@ export class SkillRegistryService {
   registerBundled(skill){if(!skill?.name)throw new Error('Built-in Skill requires a name.');if(this.skills.has(skill.name))throw new Error(`Skill is already registered: ${skill.name}`);this.skills.set(skill.name,{...skill,bundled:true,enabled:true,files:null,pythonScripts:[],legacy:false});return skill}
   list(){return [...this.skills.values()].map(skill=>({name:skill.name,description:skill.description,filePath:skill.filePath,bundled:skill.bundled,enabled:skill.enabled,toolCount:(skill.tools?.length||0)+(this.#hasResources(skill)?1:0)+(skill.pythonScripts?.length?1:0),fileCount:skill.files?Object.keys(skill.files).length:1,python:!!skill.pythonScripts?.length}));}
   toolMetadata(name){
-    if(name==='aeris_load_skill')return{kind:'loader',skillName:'',label:'Load Skill'};
+    if(name==='future_load_skill')return{kind:'loader',skillName:'',label:'Load Skill'};
     for(const skill of this.skills.values()){
       if(this.#pythonToolName(skill)===name&&skill.pythonScripts?.length)return{kind:'skill',skillName:skill.name,label:`${skill.name} Python`};
       if(this.#resourceToolName(skill)===name&&this.#hasResources(skill))return{kind:'skill',skillName:skill.name,label:`${skill.name} resources`};
@@ -51,7 +51,7 @@ export class SkillRegistryService {
     return null;
   }
   enabledSkills(){return [...this.skills.values()].filter(skill=>skill.enabled).map(skill=>({name:skill.name,description:skill.description,content:skill.content,filePath:skill.filePath,disableModelInvocation:false}));}
-  prompt(){const catalog=formatSkillsForSystemPrompt(this.enabledSkills());return catalog?`${catalog}\n\nUse the aeris_load_skill tool to read a matching skill before following it. Skill-owned tools become available only after that load completes.`:'';}
+  prompt(){const catalog=formatSkillsForSystemPrompt(this.enabledSkills());return catalog?`${catalog}\n\nUse the future_load_skill tool to read a matching skill before following it. Skill-owned tools become available only after that load completes.`:'';}
   loadedPrompt(sessionId){return [...(this.loadedBySession.get(sessionId)||[])].map(name=>this.skills.get(name)).filter(skill=>skill?.enabled&&skill.content).map(skill=>formatSkillInvocation({...skill,content:this.#invocationContent(skill)})).join('\n\n');}
 
   async load(sessionId,name){
@@ -76,7 +76,7 @@ export class SkillRegistryService {
 
   install(raw){
     const parsed=parseSkill(raw);if(this.skills.has(parsed.name))throw new Error(`Skill is already installed: ${parsed.name}`);
-    this.skills.set(parsed.name,{name:parsed.name,description:parsed.description,content:parsed.content,filePath:`aeris://skills/${parsed.name}/SKILL.md`,bundled:false,enabled:true,tools:[],files:null,pythonScripts:[],legacy:true});this.#persist();this.kernel?.bus.emit('skill:changed',{name:parsed.name,enabled:true,installed:true});return parsed.name;
+    this.skills.set(parsed.name,{name:parsed.name,description:parsed.description,content:parsed.content,filePath:`future://skills/${parsed.name}/SKILL.md`,bundled:false,enabled:true,tools:[],files:null,pythonScripts:[],legacy:true});this.#persist();this.kernel?.bus.emit('skill:changed',{name:parsed.name,enabled:true,installed:true});return parsed.name;
   }
 
   async installPackage(entries){
@@ -85,7 +85,7 @@ export class SkillRegistryService {
     if(!skillFile)throw new Error('The selected folder must contain SKILL.md at its root.');
     const parsed=parseSkill(new TextDecoder().decode(skillFile.bytes)),existing=this.skills.get(parsed.name);
     if(existing?.bundled)throw new Error(`A built-in Skill already uses this name: ${parsed.name}`);
-    const skillPackage={name:parsed.name,description:parsed.description,content:parsed.content,filePath:`aeris://skills/${parsed.name}/SKILL.md`,files,installedAt:Date.now()};
+    const skillPackage={name:parsed.name,description:parsed.description,content:parsed.content,filePath:`future://skills/${parsed.name}/SKILL.md`,files,installedAt:Date.now()};
     const enabled=existing?.enabled??true;await this.packageStore.put(skillPackage);this.skills.set(parsed.name,this.#record(skillPackage,enabled));this.#persist();this.kernel?.bus.emit('skill:changed',{name:parsed.name,enabled,installed:!existing,updated:!!existing,package:true});return parsed.name;
   }
 
@@ -108,7 +108,7 @@ export class SkillRegistryService {
 
   agentTools(sessionId,onChanged,owner={}){
     const loaded=this.loadedBySession.get(sessionId)||new Set();this.loadedBySession.set(sessionId,loaded);
-    const loadTool={name:'aeris_load_skill',label:'Load Aeris skill',description:'Load the full instructions and native tools for one enabled Aeris skill before performing the matching specialized task.',parameters:Type.Object({name:Type.String({description:'Exact skill name from available_skills.'})},{additionalProperties:false}),executionMode:'sequential',execute:async(_toolCallId,{name})=>{const skill=await this.load(sessionId,name);onChanged?.();const tools=[...(skill.tools||[]).map(tool=>tool.name),...(this.#hasResources(skill)?[this.#resourceToolName(skill)]:[]),...(skill.pythonScripts?.length?[this.#pythonToolName(skill)]:[])];return result(formatSkillInvocation({...skill,content:this.#invocationContent(skill)}),{skillId:skill.name,operation:'load',phase:'completed',result:{name:skill.name,tools}})}};
+    const loadTool={name:'future_load_skill',label:'Load Future skill',description:'Load the full instructions and native tools for one enabled Future skill before performing the matching specialized task.',parameters:Type.Object({name:Type.String({description:'Exact skill name from available_skills.'})},{additionalProperties:false}),executionMode:'sequential',execute:async(_toolCallId,{name})=>{const skill=await this.load(sessionId,name);onChanged?.();const tools=[...(skill.tools||[]).map(tool=>tool.name),...(this.#hasResources(skill)?[this.#resourceToolName(skill)]:[]),...(skill.pythonScripts?.length?[this.#pythonToolName(skill)]:[])];return result(formatSkillInvocation({...skill,content:this.#invocationContent(skill)}),{skillId:skill.name,operation:'load',phase:'completed',result:{name:skill.name,tools}})}};
     const active=[...loaded].map(name=>this.skills.get(name)).filter(skill=>skill?.enabled),owned=active.flatMap(skill=>skill.tools||[]).map(tool=>typeof tool.forSession==='function'?tool.forSession(sessionId):tool),resources=active.filter(skill=>this.#hasResources(skill)).map(skill=>this.#resourceTool(skill)),python=active.filter(skill=>skill.pythonScripts?.length).map(skill=>this.#pythonTool(skill));
     const tools=[loadTool,...owned,...resources,...python];return this.approvalService?.bindOwner?tools.map(tool=>this.approvalService.bindOwner(tool,{sessionId,...owner})):tools;
   }
@@ -123,9 +123,9 @@ export class SkillRegistryService {
   #pythonTool(skill){
     const name=this.#pythonToolName(skill),scripts=skill.pythonScripts.join(', '),optional=description=>Type.Optional(Type.String({description}));
     return{name,label:`Run ${skill.name} Python`,description:`Run one Python script included with the loaded ${skill.name} Skill. Available scripts: ${scripts}. Input and output use JSON.`,executionMode:'sequential',parameters:Type.Object({script:Type.String({description:`Exact script path. Available: ${scripts}`}),inputJson:optional('JSON value passed to main(input). Defaults to an empty object.')},{additionalProperties:false}),execute:async(toolCallId,{script,inputJson},signal,onUpdate)=>{
-      const path=safePath(script);if(!skill.pythonScripts.includes(path))throw new Error(`Python script is not available in ${skill.name}: ${path}`);if(!this.pythonRuntime)throw new Error('The Aeris Python runtime is unavailable.');
+      const path=safePath(script);if(!skill.pythonScripts.includes(path))throw new Error(`Python script is not available in ${skill.name}: ${path}`);if(!this.pythonRuntime)throw new Error('The Future Python runtime is unavailable.');
       let input={};if(inputJson)try{input=JSON.parse(inputJson)}catch{throw new Error('Python Skill inputJson must contain valid JSON.');}
-      if(!this.approvalService)throw new Error('Aeris approval service is unavailable.');
+      if(!this.approvalService)throw new Error('Future approval service is unavailable.');
       const outcome=await this.approvalService.runProtected({toolCallId,name,label:`Run ${skill.name} Python`,appId:'ai',operation:'run_python',params:{skill:skill.name,script:path,input},approvalMessage:`Allow the “${skill.name}” Skill to run ${path} in the browser Python sandbox?`},signal,onUpdate,async()=>{const stored=await this.packageStore.readAll(skill.name);return this.pythonRuntime.execute({skill:skill.name,script:path,input,files:Object.fromEntries(Object.entries(stored).map(([file,entry])=>[file,entry.bytes])),signal})});
       if(!outcome.approved)return result('The user denied the Python Skill execution request.',{...outcome.state,skillId:skill.name});
       const value=outcome.value,output=JSON.stringify(value.value,null,2),logs=[value.stdout&&`stdout:\n${value.stdout}`,value.stderr&&`stderr:\n${value.stderr}`].filter(Boolean).join('\n\n');
@@ -141,10 +141,10 @@ export class SkillRegistryService {
     }};
   }
 
-  #pythonToolName(skill){return`aeris_python_${String(skill.name||'skill').replace(/-/g,'_').slice(0,42)}`}
-  #resourceToolName(skill){return`aeris_resources_${String(skill.name||'skill').replace(/-/g,'_').slice(0,39)}`}
+  #pythonToolName(skill){return`future_python_${String(skill.name||'skill').replace(/-/g,'_').slice(0,42)}`}
+  #resourceToolName(skill){return`future_resources_${String(skill.name||'skill').replace(/-/g,'_').slice(0,39)}`}
   #hasResources(skill){return Boolean(skill.files&&Object.keys(skill.files).some(path=>path!=='SKILL.md'))}
-  #invocationContent(skill){let content=skill.content||'';if(this.#hasResources(skill)){const resources=Object.keys(skill.files).filter(path=>path!=='SKILL.md').sort();content+=`\n\n## Aeris Skill Resources\nThis Skill package includes: ${resources.join(', ')}. Use the ${this.#resourceToolName(skill)} tool to list or read referenced text resources.`}if(skill.pythonScripts?.length)content+=`\n\n## Aeris Python Runtime\nThis Skill includes browser-hosted Python scripts: ${skill.pythonScripts.join(', ')}. Use the ${this.#pythonToolName(skill)} tool to run them. Pass the script's input as JSON in inputJson. Python starts only when invoked and is released after 60 seconds of inactivity.`;return content}
+  #invocationContent(skill){let content=skill.content||'';if(this.#hasResources(skill)){const resources=Object.keys(skill.files).filter(path=>path!=='SKILL.md').sort();content+=`\n\n## Future Skill Resources\nThis Skill package includes: ${resources.join(', ')}. Use the ${this.#resourceToolName(skill)} tool to list or read referenced text resources.`}if(skill.pythonScripts?.length)content+=`\n\n## Future Python Runtime\nThis Skill includes browser-hosted Python scripts: ${skill.pythonScripts.join(', ')}. Use the ${this.#pythonToolName(skill)} tool to run them. Pass the script's input as JSON in inputJson. Python starts only when invoked and is released after 60 seconds of inactivity.`;return content}
   #record(skillPackage,enabled){const files=Object.fromEntries(Object.entries(skillPackage.files||{}).map(([path,file])=>[path,{type:file.type,size:file.size}])),pythonScripts=Object.keys(files).filter(path=>/^scripts\/.+\.py$/i.test(path)).sort();return{...skillPackage,bundled:false,enabled,tools:[],files,pythonScripts,legacy:false}}
   #normalisePackage(entries){
     const source=[...(entries||[])].map(entry=>({path:String(entry.path||entry.webkitRelativePath||entry.name||''),bytes:entry.bytes instanceof Uint8Array?entry.bytes:new Uint8Array(entry.bytes||[]),type:String(entry.type||'application/octet-stream')})).filter(entry=>entry.path&&!/(^|\/)(?:\.git|node_modules|__pycache__)(?:\/|$)|(^|\/)\.DS_Store$/i.test(entry.path));

@@ -1,4 +1,4 @@
-const STORAGE_KEY='aeris.operation-history.v1';
+const STORAGE_KEY='future.operation-history.v1';
 const MAX_RECORDS=300;
 const clone=value=>structuredClone(value);
 

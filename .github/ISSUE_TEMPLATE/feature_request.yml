@@ -1,11 +1,11 @@
 name: Feature request
-description: Propose a focused improvement to Aeris
+description: Propose a focused improvement to Future
 title: "[Feature]: "
 labels: [enhancement]
 body:
   - type: markdown
     attributes:
-      value: Thanks for helping improve Aeris. Please describe the user problem before the proposed UI.
+      value: Thanks for helping improve Future. Please describe the user problem before the proposed UI.
   - type: textarea
     id: problem
     attributes:

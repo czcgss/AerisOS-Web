@@ -1,15 +1,15 @@
-# AerisOS backend
+# FutureOS backend
 
-The backend is an optional host-side capability service. AerisOS still boots and
+The backend is an optional host-side capability service. FutureOS still boots and
 runs without it; capabilities that require native host processes, such as
 Browser Use, connect through this service when available.
 
 ## Boundaries
 
 ```text
-Aeris Agent -> registered Aeris tool -> frontend service -> HTTP API
+Future Agent -> registered Future tool -> frontend service -> HTTP API
                                                     -> Browser Use MCP --+
-Aeris Browser App <-> screenshot/input API -> Chromium CDP <------------+
+Future Browser App <-> screenshot/input API -> Chromium CDP <------------+
 Skill ---------------------------- usage policy and workflow only
 ```
 
@@ -27,7 +27,7 @@ pointer, keyboard, scroll, history, and navigation input through the backend.
 Frames are acknowledged immediately and stale frames are dropped under
 backpressure. It no longer embeds external pages in an iframe. The Agent never receives a generic Node.js
 execution endpoint. Only allowlisted browser operations are exposed. Browser
-interactions that can submit or mutate remote data remain protected Aeris tools
+interactions that can submit or mutate remote data remain protected Future tools
 and require user approval.
 
 ## Development

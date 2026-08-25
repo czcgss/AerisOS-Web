@@ -24,12 +24,12 @@ export class GuestSystemService {
     if(!source.trim())throw new Error('A terminal command is required.');
     if(source.includes('\0'))throw new Error('Terminal commands cannot contain null bytes.');
     if(source.length>24000)throw new Error('Terminal command is too long.');
-    const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/aeris-agent-${id}.sh`,encoded=base64(source),seconds=Math.max(1,Math.ceil(timeout/1000));
+    const id=crypto.randomUUID().replace(/-/g,'').slice(0,16),script=`/tmp/future-agent-${id}.sh`,encoded=base64(source),seconds=Math.max(1,Math.ceil(timeout/1000));
     const prepare=`printf %s ${quote(encoded)} | base64 -d > ${quote(script)}`;
     if(signal?.aborted)throw new DOMException('System action cancelled.','AbortError');
     // Agent commands use a reserved real login terminal (ttyS2), not the
     // root service channel (ttyS0). This matches Terminal app shell semantics.
-    const run=`cd /home/aeris && timeout -s TERM ${seconds} /bin/ash ${quote(script)}`;
+    const run=`cd /home/future && timeout -s TERM ${seconds} /bin/ash ${quote(script)}`;
     const wrapper=`( ${prepare} && ${run}; agent_status=$?; rm -f ${quote(script)}; exit "$agent_status" )`;
     try{
       const result=await this.machine.executeAgentTerminal(wrapper,timeout+7000,signal);
@@ -53,7 +53,7 @@ export class GuestSystemService {
       .map(([pid,status,name])=>({pid,status,name}));
   }
 
-  async list(path = '/mnt/aeris', { priority = false, timeout = 12000, fresh = false, instant = false } = {}) {
+  async list(path = '/mnt/future', { priority = false, timeout = 12000, fresh = false, instant = false } = {}) {
     const key=String(path);
     const shared=this.#sharedPath(key);
     if(shared!==null)try{
@@ -68,24 +68,24 @@ export class GuestSystemService {
 
   cachedList(path){const cached=this.directoryCache.get(String(path));return cached?structuredClone(cached.entries):null}
   async #refreshDirectory(path,options={}){const active=this.listInflight.get(path);if(active){if(!options.fresh)return active;await active.catch(()=>{})}const revision=this.directoryRevision.get(path)||0;const request=this.#readDirectory(path,options).then(entries=>{if((this.directoryRevision.get(path)||0)===revision){this.#cacheDirectory(path,entries);this.kernel?.bus.emit('filesystem:list-updated',{path,entries:structuredClone(entries)})}return structuredClone(entries)}).catch(error=>{this.kernel?.bus.emit('filesystem:list-error',{path,error:error.message});throw error}).finally(()=>{if(this.listInflight.get(path)===request)this.listInflight.delete(path)});this.listInflight.set(path,request);return request}
-  #loadDirectoryCache(){try{const stored=JSON.parse(localStorage.getItem('aeris.files.directory-cache')||'{}');return new Map(Object.entries(stored).filter(([,value])=>Array.isArray(value?.entries)))}catch{return new Map()}}
-  #seedDirectoryCache(){const directory=(name)=>({name,type:'directory',size:0,modified:0}),seeds={'/home/aeris':['Desktop','Documents','Downloads','Pictures'].map(directory),'/home/aeris/Desktop':[],'/home/aeris/Documents':[],'/home/aeris/Downloads':[],'/home/aeris/Pictures':[],'/mnt/aeris/Music':[],'/home/aeris/.local/share/Trash/files':[]};for(const [path,entries] of Object.entries(seeds))if(!this.directoryCache.has(path))this.directoryCache.set(path,{entries,updatedAt:0})}
-  #cacheDirectory(path,entries){this.directoryCache.set(path,{entries:structuredClone(entries),updatedAt:Date.now()});const recent=[...this.directoryCache.entries()].sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0)).slice(0,60);try{localStorage.setItem('aeris.files.directory-cache',JSON.stringify(Object.fromEntries(recent)))}catch{}}
+  #loadDirectoryCache(){try{const stored=JSON.parse(localStorage.getItem('future.files.directory-cache')||'{}');return new Map(Object.entries(stored).filter(([,value])=>Array.isArray(value?.entries)))}catch{return new Map()}}
+  #seedDirectoryCache(){const directory=(name)=>({name,type:'directory',size:0,modified:0}),seeds={'/home/future':['Desktop','Documents','Downloads','Pictures'].map(directory),'/home/future/Desktop':[],'/home/future/Documents':[],'/home/future/Downloads':[],'/home/future/Pictures':[],'/mnt/future/Music':[],'/home/future/.local/share/Trash/files':[]};for(const [path,entries] of Object.entries(seeds))if(!this.directoryCache.has(path))this.directoryCache.set(path,{entries,updatedAt:0})}
+  #cacheDirectory(path,entries){this.directoryCache.set(path,{entries:structuredClone(entries),updatedAt:Date.now()});const recent=[...this.directoryCache.entries()].sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0)).slice(0,60);try{localStorage.setItem('future.files.directory-cache',JSON.stringify(Object.fromEntries(recent)))}catch{}}
   #invalidateDirectory(path){const cached=this.directoryCache.get(path);if(cached){cached.updatedAt=0;this.#cacheDirectory(path,cached.entries)}}
-  async #warmDirectories(){for(const path of ['/home/aeris','/home/aeris/Desktop','/home/aeris/Documents','/home/aeris/Downloads','/home/aeris/Pictures']){if(!this.ready)break;await this.#refreshDirectory(path,{priority:false,timeout:8000}).catch(()=>{});await new Promise(resolve=>setTimeout(resolve,80))}}
+  async #warmDirectories(){for(const path of ['/home/future','/home/future/Desktop','/home/future/Documents','/home/future/Downloads','/home/future/Pictures']){if(!this.ready)break;await this.#refreshDirectory(path,{priority:false,timeout:8000}).catch(()=>{});await new Promise(resolve=>setTimeout(resolve,80))}}
 
   async #readDirectory(path,{priority,timeout}) {
-    const command = `/usr/local/bin/aeris_list ${quote(path)}`;
+    const command = `/usr/local/bin/future_list ${quote(path)}`;
     let lastError;
     for(let attempt=0;attempt<2;attempt++)try{
       const result=priority?await this.execInteractive(command,timeout+attempt*5000):await this.exec(command,timeout+attempt*5000);
       if(result.code===44)throw new Error(`Directory not found: ${path}`);
       if(result.code!==0)throw new Error(result.output||`Unable to read directory: ${path}`);
       // VGA is a fixed-width text transport, so it may insert visual line wraps
-      // in the middle of a filename or protocol marker. aeris_list itself emits
+      // in the middle of a filename or protocol marker. future_list itself emits
       // no record newlines; removing those wraps restores the original payload.
       const payload=result.output.replace(/[\r\n]/g,'');
-      return payload.split('__AERIS_FILE__').slice(1).map(row=>row.split('__AERIS_ROW__')[0]).map(row => { const [name,type,size,modified]=row.split('__AERIS_FIELD__',4); return {name:name?.trim() || '',type:type?.trim(),size:Number(size)||0,modified:Number(modified)||0}; }).filter(entry=>entry.name);
+      return payload.split('__FUTURE_FILE__').slice(1).map(row=>row.split('__FUTURE_ROW__')[0]).map(row => { const [name,type,size,modified]=row.split('__FUTURE_FIELD__',4); return {name:name?.trim() || '',type:type?.trim(),size:Number(size)||0,modified:Number(modified)||0}; }).filter(entry=>entry.name);
     }catch(error){lastError=error;if(!/timed out/i.test(error.message)||attempt===1)throw error}
     throw lastError;
   }
@@ -104,12 +104,12 @@ export class GuestSystemService {
   }
   async writeBytes(path, bytes, { priority = true } = {}) {
     const shared=this.#sharedPath(path);
-    if(shared!==null){const parent=path.split('/').slice(0,-1).join('/')||'/mnt/aeris';await this.execChecked(`mkdir -p ${quote(parent)}`,12000,{priority});await this.machine.writeSharedBytes(shared,bytes);this.#changed(path);return path}
-    throw new Error('Binary imports must be saved in the shared Aeris filesystem.');
+    if(shared!==null){const parent=path.split('/').slice(0,-1).join('/')||'/mnt/future';await this.execChecked(`mkdir -p ${quote(parent)}`,12000,{priority});await this.machine.writeSharedBytes(shared,bytes);this.#changed(path);return path}
+    throw new Error('Binary imports must be saved in the shared Future filesystem.');
   }
   async write(path, content, { priority = true } = {}) { const result=await this.execChecked(`mkdir -p ${quote(path.split('/').slice(0,-1).join('/')||'/')}; printf %s ${quote(content)} > ${quote(path)}`,12000,{priority});this.#changed(path);return result; }
   async writeChunked(path, content, { chunkSize = 6000, priority = true } = {}) {
-    const directory=path.split('/').slice(0,-1).join('/')||'/',temporary=`${path}.aeris-writing`,encodedPath=`${temporary}.b64`;
+    const directory=path.split('/').slice(0,-1).join('/')||'/',temporary=`${path}.future-writing`,encodedPath=`${temporary}.b64`;
     const bytes=new TextEncoder().encode(String(content));let binary='';
     for(let offset=0;offset<bytes.length;offset+=32768)binary+=String.fromCharCode(...bytes.subarray(offset,offset+32768));
     const encoded=btoa(binary);
@@ -128,14 +128,14 @@ export class GuestSystemService {
   async copy(path, { priority = true } = {}) { const parent=path.split('/').slice(0,-1).join('/')||'/',name=path.split('/').at(-1),stem=name.replace(/(\.[^.]*)$/,''),ext=name.slice(stem.length);let target=`${parent}/${stem} copy${ext}`,index=2;while((await (priority?this.execInteractive(`[ -e ${quote(target)} ]`):this.exec(`[ -e ${quote(target)} ]`))).code===0)target=`${parent}/${stem} copy ${index++}${ext}`;await this.execChecked(`cp -a ${quote(path)} ${quote(target)}`,20000,{priority});this.#changed(target);return target; }
   async move(path, directory, { priority = true } = {}) { const target=`${directory}/${path.split('/').at(-1)}`;await this.execChecked(`[ -d ${quote(directory)} ] && [ ! -e ${quote(target)} ] && mv ${quote(path)} ${quote(target)}`,20000,{priority});this.#changed(path);this.#changed(target);return target; }
   async copyTo(path,directory,{priority=true}={}){let name=path.split('/').at(-1),target=`${directory}/${name}`,index=2;while((await (priority?this.execInteractive(`[ -e ${quote(target)} ]`):this.exec(`[ -e ${quote(target)} ]`))).code===0){const dot=name.lastIndexOf('.'),stem=dot>0?name.slice(0,dot):name,ext=dot>0?name.slice(dot):'';target=`${directory}/${stem} ${index++}${ext}`}await this.execChecked(`mkdir -p ${quote(directory)}; cp -a ${quote(path)} ${quote(target)}`,20000,{priority});this.#changed(target);return target}
-  #trashOrigins(){try{return JSON.parse(localStorage.getItem('aeris.trash.origins')||'{}')}catch{return{}}}
-  #saveTrashOrigins(value){localStorage.setItem('aeris.trash.origins',JSON.stringify(value))}
+  #trashOrigins(){try{return JSON.parse(localStorage.getItem('future.trash.origins')||'{}')}catch{return{}}}
+  #saveTrashOrigins(value){localStorage.setItem('future.trash.origins',JSON.stringify(value))}
   trashOrigin(name){return this.#trashOrigins()[name]||''}
-  async trash(path, { priority = true } = {}) { const trash='/home/aeris/.local/share/Trash/files',name=path.split('/').at(-1);let target=`${trash}/${name}`,index=2;while((await (priority?this.execInteractive(`[ -e ${quote(target)} ]`):this.exec(`[ -e ${quote(target)} ]`))).code===0)target=`${trash}/${name} ${index++}`;await this.execChecked(`mkdir -p ${quote(trash)}; mv ${quote(path)} ${quote(target)} && [ ! -e ${quote(path)} ] && [ -e ${quote(target)} ]`,20000,{priority});const origins=this.#trashOrigins();origins[target.split('/').at(-1)]=path;this.#saveTrashOrigins(origins);this.#changed(path);this.#changed(target);return target; }
-  async restoreTrash(path){const name=path.split('/').at(-1),origins=this.#trashOrigins(),original=origins[name]||`/home/aeris/Desktop/${name}`,parent=original.split('/').slice(0,-1).join('/')||'/';let target=original,index=2;while((await this.exec(`[ -e ${quote(target)} ]`)).code===0)target=`${parent}/${name} restored ${index++}`;await this.execChecked(`mkdir -p ${quote(parent)}; mv ${quote(path)} ${quote(target)}`);delete origins[name];this.#saveTrashOrigins(origins);this.#changed(path);this.#changed(target);return target}
-  async emptyTrash(){const trash='/home/aeris/.local/share/Trash/files';await this.execChecked(`find ${quote(trash)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`);this.#saveTrashOrigins({});this.#changed(`${trash}/item`)}
+  async trash(path, { priority = true } = {}) { const trash='/home/future/.local/share/Trash/files',name=path.split('/').at(-1);let target=`${trash}/${name}`,index=2;while((await (priority?this.execInteractive(`[ -e ${quote(target)} ]`):this.exec(`[ -e ${quote(target)} ]`))).code===0)target=`${trash}/${name} ${index++}`;await this.execChecked(`mkdir -p ${quote(trash)}; mv ${quote(path)} ${quote(target)} && [ ! -e ${quote(path)} ] && [ -e ${quote(target)} ]`,20000,{priority});const origins=this.#trashOrigins();origins[target.split('/').at(-1)]=path;this.#saveTrashOrigins(origins);this.#changed(path);this.#changed(target);return target; }
+  async restoreTrash(path){const name=path.split('/').at(-1),origins=this.#trashOrigins(),original=origins[name]||`/home/future/Desktop/${name}`,parent=original.split('/').slice(0,-1).join('/')||'/';let target=original,index=2;while((await this.exec(`[ -e ${quote(target)} ]`)).code===0)target=`${parent}/${name} restored ${index++}`;await this.execChecked(`mkdir -p ${quote(parent)}; mv ${quote(path)} ${quote(target)}`);delete origins[name];this.#saveTrashOrigins(origins);this.#changed(path);this.#changed(target);return target}
+  async emptyTrash(){const trash='/home/future/.local/share/Trash/files';await this.execChecked(`find ${quote(trash)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`);this.#saveTrashOrigins({});this.#changed(`${trash}/item`)}
   async remove(path, { priority = true } = {}) { const result=await this.execChecked(`rm -rf ${quote(path)}`,20000,{priority});this.#changed(path);return result; }
-  #sharedPath(path){const value=String(path);if(value==='/mnt/aeris')return'/';if(value.startsWith('/mnt/aeris/'))return value.slice('/mnt/aeris'.length);return null}
+  #sharedPath(path){const value=String(path);if(value==='/mnt/future')return'/';if(value.startsWith('/mnt/future/'))return value.slice('/mnt/future'.length);return null}
   #changed(path){const parent=path.split('/').slice(0,-1).join('/')||'/';this.directoryRevision.set(parent,(this.directoryRevision.get(parent)||0)+1);this.#invalidateDirectory(parent);this.kernel.bus.emit('filesystem:changed',{path:parent});}
 
   async ensureNetwork({updateRepositories=false}={}) {
@@ -148,16 +148,16 @@ export class GuestSystemService {
     return this.networkTask;
   }
   async networkInfo(){
-    const command="address=$(ip -4 addr show dev eth0 2>/dev/null | awk '/inet / {sub(/\\/.*/,\"\",$2); print $2; exit}'); gateway=$(ip route 2>/dev/null | awk '/^default / {print $3; exit}'); dns=$(awk '/^nameserver / {print $2; exit}' /etc/resolv.conf 2>/dev/null); printf '__AERIS_NET__%s|%s|%s' \"$address\" \"$gateway\" \"$dns\"";
-    try{const {output}=await this.execInteractive(command,8000),payload=output.split('__AERIS_NET__').at(-1)||'', [address='',gateway='',dns='']=payload.trim().split('|',3),status=address&&gateway?'connected':'offline';return this.#setNetwork({status,address,gateway,dns,error:''})}catch(error){return this.#setNetwork({status:'offline',address:'',gateway:'',dns:'',error:error.message})}
+    const command="address=$(ip -4 addr show dev eth0 2>/dev/null | awk '/inet / {sub(/\\/.*/,\"\",$2); print $2; exit}'); gateway=$(ip route 2>/dev/null | awk '/^default / {print $3; exit}'); dns=$(awk '/^nameserver / {print $2; exit}' /etc/resolv.conf 2>/dev/null); printf '__FUTURE_NET__%s|%s|%s' \"$address\" \"$gateway\" \"$dns\"";
+    try{const {output}=await this.execInteractive(command,8000),payload=output.split('__FUTURE_NET__').at(-1)||'', [address='',gateway='',dns='']=payload.trim().split('|',3),status=address&&gateway?'connected':'offline';return this.#setNetwork({status,address,gateway,dns,error:''})}catch(error){return this.#setNetwork({status:'offline',address:'',gateway:'',dns:'',error:error.message})}
   }
   async networkStatus(){return (await this.networkInfo()).status==='connected';}
   #setNetwork(next){this.networkState={...this.networkState,...next};this.kernel?.bus.emit('network:change',{...this.networkState});return {...this.networkState}}
   async installPackage(name){await this.ensureNetwork();return this.execChecked(`apk update >/dev/null && apk add ${quote(name)}`,180000);}
   async configureProfile(profile) {
     const safe={fullName:profile.fullName,region:profile.region,timezone:profile.timezone,keyboardLayout:profile.keyboardLayout,analytics:!!profile.analytics,location:!!profile.location,theme:profile.theme,reduceMotion:!!profile.reduceMotion,completedAt:new Date().toISOString()};
-    await this.mkdir('/home/aeris/.config/aeris');await this.write('/home/aeris/.config/aeris/profile.json',JSON.stringify(safe,null,2));
-    if(profile.password)await this.exec(`printf '%s:%s\\n' aeris ${quote(profile.password)} | chpasswd 2>/dev/null || true`);
+    await this.mkdir('/home/future/.config/future');await this.write('/home/future/.config/future/profile.json',JSON.stringify(safe,null,2));
+    if(profile.password)await this.exec(`printf '%s:%s\\n' future ${quote(profile.password)} | chpasswd 2>/dev/null || true`);
     await this.exec(`[ -w /etc ] && [ -e /usr/share/zoneinfo/${String(profile.timezone).replace(/[^A-Za-z0-9_+\/-]/g,'')} ] && ln -sf /usr/share/zoneinfo/${String(profile.timezone).replace(/[^A-Za-z0-9_+\/-]/g,'')} /etc/localtime || true`);
     return safe;
   }

@@ -1,9 +1,9 @@
-const UNINSTALLED_KEY='aeris.apps.uninstalled.v1';
+const UNINSTALLED_KEY='future.apps.uninstalled.v1';
 
 const USERDATA_BY_APP={calendar:['calendar'],reminders:['reminders'],notes:['notes'],contacts:['contacts'],photos:['photos']};
 const STORAGE_BY_APP={
-  ai:['aeris.ai.state.v1','aeris.ai.workspace','aeris.ai.agents.v1','aeris.ai.workflows.v1','aeris.ai.skills.v1'],
-  browser:['aeris.browser.v1'],files:['aeris.finder.view'],music:['aeris.music.volume'],weather:['aeris.weather.cache','aeris.weather.location'],
+  ai:['future.ai.state.v1','future.ai.workspace','future.ai.agents.v1','future.ai.workflows.v1','future.ai.skills.v1'],
+  browser:['future.browser.v1'],files:['future.finder.view'],music:['future.music.volume'],weather:['future.weather.cache','future.weather.location'],
 };
 const readIds=storage=>{try{const value=JSON.parse(storage?.getItem(UNINSTALLED_KEY)||'[]');return new Set(Array.isArray(value)?value.map(String):[])}catch{return new Set()}};
 

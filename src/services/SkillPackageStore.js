@@ -1,4 +1,4 @@
-const DATABASE='aeris-skill-packages';
+const DATABASE='future-skill-packages';
 const LEGACY_STORE='packages';
 const FILE_STORE='files';
 

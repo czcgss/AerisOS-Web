@@ -1,4 +1,4 @@
-/* Aeris Music — system-aligned Soft UI theme. */
+/* Future Music — system-aligned Soft UI theme. */
 .music-app {
   --music-warm: #d8798f;
   --music-cool: color-mix(in srgb, var(--accent) 82%, #75b8c8);
@@ -213,7 +213,7 @@
 .music-empty strong { color: var(--text); }
 .music-empty button { background: var(--surface); box-shadow: var(--small-shadow); color: var(--accent); }
 
-/* Import sheet uses the same floating-panel language as the rest of Aeris. */
+/* Import sheet uses the same floating-panel language as the rest of Future. */
 .music-import-sheet { background: color-mix(in srgb, var(--text) 18%, transparent); backdrop-filter: blur(10px); }
 .music-import-sheet > div {
   border-color: color-mix(in srgb, #fff 64%, transparent);
@@ -236,7 +236,7 @@
 .music-import-sheet button:active { box-shadow: var(--inset); transform: scale(.98); }
 .music-import-sheet button.quiet { background: transparent; box-shadow: none; color: var(--muted); }
 
-/* Agent compact player: same player state, compact Aeris material. */
+/* Agent compact player: same player state, compact Future material. */
 .activity-music-edge { background: color-mix(in srgb, var(--surface-2) 88%, transparent); color: var(--text); }
 .activity-music {
   background:

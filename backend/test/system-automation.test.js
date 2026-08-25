@@ -23,10 +23,10 @@ test('system tasks follow an Agent turn through tool work and completion',()=>{
 });
 
 test('unfinished persisted tasks become cancelled after a browser restore',()=>{
-  const storage=memoryStorage();storage.setItem('aeris.system-tasks.v1',JSON.stringify([{id:'old',status:'running',createdAt:1,updatedAt:1}]));
+  const storage=memoryStorage();storage.setItem('future.system-tasks.v1',JSON.stringify([{id:'old',status:'running',createdAt:1,updatedAt:1}]));
   const service=new SystemTaskService(storage);service.kernel={bus:new EventBus()};service.start();
   assert.equal(service.snapshot().tasks[0].status,'cancelled');
-  assert.equal(JSON.parse(storage.getItem('aeris.system-tasks.v1'))[0].status,'cancelled');service.stop();
+  assert.equal(JSON.parse(storage.getItem('future.system-tasks.v1'))[0].status,'cancelled');service.stop();
 });
 
 test('operation receipts invoke their registered inverse exactly once',async()=>{
@@ -53,7 +53,7 @@ test('the built-in Computer Agent owns system task and automation tools',()=>{
 });
 
 test('existing Computer Agent profiles receive the new task capability once',()=>{
-  const storage=memoryStorage();storage.setItem('aeris.ai.agents.v1',JSON.stringify([{id:'computer',name:'My Computer',toolApps:['terminal'],enabled:true}]));
+  const storage=memoryStorage();storage.setItem('future.ai.agents.v1',JSON.stringify([{id:'computer',name:'My Computer',toolApps:['terminal'],enabled:true}]));
   const service=new AgentRegistryService({storage});service.start();assert.deepEqual(service.get('computer').toolApps,['terminal','tasks']);
   service.update('computer',{toolApps:['terminal']});const restored=new AgentRegistryService({storage});restored.start();assert.deepEqual(restored.get('computer').toolApps,['terminal']);
 });

@@ -1,10 +1,10 @@
-const BASE='/home/aeris/.local/share/aeris';
-const PENDING_DELETE_KEY='aeris.userdata.pending-delete.v1';
+const BASE='/home/future/.local/share/future';
+const PENDING_DELETE_KEY='future.userdata.pending-delete.v1';
 export class UserDataService {
   constructor(system,storage=localStorage){this.system=system;this.storage=storage;this.cache=new Map()}
   async start(){this.offGuestReady=this.kernel.bus.on('guest:ready',()=>this.#flushDeletes());this.#flushDeletes();this.kernel.bus.emit('userdata:ready')}
   stop(){this.offGuestReady?.();this.offGuestReady=null}
-  #key(name){return `aeris.userdata.${name}`}
+  #key(name){return `future.userdata.${name}`}
   #pending(){try{return new Set(JSON.parse(this.storage.getItem(PENDING_DELETE_KEY)||'[]'))}catch{return new Set()}}
   #savePending(value){value.size?this.storage.setItem(PENDING_DELETE_KEY,JSON.stringify([...value])):this.storage.removeItem(PENDING_DELETE_KEY)}
   async load(name,fallback=[]){

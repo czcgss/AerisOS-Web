@@ -1,5 +1,5 @@
-const CACHE_KEY='aeris.weather.cache';
-const LOCATION_KEY='aeris.weather.location';
+const CACHE_KEY='future.weather.cache';
+const LOCATION_KEY='future.weather.location';
 const DEFAULT_LOCATION={name:'New York',admin1:'New York',country:'United States',latitude:40.7128,longitude:-74.006,timezone:'America/New_York'};
 
 export class WeatherService{

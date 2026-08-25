@@ -1,6 +1,6 @@
-# Internal Aeris Skill Runtime reference
+# Internal Future Skill Runtime reference
 
-This contract defines the Skill packages Aeris can discover and execute.
+This contract defines the Skill packages Future can discover and execute.
 
 ## Source package supplied to Skill Studio
 
@@ -40,7 +40,7 @@ An imported Skill can provide:
 - readable text references and assets;
 - Python scripts executed in an isolated Pyodide Worker.
 
-An imported Skill cannot register arbitrary JavaScript tools, access Aeris app internals, edit the host source, bypass app-tool permissions, access v86 implicitly, or gain browser APIs. Create an Aeris app, widget, or theme when the requested capability needs those runtimes.
+An imported Skill cannot register arbitrary JavaScript tools, access Future app internals, edit the host source, bypass app-tool permissions, access v86 implicitly, or gain browser APIs. Create a Future app, widget, or theme when the requested capability needs those runtimes.
 
 Package limits are 250 files, 5 MB per file, and 15 MB total. Skill Studio accepts UTF-8 text resources. Folder import may additionally retain binary assets, but Agent cannot read binary content as instructions.
 
@@ -55,7 +55,7 @@ def main(input):
 
 `main` may be asynchronous. Input is JSON-compatible. Return a JSON-compatible value; pandas DataFrames are converted to records and objects supporting `tolist()` are converted to lists. Standard output and standard error are returned with the result.
 
-Static imports allow Pyodide to load compatible packages such as NumPy and pandas on demand. Do not import `js`, `pyodide`, `micropip`, `webbrowser`, `socket`, or `subprocess`. The Worker has no Aeris bridge or native process access. Each Python invocation requires user approval, and the Worker is released after 60 seconds of inactivity.
+Static imports allow Pyodide to load compatible packages such as NumPy and pandas on demand. Do not import `js`, `pyodide`, `micropip`, `webbrowser`, `socket`, or `subprocess`. The Worker has no Future bridge or native process access. Each Python invocation requires user approval, and the Worker is released after 60 seconds of inactivity.
 
 Use Python only for deterministic work. Keep reasoning, user communication, and ordinary text transformation in the model instructions.
 
