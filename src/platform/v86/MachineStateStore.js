@@ -71,6 +71,17 @@ export class MachineStateStore {
     });
   }
 
+  async deleteDatabase() {
+    this.database?.close();
+    this.database = null;
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(this.databaseName);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+      request.onblocked = () => reject(new Error('Close other FutureOS tabs before resetting the virtual computer.'));
+    });
+  }
+
   async promotePrevious(profile) {
     const database=await this.open();
     return new Promise((resolve,reject)=>{

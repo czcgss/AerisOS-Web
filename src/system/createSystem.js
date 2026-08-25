@@ -23,6 +23,7 @@ import { MusicService } from '../services/MusicService.js';
 import { BrowserService } from '../services/BrowserService.js';
 import { BrowserAutomationService } from '../services/BrowserAutomationService.js';
 import { AppInstallationService } from '../services/AppInstallationService.js';
+import { FactoryResetService } from '../services/FactoryResetService.js';
 import { AgentContextService } from '../services/AgentContextService.js';
 import { AgentEntryService } from '../services/AgentEntryService.js';
 import { AgentQueryService } from '../services/AgentQueryService.js';
@@ -116,6 +117,7 @@ export async function createSystem(root) {
   const agentRegistry=kernel.register('agentRegistry',new AgentRegistryService({storage:localStorage}));
   const multiAgent=kernel.register('multiAgent',new MultiAgentOrchestratorService({registry:agentRegistry,storage:localStorage,toolService:tools,skillRegistry}));
   const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent));
+  const factoryReset=kernel.register('factoryReset',new FactoryResetService({machine,skillRegistry,browserAutomation}));
   const operationHistory=kernel.register('operationHistory',operationHistoryService);
   const systemTasks=kernel.register('systemTasks',systemTaskService);
   const automations=kernel.register('automations',automationService);
@@ -124,7 +126,7 @@ export async function createSystem(root) {
   appInstallation.setRuntimeServices({ai:{clearData:async()=>{await aiAgent.clearData();systemTasks.clearData();operationHistory.clear();automations.clearData()}},music,weather,browser:{clearData:async()=>{browser.clearData();await browserAutomation.disconnect().catch(()=>{})}}});
   multiAgent.setCapabilitySources({isToolAppEnabled:appId=>aiAgent.isToolAppEnabled(appId)});
   multiAgent.setRunner(options=>aiAgent.runIsolatedAgent(options));
-  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,system,metrics,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
+  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,factoryReset,system,metrics,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
   window.future={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,shell};
   await kernel.boot();

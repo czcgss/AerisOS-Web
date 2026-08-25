@@ -424,6 +424,7 @@ export class V86Machine {
   }
 
   async clearPersistedState() { clearTimeout(this._checkpointTimer); await this.stateStore.clear(this.profile); }
+  async deletePersistedState() { clearTimeout(this._checkpointTimer); await this.stateStore.deleteDatabase(); }
   persistenceInfo(){return this.stateStore.info(this.profile)}
   async #emitGuestReady(restored) {
     this.#stopBootActivityMonitor();

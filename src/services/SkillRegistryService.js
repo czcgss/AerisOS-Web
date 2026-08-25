@@ -120,6 +120,13 @@ export class SkillRegistryService {
     await this.packageStore?.clear?.();this.storage?.removeItem(STORAGE_KEY);this.kernel?.bus.emit('skill:changed',{cleared:true})
   }
 
+  async deleteData(){
+    this.loadedBySession.clear();
+    await this.packageStore?.deleteDatabase?.();
+    this.storage?.removeItem(STORAGE_KEY);
+    this.kernel?.bus.emit('skill:changed',{cleared:true});
+  }
+
   #pythonTool(skill){
     const name=this.#pythonToolName(skill),scripts=skill.pythonScripts.join(', '),optional=description=>Type.Optional(Type.String({description}));
     return{name,label:`Run ${skill.name} Python`,description:`Run one Python script included with the loaded ${skill.name} Skill. Available scripts: ${scripts}. Input and output use JSON.`,executionMode:'sequential',parameters:Type.Object({script:Type.String({description:`Exact script path. Available: ${scripts}`}),inputJson:optional('JSON value passed to main(input). Defaults to an empty object.')},{additionalProperties:false}),execute:async(toolCallId,{script,inputJson},signal,onUpdate)=>{
