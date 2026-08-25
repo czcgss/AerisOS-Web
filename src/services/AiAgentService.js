@@ -248,7 +248,7 @@ export class AiAgentService {
     this.activeTurns.set(id,turn.id);
     this.multiAgent?.beginTurn(id,turn.id,prompt||files.map(file=>file.name).join(', '));
     this.#saveState();
-    this.#emit('ai:agent-event', { sessionId:id, turnId:turn.id, event:{type:'turn_created'} });
+    this.#emit('ai:agent-event', { sessionId:id, turnId:turn.id, prompt, event:{type:'turn_created'} });
     try {
       await agent.prompt(userMessage);
     } catch (error) {

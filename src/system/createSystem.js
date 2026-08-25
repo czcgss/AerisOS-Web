@@ -16,6 +16,9 @@ import { ClipboardService } from '../services/ClipboardService.js';
 import { WeatherService } from '../services/WeatherService.js';
 import { NotificationService } from '../services/NotificationService.js';
 import { AgentNotificationService } from '../services/AgentNotificationService.js';
+import { SystemTaskService } from '../services/SystemTaskService.js';
+import { AutomationService } from '../services/AutomationService.js';
+import { OperationHistoryService } from '../services/OperationHistoryService.js';
 import { MusicService } from '../services/MusicService.js';
 import { BrowserService } from '../services/BrowserService.js';
 import { BrowserAutomationService } from '../services/BrowserAutomationService.js';
@@ -62,6 +65,7 @@ import aiAssistant from '../apps/ai/index.js';
 import musicApp from '../apps/music/index.js';
 import browserApp from '../apps/browser/index.js';
 import { attachActivitySurfaces } from '../apps/activity/index.js';
+import { systemTaskCapability } from './SystemCapabilities.js';
 
 export async function createSystem(root) {
   window.aeris={ phase:'starting' };
@@ -85,6 +89,7 @@ export async function createSystem(root) {
   const widgetRegistry=new WidgetRegistry();
   builtinWidgets.forEach(widget=>widgetRegistry.register(widget));
   attachActivitySurfaces([aiAssistant,files,photos,calendar,weatherApp,contacts,reminders,notes,textedit,preview,calculator,clock,diskutility,terminal,machineApp,monitor,settingsApp,trash,musicApp,browserApp]).forEach(app=>registry.register(app));
+  registry.register(systemTaskCapability);
   const appRuntime=kernel.register('appRuntime',new AppRuntimeService({registry,storage:localStorage,bundledPackages:[counterPackage],themeRuntime}));
   await appRuntime.prepare();
   const appInstallation=kernel.register('appInstallation',new AppInstallationService({registry,appRuntime,userdata,settings,storage:localStorage}));
@@ -101,7 +106,8 @@ export async function createSystem(root) {
   const agentContext=kernel.register('agentContext',new AgentContextService(registry,i18n));
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
-  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,themeRuntime,weather,metrics,machine,music,browser,browserAutomation,registry,i18n}));
+  const operationHistoryService=new OperationHistoryService(localStorage),systemTaskService=new SystemTaskService(localStorage),automationService=new AutomationService({storage:localStorage,tasks:systemTaskService});
+  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,themeRuntime,weather,metrics,machine,music,browser,browserAutomation,registry,i18n,operationHistory:operationHistoryService,automations:automationService,systemTasks:systemTaskService}));
   skillRegistry.setApprovalService(tools);
   skillStudio.setApprovalService(tools);
   appStudio.setApprovalService(tools);
@@ -110,11 +116,15 @@ export async function createSystem(root) {
   const agentRegistry=kernel.register('agentRegistry',new AgentRegistryService({storage:localStorage}));
   const multiAgent=kernel.register('multiAgent',new MultiAgentOrchestratorService({registry:agentRegistry,storage:localStorage,toolService:tools,skillRegistry}));
   const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent));
+  const operationHistory=kernel.register('operationHistory',operationHistoryService);
+  const systemTasks=kernel.register('systemTasks',systemTaskService);
+  const automations=kernel.register('automations',automationService);
+  systemTasks.setRunner(aiAgent);automations.setRunner(aiAgent);
   const agentNotifications=kernel.register('agentNotifications',new AgentNotificationService({notifications,aiAgent,tools,queryUser,i18n}));
-  appInstallation.setRuntimeServices({ai:aiAgent,music,weather,browser:{clearData:async()=>{browser.clearData();await browserAutomation.disconnect().catch(()=>{})}}});
+  appInstallation.setRuntimeServices({ai:{clearData:async()=>{await aiAgent.clearData();systemTasks.clearData();operationHistory.clear();automations.clearData()}},music,weather,browser:{clearData:async()=>{browser.clearData();await browserAutomation.disconnect().catch(()=>{})}}});
   multiAgent.setCapabilitySources({isToolAppEnabled:appId=>aiAgent.isToolAppEnabled(appId)});
   multiAgent.setRunner(options=>aiAgent.runIsolatedAgent(options));
-  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,system,metrics,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
+  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,system,metrics,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
   window.aeris={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,shell};
   await kernel.boot();

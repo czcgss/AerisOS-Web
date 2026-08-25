@@ -150,44 +150,21 @@
   color: var(--text);
 }
 
-.ai-workspace-view-switch {
-  display: grid;
-  flex: 0 0 38px;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 5px 9px;
-  border-bottom: 1px solid color-mix(in srgb, var(--muted) 11%, transparent);
-  background: color-mix(in srgb, var(--surface) 48%, transparent);
-}
-
-.ai-workspace-view-switch button {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 9px;
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.ai-workspace-view-switch button:hover { color: var(--text); }
-
-.ai-workspace-view-switch button.selected {
-  background: var(--surface);
-  box-shadow: var(--small-shadow), var(--inset);
-  color: var(--accent);
-}
-
-.ai-workspace-view-picker{position:relative;z-index:4;display:flex;align-items:center;justify-content:flex-start;flex:0 0 43px;padding:0 10px;border-bottom:1px solid color-mix(in srgb,var(--muted) 11%,transparent);background:color-mix(in srgb,var(--surface) 48%,transparent)}
-.ai-workspace-view-picker>button{display:grid;grid-template-columns:16px minmax(0,1fr) 12px;align-items:center;min-width:148px;gap:7px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--muted) 14%,transparent);border-radius:9px;background:var(--surface);box-shadow:var(--small-shadow);color:var(--text);font-family:inherit;font-size:9px;font-weight:700;text-align:left}
-.ai-workspace-view-picker>button>.icon-chevron{color:var(--muted);transition:transform .16s}.ai-workspace-view-picker.open>button>.icon-chevron{transform:rotate(90deg)}
 .ai-workspace-view-menu{position:absolute;z-index:8;top:38px;left:10px;display:none;width:180px;padding:5px;border:1px solid color-mix(in srgb,var(--muted) 15%,transparent);border-radius:11px;background:color-mix(in srgb,var(--surface) 96%,transparent);box-shadow:0 14px 34px rgba(35,43,68,.2),var(--inset);backdrop-filter:blur(18px)}
-.ai-workspace-view-picker.open .ai-workspace-view-menu{display:block;animation:aiWorkspaceMenuIn .14s ease-out}
 .ai-workspace-view-menu button{display:grid;width:100%;grid-template-columns:18px minmax(0,1fr) 12px;align-items:center;gap:7px;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--text);font-family:inherit;font-size:9px;text-align:left}
 .ai-workspace-view-menu button:hover,.ai-workspace-view-menu button.selected{background:color-mix(in srgb,var(--accent) 9%,var(--surface-2));color:var(--accent)}
 @keyframes aiWorkspaceMenuIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+.ai-toolbar-workspace-picker{position:relative;z-index:9;flex:0 0 31px}
+.ai-toolbar-workspace-picker>.ai-workspace-toggle{position:relative;display:grid;width:31px;height:31px;place-items:center;border:0;border-radius:10px;background:var(--surface);box-shadow:var(--small-shadow);color:inherit}
+.ai-toolbar-workspace-picker>.ai-workspace-toggle.selected{background:color-mix(in srgb,var(--accent) 13%,var(--surface));box-shadow:var(--inset);color:var(--accent)}
+.ai-toolbar-workspace-picker>.ai-workspace-toggle>i{position:absolute;top:-3px;right:-3px;display:flex;min-width:11px;height:11px;align-items:center;justify-content:center;padding:0 2px;border:1px solid var(--surface);border-radius:99px;background:var(--accent);color:#fff;font:6px/1 var(--font-ui);font-style:normal}
+.ai-toolbar-workspace-picker>.ai-workspace-toggle>i[hidden]{display:none}
+.ai-toolbar-workspace-picker>.ai-workspace-toggle.has-running svg{animation:systemTaskPulse 1.6s ease-in-out infinite}
+.ai-toolbar-workspace-picker>.ai-workspace-view-menu{top:38px;right:0;left:auto;width:190px}
+.ai-toolbar-workspace-picker.open>.ai-workspace-view-menu{display:block;animation:aiWorkspaceMenuIn .14s ease-out}
+.ai-app-workspace>.ai-workspace-close{position:absolute;z-index:7;top:10px;right:10px;display:grid;width:28px;height:28px;place-items:center;border:1px solid color-mix(in srgb,var(--muted) 12%,transparent);border-radius:9px;background:color-mix(in srgb,var(--surface) 88%,transparent);box-shadow:var(--small-shadow);color:var(--muted);backdrop-filter:blur(12px)}
+.ai-app-workspace>.ai-workspace-close:hover{background:var(--surface);color:var(--text)}
 
 .ai-app-workspace>main {
   display: flex;
@@ -688,12 +665,6 @@
   color: var(--muted);
   font-size: 9px;
   flex: 0 0 44px;
-}
-
-.ai-toolbar>button.ai-workspace-toggle.selected {
-  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
-  box-shadow: var(--inset);
-  color: var(--accent);
 }
 
 .ai-toolbar>button.ai-applications-button.selected {

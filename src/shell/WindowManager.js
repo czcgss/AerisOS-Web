@@ -9,6 +9,7 @@ export class WindowManager {
   open(appId, options = {}) {
     const app = this.registry.get(appId);
     if (!app) throw new Error(`Unknown application: ${appId}`);
+    if(app.internal)throw new Error(`Internal capability is not a launchable application: ${appId}`);
     if (app.singleInstance) {
       const current = [...this.windows.values()].find(window => window.app.id === appId);
       if (current) { current.element.hidden = false; this.focus(current.id); return current; }
@@ -105,7 +106,7 @@ export class WindowManager {
     if(!this.context.settings.get('restoreSession'))return;
     let session=[];try{session=JSON.parse(localStorage.getItem('aeris.window-session')||'[]')}catch{}
     this.restoring=true;
-    for(const state of session){if(!this.registry.get(state.appId))continue;const record=this.open(state.appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});if(state.maximized)this.zoom(record.id);if(state.fullscreen)this.maximize(record.id);if(state.minimized)record.element.hidden=true}
+    for(const state of session){const app=this.registry.get(state.appId);if(!app||app.internal)continue;const record=this.open(state.appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});if(state.maximized)this.zoom(record.id);if(state.fullscreen)this.maximize(record.id);if(state.minimized)record.element.hidden=true}
     this.restoring=false;
   }
 

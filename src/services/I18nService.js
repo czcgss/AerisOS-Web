@@ -1,8 +1,9 @@
 import en from '../locales/en.js';
 import zh from '../locales/zh.js';
+import {systemFeaturePacks} from '../locales/systemFeatures.js';
 
 export class I18nService {
-  constructor(settings) { this.settings = settings; this.packs = { en, zh }; }
+  constructor(settings) { this.settings = settings; this.packs = { en:{...en,...systemFeaturePacks.en}, zh:{...zh,...systemFeaturePacks.zh} }; }
   start() {
     try { Object.assign(this.packs, JSON.parse(localStorage.getItem('aeris.languagePacks') || '{}')); } catch {}
   }

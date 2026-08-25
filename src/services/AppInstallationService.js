@@ -10,10 +10,10 @@ const readIds=storage=>{try{const value=JSON.parse(storage?.getItem(UNINSTALLED_
 export class AppInstallationService{
   constructor({registry,appRuntime,userdata,settings,storage=globalThis.localStorage}={}){Object.assign(this,{registry,appRuntime,userdata,settings,storage});this.uninstalled=readIds(storage)}
   setRuntimeServices(services={}){this.runtimeServices=services}
-  async prepare(){for(const id of [...this.uninstalled]){const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);if(runtime)this.appRuntime.uninstall(id,{allowBundled:true});else this.registry.unregister(id)}this.#persist()}
-  canUninstall(id){return Boolean(this.registry.get(String(id)))}
+  async prepare(){for(const id of [...this.uninstalled]){if(this.registry.get(id)?.internal){this.uninstalled.delete(id);continue}const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);if(runtime)this.appRuntime.uninstall(id,{allowBundled:true});else this.registry.unregister(id)}this.#persist()}
+  canUninstall(id){const app=this.registry.get(String(id));return Boolean(app&&!app.internal)}
   async uninstall(id){
-    id=String(id);const app=this.registry.get(id);if(!app)return false;const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);
+    id=String(id);const app=this.registry.get(id);if(!app||app.internal)return false;const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);
     if(runtime)this.appRuntime.uninstall(id,{allowBundled:true});else this.registry.unregister(id);
     if(!runtime||runtime.source==='bundled'){this.uninstalled.add(id);this.#persist()}
     this.settings?.set('dockApps',(this.settings.get('dockApps')||[]).filter(appId=>appId!==id));await this.#clearData(id);

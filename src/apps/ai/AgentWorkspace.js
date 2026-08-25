@@ -91,19 +91,22 @@ const workflowViewMarkup=(workflows,tools,i18n,expandedWorkflowIds)=>{
   return`<section class="ai-workflow-view ai-workflow-history"><header><div><strong>${esc(i18n.t('workflowHistory'))}</strong><small>${esc(i18n.t('workflowHistoryCount').replace('{count}',workflows.length))}</small></div></header><div class="ai-workflow-records">${workflows.map(workflow=>`<details class="ai-workflow-record" data-ai-workflow-record="${esc(workflow.id)}" ${expandedWorkflowIds.has(workflow.id)?'open':''}><summary><span>${icon('message',13)}</span><div><small>${esc(i18n.t('userRequest'))}</small><strong>${esc(shortText(workflow.task,120))}</strong></div><em class="workflow-status-${esc(workflow.status)}">${esc(i18n.t(`agentStatus_${workflow.status}`))} · ${Math.max(0,Math.min(100,workflow.progress||0))}%</em><i>${icon('chevron',10)}</i></summary><div class="ai-workflow-record-body"><div class="ai-workflow-progress"><i style="width:${Math.max(0,Math.min(100,workflow.progress||0))}%"></i></div><div class="ai-workflow-tree">${workflowTree(workflow)}</div></div></details>`).join('')}</div></section>`;
 };
 
-export function workspaceMarkup(tools, i18n, { animate = true, signature = '', view = 'activity', viewMenuOpen = false, context = null, windows = [], activityApps = [], activityAppId = '', workflows = [], expandedWorkflowIds = new Set() } = {}) {
+const workspaceViews=[['workflow','list','agentWorkflow'],['tasks','history','taskCenter'],['activity','maximize','workspaceActivity'],['context','focus','workspaceContextView']];
+
+export function workspacePickerMarkup(i18n,{view='activity',menuOpen=false,workspaceOpen=false,runningTasks=0}={}){
+  return `<nav class="ai-toolbar-workspace-picker ${menuOpen?'open':''}" data-ai-workspace-picker aria-label="${esc(i18n.t('agentWorkspace'))}">
+    <button class="ai-workspace-toggle ${workspaceOpen?'selected':''} ${runningTasks?'has-running':''}" data-ai-workspace-view-menu aria-expanded="${menuOpen}" title="${esc(i18n.t('agentWorkspace'))}">${icon('layers',17)}<i ${runningTasks?'':'hidden'}>${runningTasks||''}</i></button>
+    <div class="ai-workspace-view-menu">${workspaceViews.map(([value,viewIcon,label])=>`<button class="${workspaceOpen&&view===value?'selected':''}" data-ai-workspace-view="${value}" aria-pressed="${workspaceOpen&&view===value}">${icon(viewIcon,12)}<span>${esc(i18n.t(label))}</span>${workspaceOpen&&view===value?icon('check',10):''}</button>`).join('')}</div>
+  </nav>`;
+}
+
+export function workspaceMarkup(tools, i18n, { animate = true, signature = '', view = 'activity', context = null, windows = [], activityApps = [], activityAppId = '', workflows = [], expandedWorkflowIds = new Set(), taskMarkup = '' } = {}) {
   const resizeHandle = `<div class="ai-workspace-resize" data-ai-workspace-resize role="separator" aria-orientation="vertical" aria-label="${esc(i18n.t('resizeWorkspace'))}" tabindex="0"><i></i></div>`;
-  const views=[['workflow','list','agentWorkflow'],['activity','maximize','workspaceActivity'],['context','focus','workspaceContextView']],activeView=views.find(item=>item[0]===view)||views[0];
   return `<aside class="ai-app-workspace ai-app-workspace-empty ${animate?'':'ai-app-workspace-stable'}" data-ai-app-workspace data-workspace-signature="${esc(signature||'empty')}">
     ${resizeHandle}
-    <header>
-      <div><strong>${esc(i18n.t('agentWorkspace'))}</strong><small>${esc(i18n.t('workspaceReady'))}</small></div>
-      <button data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}">${icon('close', 15)}</button>
-    </header>
-    <nav class="ai-workspace-view-picker ${viewMenuOpen?'open':''}" data-ai-workspace-picker aria-label="${esc(i18n.t('agentWorkspace'))}"><button data-ai-workspace-view-menu aria-expanded="${viewMenuOpen}">${icon(activeView[1],13)}<span>${esc(i18n.t(activeView[2]))}</span>${icon('chevron',10)}</button><div class="ai-workspace-view-menu">${views.map(([value,viewIcon,label])=>`<button class="${view===value?'selected':''}" data-ai-workspace-view="${value}" aria-pressed="${view===value}">${icon(viewIcon,12)}<span>${esc(i18n.t(label))}</span>${view===value?icon('check',10):''}</button>`).join('')}</div></nav>
+    <button class="ai-workspace-close" data-ai-close-workspace title="${esc(i18n.t('closeWorkspace'))}" aria-label="${esc(i18n.t('closeWorkspace'))}">${icon('close',14)}</button>
     <main class="ai-workspace-content-layout">
-      ${view==='workflow'?workflowViewMarkup(workflows,tools,i18n,expandedWorkflowIds):view==='context'?contextViewMarkup(context,windows,tools,i18n,activityApps):activityViewMarkup(activityApps,activityAppId,i18n)}
+      ${view==='workflow'?workflowViewMarkup(workflows,tools,i18n,expandedWorkflowIds):view==='tasks'?taskMarkup:view==='context'?contextViewMarkup(context,windows,tools,i18n,activityApps):activityViewMarkup(activityApps,activityAppId,i18n)}
     </main>
-    <footer><span>${icon(view==='workflow'?'list':view==='context'?'lock':'maximize',14)} ${esc(i18n.t(view==='workflow'?'workflowManagedByAeris':view==='context'?'contextManagedByAeris':'activityManagedByAeris'))}</span></footer>
   </aside>`;
 }

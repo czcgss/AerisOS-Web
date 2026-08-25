@@ -1,11 +1,13 @@
 const STORAGE_KEY='aeris.ai.agents.v1';
+const VERSION_KEY='aeris.ai.agents.version';
+const CURRENT_VERSION=2;
 const COLORS=new Set(['blue','purple','green','orange','pink','red','grey','teal']);
 const AGENT_ICONS=new Set(['agentGeneral','agentPlanner','agentProductivity','agentWorkspace','agentComputer','agentCreator']);
 const DEFAULT_AGENTS=[
   {id:'planner',name:'Planner',description:'Breaks complex goals into coordinated, verifiable work.',icon:'agentPlanner',color:'purple',systemPrompt:'You are the Aeris planning specialist. Decompose the assigned objective, identify dependencies, and return a precise plan or decision. Do not claim work performed by other agents.',toolApps:[],skills:[],modelKey:'',enabled:true,builtIn:true},
   {id:'productivity',name:'Productivity',description:'Works with calendars, reminders, notes, contacts, and weather.',icon:'agentProductivity',color:'blue',systemPrompt:'You are the Aeris productivity specialist. Complete the assigned task using only your available Aeris tools. Preserve dates, names, and user intent exactly.',toolApps:['calendar','reminders','notes','contacts','weather','clock'],skills:[],modelKey:'',enabled:true,builtIn:true},
   {id:'workspace',name:'Workspace',description:'Manages documents, files, photos, and local content.',icon:'agentWorkspace',color:'teal',systemPrompt:'You are the Aeris workspace specialist. Inspect and modify the assigned files or documents carefully. Report exact paths and concrete results.',toolApps:['files','textedit','preview','photos','trash'],skills:[],modelKey:'',enabled:true,builtIn:true},
-  {id:'computer',name:'Computer',description:'Operates the Linux guest and inspects system state.',icon:'agentComputer',color:'green',systemPrompt:'You are the Aeris computer specialist. Use finite, non-interactive commands and system tools. Explain risky operations and return concise command evidence.',toolApps:['terminal','monitor','diskutility','machine','settings'],skills:[],modelKey:'',enabled:true,builtIn:true},
+  {id:'computer',name:'Computer',description:'Operates the Linux guest, system tasks, and automations.',icon:'agentComputer',color:'green',systemPrompt:'You are the Aeris computer specialist. Operate the Linux guest, system tasks, automations, and operation history. Use finite, non-interactive commands, explain risky operations, and return concise evidence.',toolApps:['terminal','monitor','diskutility','machine','settings','tasks'],skills:[],modelKey:'',enabled:true,builtIn:true},
   {id:'creator',name:'Creator',description:'Builds Aeris apps, widgets, themes, and Skills.',icon:'agentCreator',color:'pink',systemPrompt:'You are the Aeris extension specialist. Load the relevant creation Skill before building or modifying an extension. Follow the Aeris design and runtime contracts exactly and validate the result.',toolApps:[],skills:['create-app','create-widget','create-theme','skill-creator'],modelKey:'',enabled:true,builtIn:true},
 ];
 const clone=value=>structuredClone(value);
@@ -15,10 +17,11 @@ export class AgentRegistryService{
   constructor({storage=globalThis.localStorage}={}){this.storage=storage;this.agents=new Map()}
   start(){
     let saved=[];try{saved=JSON.parse(this.storage?.getItem(STORAGE_KEY)||'[]')}catch{}
+    const savedVersion=Number(this.storage?.getItem(VERSION_KEY)||1);
     const byId=new Map((Array.isArray(saved)?saved:[]).filter(item=>item?.id).map(item=>[String(item.id),item]));
-    for(const definition of DEFAULT_AGENTS){const override=byId.get(definition.id);this.agents.set(definition.id,this.#normalise({...definition,...override,id:definition.id,icon:definition.icon,builtIn:true}))}
+    for(const definition of DEFAULT_AGENTS){let override=byId.get(definition.id);if(override&&savedVersion<2&&definition.id==='computer')override={...override,toolApps:[...new Set([...(override.toolApps||[]),'tasks'])]};this.agents.set(definition.id,this.#normalise({...definition,...override,id:definition.id,icon:definition.icon,builtIn:true}))}
     for(const item of byId.values())if(!this.agents.has(String(item.id)))this.agents.set(String(item.id),this.#normalise({...item,builtIn:false}));
-    this.#persist();
+    this.#persist();this.storage?.setItem(VERSION_KEY,String(CURRENT_VERSION));
   }
   list({enabledOnly=false}={}){return[...this.agents.values()].filter(item=>!enabledOnly||item.enabled).map(clone)}
   get(id){const item=this.agents.get(String(id));return item?clone(item):null}

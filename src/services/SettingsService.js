@@ -18,6 +18,8 @@ export class SettingsService {
     if(!this.values.appSuiteVersion||this.values.appSuiteVersion<2){for(const id of ['photos','weather'])if(!this.values.dockApps.includes(id))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,id);this.values.appSuiteVersion=2;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
     if(this.values.appSuiteVersion<3){if(!this.values.dockApps.includes('music'))this.values.dockApps.splice(Math.min(2,this.values.dockApps.length),0,'music');this.values.appSuiteVersion=3;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
     if(this.values.appSuiteVersion<4){if(!this.values.dockApps.includes('browser'))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,'browser');this.values.appSuiteVersion=4;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
+    if(this.values.appSuiteVersion<5){if(!this.values.dockApps.includes('tasks'))this.values.dockApps.push('tasks');this.values.appSuiteVersion=5;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
+    if(this.values.appSuiteVersion<6){this.values.dockApps=this.values.dockApps.filter(id=>id!=='tasks');this.values.appSuiteVersion=6;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
   }
   get(key) { return this.values[key]; }
   all() { return { ...this.values }; }
