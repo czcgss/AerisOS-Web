@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MultiAgentOrchestratorService} from '../../src/services/MultiAgentOrchestratorService.js';
 
-const profile={id:'computer',name:'Computer Agent',description:'Operates Aeris.',toolApps:['terminal'],skills:[],enabled:true};
+const profile={id:'computer',name:'Computer Agent',description:'Operates Future.',toolApps:['terminal'],skills:[],enabled:true};
 const registry={list:()=>[profile],get:id=>id===profile.id?profile:null};
 const toolService={
   apps:()=>[{id:'terminal',title:'Terminal'}],

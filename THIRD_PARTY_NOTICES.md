@@ -1,6 +1,6 @@
 # Third-party software
 
-Aeris depends on and/or redistributes the following third-party components. Their licenses apply to those components independently of the Aeris project license.
+Future depends on and/or redistributes the following third-party components. Their licenses apply to those components independently of the Future project license.
 
 | Component | Use | License / source |
 | --- | --- | --- |

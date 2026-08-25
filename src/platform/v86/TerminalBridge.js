@@ -53,12 +53,12 @@ export class TerminalBridge {
   #nextExecution(){
     if(this.activeExecution||!this.executionQueue.length||!this.machine.emulator)return;
     const request=this.executionQueue.shift(),token=`${request.id}_${crypto.randomUUID().replace(/-/g,'').slice(0,8)}`;
-    request.begin=`__AERIS_TTY_BEGIN_${token}__`;request.end=`__AERIS_TTY_END_${token}__`;
+    request.begin=`__FUTURE_TTY_BEGIN_${token}__`;request.end=`__FUTURE_TTY_END_${token}__`;
     this.activeExecution=request;this.executionBuffer='';
     // Split marker literals across shell variables so terminal echo cannot be
     // mistaken for actual framed output.
-    const prefix='__AERIS_TTY_',beginSuffix=`BEGIN_${token}__`,endSuffix=`END_${token}__`;
-    const framed=`__aeris_prefix='${prefix}'; __aeris_begin='${beginSuffix}'; __aeris_end='${endSuffix}'; printf '\\n%s%s\\n' "$__aeris_prefix" "$__aeris_begin"; ( ${request.command} ); __aeris_status=$?; printf '\\n%s%s:%s\\n' "$__aeris_prefix" "$__aeris_end" "$__aeris_status"`;
+    const prefix='__FUTURE_TTY_',beginSuffix=`BEGIN_${token}__`,endSuffix=`END_${token}__`;
+    const framed=`__future_prefix='${prefix}'; __future_begin='${beginSuffix}'; __future_end='${endSuffix}'; printf '\\n%s%s\\n' "$__future_prefix" "$__future_begin"; ( ${request.command} ); __future_status=$?; printf '\\n%s%s:%s\\n' "$__future_prefix" "$__future_end" "$__future_status"`;
     // VINTR flushes the TTY input queue. Sending Ctrl+C and the command in one
     // serial packet discards the command bytes that follow the interrupt.
     this.write('\u0003');

@@ -19,8 +19,8 @@ export class BrowserAutomationService{
   async disconnect(signal){const result=await this.#request('/session',{method:'DELETE',signal});this.#set({state:'idle',operations:[],tools:[],error:''});return result}
   subscribe(listener){this.streamListeners.add(listener);this.#connectStream();return()=>{this.streamListeners.delete(listener);if(!this.streamListeners.size)this.#closeStream()}}
   async #request(path,options={}){
-    let response;try{response=await this.fetcher(`${this.endpoint}${path}`,{headers:{'content-type':'application/json'},...options})}catch(error){throw new Error(`Aeris backend is unavailable: ${error.message}`)}
-    const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload?.error?.message||`Aeris backend request failed (${response.status}).`);
+    let response;try{response=await this.fetcher(`${this.endpoint}${path}`,{headers:{'content-type':'application/json'},...options})}catch(error){throw new Error(`Future backend is unavailable: ${error.message}`)}
+    const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload?.error?.message||`Future backend request failed (${response.status}).`);
     if(path.startsWith('/capabilities'))this.#set(payload);return payload;
   }
   #set(value){this.state={...this.state,...value};this.kernel?.bus.emit('browser-automation:changed',this.snapshot())}

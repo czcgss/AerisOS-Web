@@ -11,7 +11,7 @@
 .machine-pro>aside button{height:38px}.machine-pro>aside footer{position:absolute;left:21px;bottom:22px;display:flex;flex-direction:column;gap:3px}.machine-pro>aside footer small{margin-top:10px;color:var(--muted);font-size:7px}.machine-pro>aside footer strong{font-size:8px}.machine-pro .guest-display-slot{border-radius:0}[data-theme="dark"] .calculator-pro,[data-theme="dark"] .textedit-pro,[data-theme="dark"] .preview-pro,[data-theme="dark"] .monitor-pro,[data-theme="dark"] .machine-pro,[data-theme="dark"] .disk-pro,[data-theme="dark"] .clock-pro{background:linear-gradient(145deg,#334a58,#283d49)}[data-theme="dark"] .text-paper textarea,[data-theme="dark"] .preview-workspace>main pre{background:#263945;color:#dce7ec}
 .calculator-pro .calculator-keys button{height:40px}
 .machine-pro>aside>button:nth-of-type(2){display:none}
-/* Agnoster is Aeris Terminal's built-in default theme. */
+/* Agnoster is Future Terminal's built-in default theme. */
 .terminal-pro[data-terminal-theme="agnoster"]{--terminal-bg:#111a22;--terminal-panel:#1c2934;--terminal-fg:#d9e2e8;--terminal-muted:#7f94a3;--terminal-blue:#5aa7e8;--terminal-cyan:#55c2c8;--terminal-green:#67c58b;--terminal-yellow:#e9bc64;--terminal-orange:#e6965c;--terminal-red:#ef7373;--terminal-violet:#b398ed;--terminal-pink:#e58ab2;font-family:var(--font-mono);background:var(--terminal-bg);color:var(--terminal-fg)}
 .terminal-pro[data-terminal-theme="agnoster"]>header{background:#1b2833;border-color:rgba(255,255,255,.055)}
 .terminal-pro[data-terminal-theme="agnoster"] .terminal-tabs button,.terminal-pro[data-terminal-theme="agnoster"] .terminal-session-meta,.terminal-pro[data-terminal-theme="agnoster"]>footer{font-family:inherit}

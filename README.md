@@ -1,24 +1,24 @@
 <div align="center">
-  <h1><img src="public/aeris.svg" width="64" height="64" alt="AerisOS logo" align="center">&nbsp;AerisOS</h1>
+  <h1><img src="public/future.svg" width="64" height="64" alt="FutureOS logo" align="center">&nbsp;FutureOS</h1>
   <p><strong>An AI-native WebOS research project running a real Linux guest in the browser.</strong></p>
   <p>
-    <a href="https://github.com/czcgss/AerisOS-Web/actions/workflows/ci.yml"><img src="https://github.com/czcgss/AerisOS-Web/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI status"></a>
-    <a href="https://github.com/czcgss/AerisOS-Web/releases"><img src="https://img.shields.io/github/v/release/czcgss/AerisOS-Web?display_name=tag" alt="Latest release"></a>
+    <a href="https://github.com/czcgss/FutureOS-Web/actions/workflows/ci.yml"><img src="https://github.com/czcgss/FutureOS-Web/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI status"></a>
+    <a href="https://github.com/czcgss/FutureOS-Web/releases"><img src="https://img.shields.io/github/v/release/czcgss/FutureOS-Web?display_name=tag" alt="Latest release"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
     <img src="https://img.shields.io/badge/status-experimental-orange.svg" alt="Experimental status">
   </p>
 </div>
 
-AerisOS is a modular, browser-hosted operating-system environment built around an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86). It combines a desktop shell, window manager, system applications, Linux-backed files and terminals, persistent machine state, and an Agent that can use structured application capabilities.
+FutureOS (Chinese name: **伏秋**) is a modular, browser-hosted operating-system environment built around an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86). It combines a desktop shell, window manager, system applications, Linux-backed files and terminals, persistent machine state, and an Agent that can use structured application capabilities.
 
-All Aeris-owned implementation code was written by AI through iterative product direction, review, and manual testing by a human. Third-party projects retain their original authorship and licenses.
+All Future-owned implementation code was written by AI through iterative product direction, review, and manual testing by a human. Third-party projects retain their original authorship and licenses.
 
 > [!IMPORTANT]
-> AerisOS is not a complete, general-purpose operating system and is not intended for daily or production use. It is an active research prototype for exploring how AI-native operating systems may evolve—and how far a complex system can be built through AI-directed software development.
+> FutureOS is not a complete, general-purpose operating system and is not intended for daily or production use. It is an active research prototype for exploring how AI-native operating systems may evolve—and how far a complex system can be built through AI-directed software development.
 
-## Why AerisOS exists
+## Why FutureOS exists
 
-Most desktop AI products add an assistant on top of an existing operating system. AerisOS explores a different model: AI is a visible system capability with explicit context, application tools, permissions, approvals, activity history, and actionable results.
+Most desktop AI products add an assistant on top of an existing operating system. FutureOS explores a different model: AI is a visible system capability with explicit context, application tools, permissions, approvals, activity history, and actionable results.
 
 The project is designed to test questions such as:
 
@@ -42,8 +42,8 @@ Node 22 is the version used by CI. New, unsupported Node major versions may be i
 ## Quick start
 
 ```bash
-git clone https://github.com/czcgss/AerisOS-Web.git
-cd AerisOS-Web
+git clone https://github.com/czcgss/FutureOS-Web.git
+cd FutureOS-Web
 corepack enable
 corepack prepare pnpm@11.9.0 --activate
 pnpm install --frozen-lockfile
@@ -61,11 +61,11 @@ npm install --global pnpm@11.9.0
 
 `pnpm assets` downloads the official Alpine Linux 3.24.1 x86 standard image, reports download progress, and verifies its SHA-256 checksum. The ISO is intentionally excluded from Git.
 
-## Aeris AI
+## Future AI
 
-Open **Aeris AI → Settings → Model** and configure an OpenAI-compatible base URL, API key, and model. Model credentials are intended only for local development or trusted endpoints.
+Open **Future AI → Settings → Model** and configure an OpenAI-compatible base URL, API key, and model. Model credentials are intended only for local development or trusted endpoints.
 
-Aeris AI is designed as an operating-system capability, not an assistant layered on top of the desktop. It shares the system's application model, context, permissions, notifications, persistence, and live interface surfaces, allowing a request to become an observable system workflow instead of an opaque chat response.
+Future AI is designed as an operating-system capability, not an assistant layered on top of the desktop. It shares the system's application model, context, permissions, notifications, persistence, and live interface surfaces, allowing a request to become an observable system workflow instead of an opaque chat response.
 
 - **System context:** invoke the Agent globally or from an App, then explicitly attach the active window, file, resource, date, text, or another open App.
 - **Native App actions:** Apps expose validated tools for querying and changing real application data. Users control which Apps the Agent may operate.
@@ -74,13 +74,13 @@ Aeris AI is designed as an operating-system capability, not an assistant layered
 - **Visible execution:** the Agent workspace can host compact, live App views, so users can watch and continue the work in either the Agent or the full desktop App.
 - **System safety:** risky terminal, file, and destructive operations pause for an in-system approval without blocking the rest of the desktop.
 - **Shared system state:** conversations, usage, notifications, read state, workflows, Skills, and settings persist locally across refreshes.
-- **Extensibility:** Agent Skills can create and validate Aeris Apps, widgets, themes, and other Skills against the system's runtime contracts.
+- **Extensibility:** Agent Skills can create and validate Future Apps, widgets, themes, and other Skills against the system's runtime contracts.
 
 Approval reduces accidental actions but is not a security boundary against malicious same-origin code or compromised dependencies. Never commit API keys or use production secrets in the browser client.
 
 ## Contributing
 
-Contributions are welcome, but AerisOS uses a strict integration workflow:
+Contributions are welcome, but FutureOS uses a strict integration workflow:
 
 1. Read [CONTRIBUTING.md](CONTRIBUTING.md).
 2. Create a focused branch from the latest `develop`.
@@ -93,4 +93,4 @@ For vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a publ
 
 ## License
 
-AerisOS is released under the [MIT License](LICENSE). Third-party components remain governed by their own licenses and notices.
+FutureOS is released under the [MIT License](LICENSE). Third-party components remain governed by their own licenses and notices.

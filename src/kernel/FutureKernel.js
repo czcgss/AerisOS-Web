@@ -1,6 +1,6 @@
 import { EventBus } from './EventBus.js';
 
-export class AerisKernel {
+export class FutureKernel {
   constructor() {
     this.bus = new EventBus();
     this.services = new Map();

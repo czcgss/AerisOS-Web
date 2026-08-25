@@ -10,10 +10,10 @@ export class DialogService {
     return new Promise(resolve => {
       const layer = document.createElement('section');
       layer.className = 'system-dialog-layer';
-      const field=multiline?`<textarea name="aeris-value" placeholder="${this.#escape(placeholder)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore>${this.#escape(value)}</textarea>`:`<input name="aeris-value" type="text" value="${this.#escape(value)}" placeholder="${this.#escape(placeholder)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore>`;
+      const field=multiline?`<textarea name="future-value" placeholder="${this.#escape(placeholder)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore>${this.#escape(value)}</textarea>`:`<input name="future-value" type="text" value="${this.#escape(value)}" placeholder="${this.#escape(placeholder)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore>`;
       layer.innerHTML = `<div class="system-dialog-backdrop"></div><form class="system-dialog ${multiline?'system-dialog-multiline':''}" role="dialog" aria-modal="true" autocomplete="off" data-form-type="other"><header><strong>${title || this.i18n.t('newFolder')}</strong>${message ? `<p>${message}</p>` : ''}</header>${field}<small data-dialog-error></small><footer><button type="button" data-dialog-cancel>${this.i18n.t('cancel')}</button><button class="dialog-primary" type="submit">${submitLabel||this.i18n.t('create')}</button></footer></form>`;
       this.root.appendChild(layer);
-      const input = layer.querySelector('[name="aeris-value"]'), error = layer.querySelector('[data-dialog-error]');
+      const input = layer.querySelector('[name="future-value"]'), error = layer.querySelector('[data-dialog-error]');
       const finish = result => { if (!layer.isConnected) return; layer.remove(); this.active = null; resolve(result); };
       const cancel = () => finish(null);
       this.active = { cancel };

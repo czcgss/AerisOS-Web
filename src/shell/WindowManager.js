@@ -9,6 +9,7 @@ export class WindowManager {
   open(appId, options = {}) {
     const app = this.registry.get(appId);
     if (!app) throw new Error(`Unknown application: ${appId}`);
+    if(app.internal)throw new Error(`Internal capability is not a launchable application: ${appId}`);
     if (app.singleInstance) {
       const current = [...this.windows.values()].find(window => window.app.id === appId);
       if (current) { current.element.hidden = false; this.focus(current.id); return current; }
@@ -103,9 +104,9 @@ export class WindowManager {
 
   restoreSession() {
     if(!this.context.settings.get('restoreSession'))return;
-    let session=[];try{session=JSON.parse(localStorage.getItem('aeris.window-session')||'[]')}catch{}
+    let session=[];try{session=JSON.parse(localStorage.getItem('future.window-session')||'[]')}catch{}
     this.restoring=true;
-    for(const state of session){if(!this.registry.get(state.appId))continue;const record=this.open(state.appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});if(state.maximized)this.zoom(record.id);if(state.fullscreen)this.maximize(record.id);if(state.minimized)record.element.hidden=true}
+    for(const state of session){const app=this.registry.get(state.appId);if(!app||app.internal)continue;const record=this.open(state.appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});if(state.maximized)this.zoom(record.id);if(state.fullscreen)this.maximize(record.id);if(state.minimized)record.element.hidden=true}
     this.restoring=false;
   }
 
@@ -139,5 +140,5 @@ export class WindowManager {
   persistSession(){this.#persistSession()}
   #syncFullscreenChrome(){this.layer.closest('.desktop')?.classList.toggle('has-fullscreen-window',[...this.windows.values()].some(record=>record.fullscreen))}
   #contextWindow(record){return{id:record.id,appId:record.app.id,title:this.context.i18n.t(record.app.title),icon:record.app.icon,color:record.app.color||'grey',path:record.launchOptions?.path||'',minimized:record.element.hidden,focused:record.element.classList.contains('focused'),zIndex:Number(record.element.style.zIndex)||0}}
-  #persistSession(){if(this.restoring||!this.context.settings.get('restoreSession'))return;const session=[...this.windows.values()].map(record=>{const{app,element,maximized,fullscreen,launchOptions}=record,normalStyle=maximized?record.previous:fullscreen?record.fullscreenPrevious:element.style.cssText,style=document.createElement('div').style;style.cssText=normalStyle||element.style.cssText;return{appId:app.id,left:parseFloat(style.left)||0,top:parseFloat(style.top)||48,width:parseFloat(style.width)||element.offsetWidth,height:parseFloat(style.height)||element.offsetHeight,maximized,fullscreen,minimized:element.hidden,launchOptions}});localStorage.setItem('aeris.window-session',JSON.stringify(session))}
+  #persistSession(){if(this.restoring||!this.context.settings.get('restoreSession'))return;const session=[...this.windows.values()].map(record=>{const{app,element,maximized,fullscreen,launchOptions}=record,normalStyle=maximized?record.previous:fullscreen?record.fullscreenPrevious:element.style.cssText,style=document.createElement('div').style;style.cssText=normalStyle||element.style.cssText;return{appId:app.id,left:parseFloat(style.left)||0,top:parseFloat(style.top)||48,width:parseFloat(style.width)||element.offsetWidth,height:parseFloat(style.height)||element.offsetHeight,maximized,fullscreen,minimized:element.hidden,launchOptions}});localStorage.setItem('future.window-session',JSON.stringify(session))}
 }

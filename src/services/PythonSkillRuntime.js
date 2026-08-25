@@ -33,7 +33,7 @@ export class PythonSkillRuntime {
 
   #worker(){
     if(this.worker)return this.worker;
-    const worker=new Worker(new URL('../workers/PythonSkillWorker.js',import.meta.url),{type:'module',name:'aeris-python-skill-runtime'});
+    const worker=new Worker(new URL('../workers/PythonSkillWorker.js',import.meta.url),{type:'module',name:'future-python-skill-runtime'});
     worker.onmessage=event=>this.#message(event.data||{});
     worker.onerror=event=>{const error=new Error(event.message||'Python runtime failed.'),requests=[...this.pending.values()];this.pending.clear();this.worker?.terminate();this.worker=null;this.busy=false;for(const request of requests)request.reject(error);this.#status('failed',error.message)};
     this.worker=worker;return worker;

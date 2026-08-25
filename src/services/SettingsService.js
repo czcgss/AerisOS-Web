@@ -2,29 +2,31 @@ const DEFAULTS = {
   locale: 'en', theme: 'light', accent: '#5f87d7', wallpaper: 'aurora',
   memory: 256, autoBoot: true, restoreSession: true,
   dockApps: ['files','browser','music','photos','calendar','weather','notes','terminal','settings'],
-  setupComplete: false, fullName: 'Aeris User', region: 'US', timezone: 'America/New_York',
+  setupComplete: false, fullName: 'Future User', region: 'US', timezone: 'America/New_York',
   keyboardLayout: 'us', analytics: false, location: false, reduceMotion: false,
 };
 
 export class SettingsService {
   constructor(storage = localStorage) { this.storage = storage; this.values = { ...DEFAULTS }; }
   start() {
-    try { this.values = { ...DEFAULTS, ...JSON.parse(this.storage.getItem('aeris.settings') || '{}') }; } catch {}
+    try { this.values = { ...DEFAULTS, ...JSON.parse(this.storage.getItem('future.settings') || '{}') }; } catch {}
     if (this.values.memory < 256) {
       this.values.memory = 256;
-      this.storage.setItem('aeris.settings', JSON.stringify(this.values));
+      this.storage.setItem('future.settings', JSON.stringify(this.values));
     }
     if (!Array.isArray(this.values.dockApps)) this.values.dockApps = [...DEFAULTS.dockApps];
-    if(!this.values.appSuiteVersion||this.values.appSuiteVersion<2){for(const id of ['photos','weather'])if(!this.values.dockApps.includes(id))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,id);this.values.appSuiteVersion=2;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
-    if(this.values.appSuiteVersion<3){if(!this.values.dockApps.includes('music'))this.values.dockApps.splice(Math.min(2,this.values.dockApps.length),0,'music');this.values.appSuiteVersion=3;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
-    if(this.values.appSuiteVersion<4){if(!this.values.dockApps.includes('browser'))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,'browser');this.values.appSuiteVersion=4;this.storage.setItem('aeris.settings',JSON.stringify(this.values))}
+    if(!this.values.appSuiteVersion||this.values.appSuiteVersion<2){for(const id of ['photos','weather'])if(!this.values.dockApps.includes(id))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,id);this.values.appSuiteVersion=2;this.storage.setItem('future.settings',JSON.stringify(this.values))}
+    if(this.values.appSuiteVersion<3){if(!this.values.dockApps.includes('music'))this.values.dockApps.splice(Math.min(2,this.values.dockApps.length),0,'music');this.values.appSuiteVersion=3;this.storage.setItem('future.settings',JSON.stringify(this.values))}
+    if(this.values.appSuiteVersion<4){if(!this.values.dockApps.includes('browser'))this.values.dockApps.splice(Math.min(1,this.values.dockApps.length),0,'browser');this.values.appSuiteVersion=4;this.storage.setItem('future.settings',JSON.stringify(this.values))}
+    if(this.values.appSuiteVersion<5){if(!this.values.dockApps.includes('tasks'))this.values.dockApps.push('tasks');this.values.appSuiteVersion=5;this.storage.setItem('future.settings',JSON.stringify(this.values))}
+    if(this.values.appSuiteVersion<6){this.values.dockApps=this.values.dockApps.filter(id=>id!=='tasks');this.values.appSuiteVersion=6;this.storage.setItem('future.settings',JSON.stringify(this.values))}
   }
   get(key) { return this.values[key]; }
   all() { return { ...this.values }; }
   set(key, value) {
     this.values[key] = value;
-    this.storage.setItem('aeris.settings', JSON.stringify(this.values));
+    this.storage.setItem('future.settings', JSON.stringify(this.values));
     this.kernel?.bus.emit('settings:change', { key, value });
   }
-  update(values) { for (const [key,value] of Object.entries(values)) this.values[key]=value;this.storage.setItem('aeris.settings',JSON.stringify(this.values));this.kernel?.bus.emit('settings:batch-change',{...values}); }
+  update(values) { for (const [key,value] of Object.entries(values)) this.values[key]=value;this.storage.setItem('future.settings',JSON.stringify(this.values));this.kernel?.bus.emit('settings:batch-change',{...values}); }
 }

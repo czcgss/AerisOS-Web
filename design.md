@@ -23,8 +23,8 @@ Use it for Health/wellness apps (健康), meditation platforms (平台), fitness
 
 ## 3. System Theme Contract
 
-Neumorphism defines the bundled Aeris visual direction, but applications must not hard-code it as the only possible appearance. Every shell surface, built-in application, extension application, widget, notification, Agent surface, setup screen, and recovery screen consumes semantic system theme tokens.
+Neumorphism defines the bundled Future visual direction, but applications must not hard-code it as the only possible appearance. Every shell surface, built-in application, extension application, widget, notification, Agent surface, setup screen, and recovery screen consumes semantic system theme tokens.
 
 Theme packages may customize the color roles, typography families and scale, corner system, application-icon treatment, glass material, depth, motion scale, and wallpaper. Components must use variables such as `--surface`, `--surface-2`, `--text`, `--muted`, `--accent`, `--line`, `--positive`, `--warning`, `--danger`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--window-radius`, `--icon-radius`, `--glass-blur`, `--font-ui`, and `--font-mono` instead of introducing an unrelated application-wide palette.
 
-The active theme can change without an application restart. Extension applications and widgets must subscribe to their Aeris environment and re-render any derived appearance when the theme id, version, base mode, tokens, or variables change. Reduced-motion preferences always override theme motion.
+The active theme can change without an application restart. Extension applications and widgets must subscribe to their Future environment and re-render any derived appearance when the theme id, version, base mode, tokens, or variables change. Reduced-motion preferences always override theme motion.

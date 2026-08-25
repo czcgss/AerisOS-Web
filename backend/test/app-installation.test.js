@@ -7,12 +7,12 @@ import {counterPackage} from '../../src/apps/extensions/counter/package.js';
 
 const memoryStorage=()=>{const values=new Map();return{values,getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,String(value)),removeItem:key=>values.delete(key)}};
 const app=id=>({id,title:id,icon:'grid',color:'blue',mount(){}});
-const settings=storage=>({dockApps:['calendar','files'],get(key){return this[key]},set(key,value){this[key]=value;storage.setItem('aeris.settings',JSON.stringify({[key]:value}))}});
+const settings=storage=>({dockApps:['calendar','files'],get(key){return this[key]},set(key,value){this[key]=value;storage.setItem('future.settings',JSON.stringify({[key]:value}))}});
 const userdata=()=>{const values=new Map([['calendar',{events:[{id:'event'}]}],['notifications',{items:[{id:'one',appId:'calendar'},{id:'two',appId:'reminders'}],delivered:{'calendar:event':1,'reminders:item':2}}]]);return{values,async remove(name){values.delete(name)},async load(name,fallback){return structuredClone(values.get(name)??fallback)},async save(name,value){values.set(name,structuredClone(value))}}};
 
 test('built-in apps uninstall with private data and stay uninstalled',async()=>{
   const storage=memoryStorage(),registry=new AppRegistry(),prefs=settings(storage),data=userdata();registry.register(app('calendar'));registry.register(app('files'));
-  storage.setItem('aeris.files.directory-cache','cached');
+  storage.setItem('future.files.directory-cache','cached');
   const service=new AppInstallationService({registry,userdata:data,settings:prefs,storage});
   assert.equal(service.canUninstall('calendar'),true);
   assert.equal(await service.uninstall('calendar'),true);
@@ -29,9 +29,9 @@ test('built-in apps uninstall with private data and stay uninstalled',async()=>{
 
 test('app-specific browser storage is removed without deleting shared system data',async()=>{
   const storage=memoryStorage(),registry=new AppRegistry(),prefs=settings(storage),data=userdata();registry.register(app('files'));
-  storage.setItem('aeris.finder.view','gallery');storage.setItem('aeris.files.directory-cache','cached');storage.setItem('unrelated.user.document','keep');
+  storage.setItem('future.finder.view','gallery');storage.setItem('future.files.directory-cache','cached');storage.setItem('unrelated.user.document','keep');
   const service=new AppInstallationService({registry,userdata:data,settings:prefs,storage});await service.uninstall('files');
-  assert.equal(storage.getItem('aeris.finder.view'),null);assert.equal(storage.getItem('aeris.files.directory-cache'),'cached');assert.equal(storage.getItem('unrelated.user.document'),'keep');
+  assert.equal(storage.getItem('future.finder.view'),null);assert.equal(storage.getItem('future.files.directory-cache'),'cached');assert.equal(storage.getItem('unrelated.user.document'),'keep');
 });
 
 test('bundled runtime apps can be removed by the system app manager',async()=>{

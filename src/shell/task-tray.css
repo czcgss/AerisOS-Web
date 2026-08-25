@@ -1,0 +1,21 @@
+.system-task-tray-button { position: relative; }
+.system-task-tray-button > i {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: none;
+  min-width: 11px;
+  height: 11px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  border: 1px solid var(--surface);
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  font: 6px/1 var(--font-ui);
+}
+.system-task-tray-button > i.visible { display: flex; }
+.system-task-tray-button.has-running svg { animation: systemTaskPulse 1.6s ease-in-out infinite; }
+@keyframes systemTaskPulse { 50% { opacity: .48; } }
+@media (prefers-reduced-motion: reduce) { .system-task-tray-button.has-running svg { animation: none; } }

@@ -5,7 +5,7 @@ const result=(text,details={})=>({content:[{type:'text',text}],details});
 export class AgentQueryService {
   constructor(){this.pending=new Map()}
   start(){}
-  stop(){for(const query of this.pending.values())query.reject(new Error('Aeris stopped before the question was answered.'));this.pending.clear()}
+  stop(){for(const query of this.pending.values())query.reject(new Error('Future stopped before the question was answered.'));this.pending.clear()}
 
   pendingForSession(sessionId){const query=[...this.pending.values()].find(item=>item.sessionId===sessionId);return query?this.#public(query):null}
 
@@ -16,7 +16,7 @@ export class AgentQueryService {
   }
 
   tool(){
-    const base={name:'query_user',label:'Clarify app requirements',description:'Ask whether a new Aeris app should expose desktop widget extension capabilities. Use only during new app creation and only when the user has not stated this requirement.',parameters:Type.Object({topic:Type.Literal('app-widget-extension',{description:'The only supported clarification topic.'}),appName:Type.String({description:'Concise user-facing name of the app being created.'})},{additionalProperties:false}),executionMode:'sequential'};
+    const base={name:'query_user',label:'Clarify app requirements',description:'Ask whether a new Future app should expose desktop widget extension capabilities. Use only during new app creation and only when the user has not stated this requirement.',parameters:Type.Object({topic:Type.Literal('app-widget-extension',{description:'The only supported clarification topic.'}),appName:Type.String({description:'Concise user-facing name of the app being created.'})},{additionalProperties:false}),executionMode:'sequential'};
     base.forSession=sessionId=>({...base,forSession:undefined,execute:(toolCallId,input,signal,onUpdate)=>this.#execute(sessionId,toolCallId,input,signal,onUpdate)});return base;
   }
 

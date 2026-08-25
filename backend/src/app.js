@@ -20,8 +20,8 @@ export const createBackend=(options={})=>{
     try{
       headers=corsHeaders(request,config);
       if(request.method==='OPTIONS'){response.writeHead(204,headers);response.end();return}
-      const url=new URL(request.url,'http://aeris.local');
-      if(request.method==='GET'&&url.pathname==='/api/health'){sendJson(response,200,{status:'ok',service:'aeris-backend',protocolVersion:BACKEND_PROTOCOL_VERSION,browser:browser.status()},headers);return}
+      const url=new URL(request.url,'http://future.local');
+      if(request.method==='GET'&&url.pathname==='/api/health'){sendJson(response,200,{status:'ok',service:'future-backend',protocolVersion:BACKEND_PROTOCOL_VERSION,browser:browser.status()},headers);return}
       if(request.method==='GET'&&url.pathname==='/api/browser/capabilities'){const state=url.searchParams.get('connect')==='1'?await browser.connect():browser.status();sendJson(response,200,state,headers);return}
       if(request.method==='GET'&&url.pathname==='/api/browser/view'){sendJson(response,200,await browser.view(),headers);return}
       if(request.method==='POST'&&url.pathname==='/api/browser/view/navigate'){const body=await readJson(request,config.requestLimit);sendJson(response,200,await browser.navigate(body.url),headers);return}
@@ -39,7 +39,7 @@ export const createBackend=(options={})=>{
   });
   server.on('upgrade',(request,socket)=>{
     try{
-      const url=new URL(request.url,'http://aeris.local'),origin=request.headers.origin;if(url.pathname!=='/api/browser/stream'){rejectWebSocket(socket,404,'WebSocket route not found.');return}if(origin&&!config.allowedOrigins.has(origin)){rejectWebSocket(socket,403,'Origin is not allowed.');return}
+      const url=new URL(request.url,'http://future.local'),origin=request.headers.origin;if(url.pathname!=='/api/browser/stream'){rejectWebSocket(socket,404,'WebSocket route not found.');return}if(origin&&!config.allowedOrigins.has(origin)){rejectWebSocket(socket,403,'Origin is not allowed.');return}
       const connection=acceptWebSocket(request,socket);let latest=null,sending=false;
       const flush=()=>{if(sending||!latest||connection.buffered()>1024*1024)return;sending=true;const value=latest;latest=null;connection.send(value);sending=false;if(latest)queueMicrotask(flush)};
       const unsubscribe=browser.subscribe(event=>{latest=event;flush()});

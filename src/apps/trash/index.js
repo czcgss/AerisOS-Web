@@ -1,5 +1,5 @@
 import {icon} from '../../icons.js';
-const TRASH='/home/aeris/.local/share/Trash/files';
+const TRASH='/home/future/.local/share/Trash/files';
 const esc=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
 const fmt=size=>size>1048576?`${(size/1048576).toFixed(1)} MB`:size>1024?`${Math.ceil(size/1024)} KB`:`${size} B`;
 export default{

@@ -1,4 +1,4 @@
-const APP_STUDIO_TOOL='aeris_app_studio',WIDGET_STUDIO_TOOL='aeris_widget_studio',THEME_STUDIO_TOOL='aeris_theme_studio',STUDIO_TOOLS=new Set([APP_STUDIO_TOOL,WIDGET_STUDIO_TOOL,THEME_STUDIO_TOOL]);
+const APP_STUDIO_TOOL='future_app_studio',WIDGET_STUDIO_TOOL='future_widget_studio',THEME_STUDIO_TOOL='future_theme_studio',STUDIO_TOOLS=new Set([APP_STUDIO_TOOL,WIDGET_STUDIO_TOOL,THEME_STUDIO_TOOL]);
 const APP_SOURCE_FIELDS=new Set([
   'initialStateJson','localeEnJson','localeZhJson',
   'mainHtml','mainCss','mainJavaScript',

@@ -1,4 +1,4 @@
-const DATABASE='aeris-skill-packages';
+const DATABASE='future-skill-packages';
 const LEGACY_STORE='packages';
 const FILE_STORE='files';
 
@@ -70,5 +70,10 @@ export class SkillPackageStore {
   async clear(){
     const database=await this.open(),stores=[LEGACY_STORE,FILE_STORE].filter(name=>database.objectStoreNames.contains(name)),transaction=database.transaction(stores,'readwrite');
     for(const name of stores)transaction.objectStore(name).clear();await transactionDone(transaction)
+  }
+
+  async deleteDatabase(){
+    this.database?.close();this.database=null;
+    return new Promise((resolve,reject)=>{const request=indexedDB.deleteDatabase(this.databaseName);request.onsuccess=()=>resolve();request.onerror=()=>reject(request.error);request.onblocked=()=>reject(new Error('Close other FutureOS tabs before clearing Skill data.'))})
   }
 }

@@ -14,7 +14,7 @@ class MemoryNotifications{
 test('Agent notifications retain the owning session and follow approval state',async()=>{
   const notifications=new MemoryNotifications(),bus=new EventBus(),aiAgent={snapshot:()=>({sessions:[{id:'session-b',title:'Background research'}]})},service=new AgentNotificationService({notifications,aiAgent,tools:{},queryUser:{},i18n:{t:key=>key}});service.kernel={bus};service.start();
 
-  bus.emit('capability:execution',{toolCallId:'tool-1',sessionId:'session-b',turnId:'turn-2',phase:'approval',label:'Delete file',approvalMessage:'Delete /home/aeris/demo.txt?'});
+  bus.emit('capability:execution',{toolCallId:'tool-1',sessionId:'session-b',turnId:'turn-2',phase:'approval',label:'Delete file',approvalMessage:'Delete /home/future/demo.txt?'});
   await flush();
   const pending=notifications.bySource('agent:approval:tool-1');
   assert.equal(pending.category,'approval');

@@ -12,7 +12,7 @@ export class AppRegistry {
     this.apps.delete(id);this.#emit({type:'unregistered',app});return true;
   }
   get(id) { return this.apps.get(id); }
-  list() { return [...this.apps.values()]; }
+  list({includeInternal=false}={}) { return [...this.apps.values()].filter(app=>includeInternal||!app.internal); }
   subscribe(listener) { this.listeners.add(listener);return()=>this.listeners.delete(listener); }
   #emit(change) { for(const listener of this.listeners)listener(change); }
 }
