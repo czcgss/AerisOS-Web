@@ -20,7 +20,10 @@ test('execution history excludes cancelled tasks and unrelated undo receipts',()
 });
 
 test('daily automation exposes its next scheduled execution',()=>{
-  const now=new Date('2026-08-25T09:00:00+08:00').getTime();
+  // Daily automations follow the computer's local wall clock. Construct both
+  // values in the process timezone so this assertion is identical on a UTC CI
+  // runner and a developer machine in another timezone.
+  const now=new Date(2026,7,25,9,0,0,0).getTime();
   const next=automationNextRunAt({enabled:true,createdAt:now,lastRunAt:0,trigger:{type:'daily',time:'08:00'}},now);
-  assert.equal(new Date(next).toISOString(),new Date('2026-08-26T08:00:00+08:00').toISOString());
+  assert.equal(next,new Date(2026,7,26,8,0,0,0).getTime());
 });
