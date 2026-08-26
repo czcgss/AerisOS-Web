@@ -85,13 +85,18 @@ export class WindowManager {
     const record = this.windows.get(id); if (!record || record.fullscreen) return;
     if (!record.maximized) {
       record.previous = record.element.style.cssText;
-      const dock = this.layer.closest('.desktop')?.querySelector('.dock');
+      const desktop = this.layer.closest('.desktop');
+      const dock = desktop?.querySelector('.dock');
+      const systemBar = desktop?.querySelector('.system-bar');
       const dockTop = dock?.getBoundingClientRect().top || innerHeight - 75;
       const bottomInset = Math.max(0, Math.ceil(innerHeight - dockTop));
       // Title-bar zoom fills the usable desktop, not the physical viewport.
-      // Sit flush against the system bar while retaining a subtle frame beside
-      // the wallpaper and Dock. True fullscreen remains a separate action.
-      const topInset = 0;
+      // The themed system bar and the window layer do not necessarily share
+      // the same height. Align their measured edges instead of assuming that
+      // top: 0 inside the layer is flush with the bar.
+      const layerTop = this.layer.getBoundingClientRect().top;
+      const barBottom = systemBar?.getBoundingClientRect().bottom ?? layerTop;
+      const topInset = Math.round(barBottom - layerTop);
       const sideInset = 1;
       const dockGap = 1;
       record.element.style.cssText += `;inset:${topInset}px ${sideInset}px ${bottomInset+dockGap}px ${sideInset}px;width:auto;height:auto;z-index:${++this.z}`;
