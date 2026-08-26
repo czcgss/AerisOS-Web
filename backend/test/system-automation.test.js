@@ -14,9 +14,9 @@ const memoryStorage=()=>{const values=new Map();return{values,getItem:key=>value
 test('system tasks follow an Agent turn through tool work and completion',()=>{
   const storage=memoryStorage(),bus=new EventBus(),service=new SystemTaskService(storage);service.kernel={bus};service.start();
   bus.emit('ai:agent-event',{sessionId:'session-1',turnId:'turn-1',prompt:'Prepare a morning brief',event:{type:'turn_created'}});
-  let task=service.snapshot().tasks[0];assert.equal(task.title,'Prepare a morning brief');assert.equal(task.status,'running');
+  assert.equal(service.snapshot().tasks.length,0);
   bus.emit('capability:execution',{sessionId:'session-1',turnId:'turn-1',toolCallId:'tool-1',phase:'approval',label:'Read calendar',appId:'calendar'});
-  task=service.snapshot().tasks[0];assert.equal(task.status,'approval');assert.equal(task.activeTool.appId,'calendar');
+  let task=service.snapshot().tasks[0];assert.equal(task.title,'Read calendar');assert.equal(task.status,'approval');assert.equal(task.activeTool.appId,'calendar');
   assert.equal(service.remove(task.id),false);
   bus.emit('ai:task-status',{sessionId:'session-1',turnId:'turn-1',status:'completed'});
   task=service.snapshot().tasks[0];assert.equal(task.status,'completed');assert.equal(task.progress,100);service.stop();
