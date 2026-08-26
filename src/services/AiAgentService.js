@@ -96,6 +96,8 @@ export class AiAgentService {
       sessions: this.state.sessions.map(session => ({
         id: session.id,
         title: session.title,
+        origin: session.origin,
+        automation: clone(session.automation),
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
         messageCount: session.messages.length,
@@ -165,9 +167,15 @@ export class AiAgentService {
     this.#emit('ai:changed');
   }
 
-  createSession() {
+  createSession(options = {}) {
     const stamp = now();
-    const session = { id: crypto.randomUUID(), title: 'New chat', createdAt: stamp, updatedAt: stamp, messages: [], turns: [], skills: [] };
+    const origin=options.origin==='automation'?'automation':'user',automation=origin==='automation'?{
+      id:String(options.automation?.id||''),
+      name:String(options.automation?.name||options.title||'').trim().slice(0,100),
+      triggerType:String(options.automation?.triggerType||''),
+      triggerReason:String(options.automation?.triggerReason||''),
+    }:null;
+    const session = { id: crypto.randomUUID(), title: String(options.title||'New chat').trim().slice(0,80)||'New chat', origin, automation, createdAt: stamp, updatedAt: stamp, messages: [], turns: [], skills: [] };
     this.state.sessions.unshift(session);
     this.persist();
     this.#emit('ai:changed', { sessionId: session.id });
@@ -220,7 +228,7 @@ export class AiAgentService {
     return run;
   }
 
-  async #sendTurn(id, text, {skillName='',attachments=[]}={}) {
+  async #sendTurn(id, text, {skillName='',attachments=[],source='user'}={}) {
     const prompt = String(text).trim();
     const files=Array.isArray(attachments)?attachments:[];
     if (!prompt&&!files.length) return;
@@ -243,7 +251,7 @@ export class AiAgentService {
     this.activeTurns.delete(id);
     const timestamp=now(),context=this.agentContext?.snapshot()||null,contextBlock=this.agentContext?.promptBlock()||'',modelPrompt=contextBlock?`${prompt||'Analyze the attached file or files.'}\n\n${contextBlock}`:prompt,input=agentAttachmentInput(modelPrompt,files);
     const visibleUserMessage={role:'user',content:prompt,timestamp,attachments:attachmentMetadata(files)},userMessage={role:'user',content:input.content,timestamp};
-    const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:'running',user:clone(visibleUserMessage),responses:[],messageIndex:null,error:''};
+    const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:'running',source:source==='automation'?'automation':'user',user:clone(visibleUserMessage),responses:[],messageIndex:null,error:''};
     session.turns.push(turn);session.updatedAt=userMessage.timestamp;
     this.activeTurns.set(id,turn.id);
     this.multiAgent?.beginTurn(id,turn.id,prompt||files.map(file=>file.name).join(', '));
@@ -410,7 +418,7 @@ export class AiAgentService {
         agent.state.messages=compactAgentMessages(agent.state.messages);
         session.messages = compactAttachmentMessages(agent.state.messages);
         session.updatedAt = now();
-        if (session.title === 'New chat') {
+        if (session.origin!=='automation'&&session.title === 'New chat') {
           const first = session.messages.find(message => message.role === 'user');
           const title = typeof first?.content === 'string' ? first.content : first?.content?.find(block => block.type === 'text')?.text;
           if (title) session.title = title.trim().replace(/\s+/g, ' ').slice(0, 44);
@@ -465,12 +473,14 @@ export class AiAgentService {
     const sessions = Array.isArray(saved?.sessions) ? saved.sessions.filter(item => item?.id).map(item => ({
       id: String(item.id),
       title: String(item.title || 'New chat'),
+      origin:item.origin==='automation'?'automation':'user',
+      automation:item.origin==='automation'?{id:String(item.automation?.id||''),name:String(item.automation?.name||item.title||''),triggerType:String(item.automation?.triggerType||''),triggerReason:String(item.automation?.triggerReason||'')}:null,
       createdAt: Number(item.createdAt) || now(),
       updatedAt: Number(item.updatedAt) || now(),
       messages: compactAgentMessages(Array.isArray(item.messages) ? item.messages : []),
       skills:Array.isArray(item.skills)?[...new Set(item.skills.map(String))]:[],
       turns: Array.isArray(item.turns) ? item.turns.filter(turn=>turn?.id&&turn?.user).map(turn=>({
-        id:String(turn.id),createdAt:Number(turn.createdAt)||now(),updatedAt:Number(turn.updatedAt)||now(),status:['running','queued'].includes(turn.status)?'stopped':String(turn.status||'completed'),
+        id:String(turn.id),createdAt:Number(turn.createdAt)||now(),updatedAt:Number(turn.updatedAt)||now(),status:['running','queued'].includes(turn.status)?'stopped':String(turn.status||'completed'),source:turn.source==='automation'?'automation':'user',
         user:turn.user,responses:compactAgentMessages(Array.isArray(turn.responses)?turn.responses:[]),messageIndex:Number.isInteger(turn.messageIndex)?turn.messageIndex:null,taskId:turn.taskId?String(turn.taskId):'',error:String(turn.error||''),
       })) : [],
     })) : [];
