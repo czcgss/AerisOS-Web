@@ -1,4 +1,5 @@
 export default {
+  automationConversation: 'Automation', automationInstruction: 'Automation instruction',
   _name: 'English', deny: 'Deny', system: 'Future', computerName: 'Future Computer', virtualComputerName: 'Future Virtual Computer', linuxSystemName: 'Future Linux', applications: 'Applications', search: 'Search applications, files and commands',
   files: 'Files', terminal: 'Terminal', settings: 'Settings', machine: 'Computer', monitor: 'System Monitor', notes: 'Notes', music: 'Music',
   desktop: 'Desktop', documents: 'Documents', downloads: 'Downloads', pictures: 'Pictures', home: 'Home', shared: 'Shared', locations: 'Locations',

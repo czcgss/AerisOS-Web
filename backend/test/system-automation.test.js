@@ -40,10 +40,10 @@ test('operation receipts invoke their registered inverse exactly once',async()=>
 test('manual automations run in a background Agent session and update state',async()=>{
   const storage=memoryStorage(),bus=new EventBus(),started=[];
   const tasks={begin:value=>({id:'task-1',...value}),snapshot:()=>({tasks:[]}),update(){}};
-  const service=new AutomationService({storage,tasks});service.kernel={bus};service.setRunner({createSession:()=> 'automation-session',renameSession:(id,name)=>started.push(['rename',id,name]),send:async(id,prompt)=>started.push(['send',id,prompt])});service.start();
+  const service=new AutomationService({storage,tasks});service.kernel={bus};service.setRunner({createSession:options=>{started.push(['create',options]);return 'automation-session'},send:async(id,prompt,options)=>started.push(['send',id,prompt,options])});service.start();
   const rule=service.create({name:'Daily plan',trigger:{type:'daily',time:'09:00'},action:{prompt:'Plan my day'}});
   await service.run(rule.id);
-  assert.deepEqual(started,[['rename','automation-session','Daily plan'],['send','automation-session','Plan my day']]);
+  assert.deepEqual(started,[['create',{title:'Daily plan',origin:'automation',automation:{id:rule.id,name:'Daily plan',triggerType:'daily',triggerReason:'manual'}}],['send','automation-session','Plan my day',{source:'automation'}]]);
   assert.equal(service.get(rule.id).lastStatus,'completed');assert.ok(service.get(rule.id).lastRunAt);service.stop();
 });
 

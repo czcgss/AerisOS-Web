@@ -73,7 +73,7 @@ export class SystemTaskService{
   }
 
   async cancel(id){const task=this.tasks.find(item=>item.id===id);if(!task||terminal.has(task.status))return false;this.runner?.abort?.(task.sessionId);this.update(id,{status:'cancelled'});return true}
-  async retry(id){const task=this.tasks.find(item=>item.id===id);if(!task?.prompt||!this.runner)throw new Error('This task cannot be retried.');const sessionId=this.runner.createSession();this.runner.renameSession(sessionId,task.title);this.update(id,{status:'cancelled',replacedBySessionId:sessionId});await this.runner.send(sessionId,task.prompt);return sessionId}
+  async retry(id){const task=this.tasks.find(item=>item.id===id);if(!task?.prompt||!this.runner)throw new Error('This task cannot be retried.');const automated=task.origin==='automation',sessionId=this.runner.createSession(automated?{title:task.title,origin:'automation',automation:{id:task.automationId||'',name:task.title,triggerReason:'retry'}}:{title:task.title});this.update(id,{status:'cancelled',replacedBySessionId:sessionId});await this.runner.send(sessionId,task.prompt,automated?{source:'automation'}:{});return sessionId}
   clearCompleted(){for(const task of this.tasks)if(terminal.has(task.status))task.dismissed=true;this.#save()}
   clearData(){for(const task of this.tasks)if(!terminal.has(task.status))this.runner?.abort?.(task.sessionId);this.tasks=[];this.pendingTurns.clear();this.ignoredTurns.clear();this.storage?.removeItem(STORAGE_KEY);this.#emit()}
   remove(id){const task=this.tasks.find(item=>item.id===id);if(!task||!terminal.has(task.status))return false;this.update(id,{dismissed:true});return true}

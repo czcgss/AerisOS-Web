@@ -79,3 +79,44 @@
 @media (prefers-reduced-motion: reduce) {
   .agent-notification-target { animation: none; }
 }
+
+.ai-session-row strong { display: flex; align-items: center; gap: 5px; }
+.ai-session-origin {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 700;
+}
+.ai-session-row.automation-session > button:first-child > span:first-child { color: var(--accent); }
+.ai-automation-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ai-message-automation .ai-message-avatar {
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface-2));
+  color: var(--accent);
+}
+.ai-message-automation .ai-message-body {
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-2));
+}
+.ai-automation-instruction {
+  display: flex !important;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 5px !important;
+  color: var(--accent);
+  font-size: 9px !important;
+  font-weight: 700 !important;
+}

@@ -1,4 +1,5 @@
 export default {
+  automationConversation: '自动化', automationInstruction: '自动化指令',
   _name: '简体中文', deny: '拒绝', system: '伏秋', computerName: '伏秋电脑', virtualComputerName: '伏秋虚拟电脑', linuxSystemName: '伏秋 Linux', applications: '应用程序', search: '搜索应用、文件和命令',
   files: '文件', terminal: '终端', settings: '设置', machine: '计算机', monitor: '系统监视器', notes: '备忘录', music: '音乐',
   desktop: '桌面', documents: '文稿', downloads: '下载', pictures: '图片', home: '主目录', shared: '共享空间', locations: '位置',
