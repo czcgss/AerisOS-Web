@@ -1,19 +1,19 @@
-const UNINSTALLED_KEY='aeris.apps.uninstalled.v1';
+const UNINSTALLED_KEY='future.apps.uninstalled.v1';
 
 const USERDATA_BY_APP={calendar:['calendar'],reminders:['reminders'],notes:['notes'],contacts:['contacts'],photos:['photos']};
 const STORAGE_BY_APP={
-  ai:['aeris.ai.state.v1','aeris.ai.workspace','aeris.ai.agents.v1','aeris.ai.workflows.v1','aeris.ai.skills.v1'],
-  browser:['aeris.browser.v1'],files:['aeris.finder.view'],music:['aeris.music.volume'],weather:['aeris.weather.cache','aeris.weather.location'],
+  ai:['future.ai.state.v1','future.ai.workspace','future.ai.agents.v1','future.ai.workflows.v1','future.ai.skills.v1'],
+  browser:['future.browser.v1'],files:['future.finder.view'],music:['future.music.volume'],weather:['future.weather.cache','future.weather.location'],
 };
 const readIds=storage=>{try{const value=JSON.parse(storage?.getItem(UNINSTALLED_KEY)||'[]');return new Set(Array.isArray(value)?value.map(String):[])}catch{return new Set()}};
 
 export class AppInstallationService{
   constructor({registry,appRuntime,userdata,settings,storage=globalThis.localStorage}={}){Object.assign(this,{registry,appRuntime,userdata,settings,storage});this.uninstalled=readIds(storage)}
   setRuntimeServices(services={}){this.runtimeServices=services}
-  async prepare(){for(const id of [...this.uninstalled]){const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);if(runtime)this.appRuntime.uninstall(id,{allowBundled:true});else this.registry.unregister(id)}this.#persist()}
-  canUninstall(id){return Boolean(this.registry.get(String(id)))}
+  async prepare(){for(const id of [...this.uninstalled]){if(this.registry.get(id)?.internal){this.uninstalled.delete(id);continue}const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);if(runtime)this.appRuntime.uninstall(id,{allowBundled:true});else this.registry.unregister(id)}this.#persist()}
+  canUninstall(id){const app=this.registry.get(String(id));return Boolean(app&&!app.internal)}
   async uninstall(id){
-    id=String(id);const app=this.registry.get(id);if(!app)return false;const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);
+    id=String(id);const app=this.registry.get(id);if(!app||app.internal)return false;const runtime=this.appRuntime?.list().find(item=>item.manifest.id===id);
     if(runtime)this.appRuntime.uninstall(id,{allowBundled:true});else this.registry.unregister(id);
     if(!runtime||runtime.source==='bundled'){this.uninstalled.add(id);this.#persist()}
     this.settings?.set('dockApps',(this.settings.get('dockApps')||[]).filter(appId=>appId!==id));await this.#clearData(id);

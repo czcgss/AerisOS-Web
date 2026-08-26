@@ -6,7 +6,7 @@ const HEX=/^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
 const ICON_ID=/^[A-Za-z][A-Za-z0-9]{0,47}$/;
 const SVG_PATH=/^[MmZzLlHhVvCcSsQqTtAaEe0-9+.,\-\s]+$/;
 const plain=value=>value&&typeof value==='object'&&!Array.isArray(value);
-const fail=message=>{throw new Error(`Invalid Aeris theme package: ${message}`)};
+const fail=message=>{throw new Error(`Invalid Future theme package: ${message}`)};
 const localized=(value,field)=>{if(!plain(value))fail(`${field} must be a localized object`);const result=Object.fromEntries(Object.entries(value).map(([locale,text])=>[String(locale),String(text||'').trim()]).filter(([,text])=>text));if(!result.en||!result.zh)fail(`${field} requires en and zh values`);return result};
 const color=(value,field)=>{const result=String(value||'').trim();if(!HEX.test(result))fail(`${field} must be a six or eight digit hex color`);return result};
 const number=(value,field,min,max,fallback)=>{const result=value==null?fallback:Number(value);if(!Number.isFinite(result)||result<min||result>max)fail(`${field} must be between ${min} and ${max}`);return result};
@@ -32,7 +32,7 @@ export function validateThemePackage(source){
     motion:{scale:number(motion.scale,'motion.scale',0,1.5,1)},
   };
   const wallpaper=plain(source.wallpaper)?source.wallpaper:{};
-  return{manifest:{formatVersion:THEME_PACKAGE_FORMAT_VERSION,id,version,name:localized(manifest.name,'name'),description:localized(manifest.description,'description'),author:text(manifest.author||'Aeris Community','author',80),baseMode},tokens,wallpaper:{background:background(wallpaper.background||'linear-gradient(145deg,#dce8ef,#cbdde8)'),preview:color(wallpaper.preview||tokens.colors.surface,'wallpaper.preview')}};
+  return{manifest:{formatVersion:THEME_PACKAGE_FORMAT_VERSION,id,version,name:localized(manifest.name,'name'),description:localized(manifest.description,'description'),author:text(manifest.author||'Future Community','author',80),baseMode},tokens,wallpaper:{background:background(wallpaper.background||'linear-gradient(145deg,#dce8ef,#cbdde8)'),preview:color(wallpaper.preview||tokens.colors.surface,'wallpaper.preview')}};
 }
 
 export function themeCssVariables(themePackage){const {tokens}=themePackage,{colors,typography,shape,icons,material,motion}=tokens,alpha=Math.round(material.transparency*255).toString(16).padStart(2,'0'),iconRadius=icons.shape==='circle'?'50%':icons.shape==='rounded'?`${shape.small}px`:`${Math.max(shape.medium,12)}px`;return{

@@ -9,6 +9,7 @@ export class WindowManager {
   open(appId, options = {}) {
     const app = this.registry.get(appId);
     if (!app) throw new Error(`Unknown application: ${appId}`);
+    if(app.internal)throw new Error(`Internal capability is not a launchable application: ${appId}`);
     if (app.singleInstance) {
       const current = [...this.windows.values()].find(window => window.app.id === appId);
       if (current) { current.element.hidden = false; this.focus(current.id); return current; }
@@ -84,13 +85,18 @@ export class WindowManager {
     const record = this.windows.get(id); if (!record || record.fullscreen) return;
     if (!record.maximized) {
       record.previous = record.element.style.cssText;
-      const dock = this.layer.closest('.desktop')?.querySelector('.dock');
+      const desktop = this.layer.closest('.desktop');
+      const dock = desktop?.querySelector('.dock');
+      const systemBar = desktop?.querySelector('.system-bar');
       const dockTop = dock?.getBoundingClientRect().top || innerHeight - 75;
       const bottomInset = Math.max(0, Math.ceil(innerHeight - dockTop));
       // Title-bar zoom fills the usable desktop, not the physical viewport.
-      // Sit flush against the system bar while retaining a subtle frame beside
-      // the wallpaper and Dock. True fullscreen remains a separate action.
-      const topInset = 0;
+      // The themed system bar and the window layer do not necessarily share
+      // the same height. Align their measured edges instead of assuming that
+      // top: 0 inside the layer is flush with the bar.
+      const layerTop = this.layer.getBoundingClientRect().top;
+      const barBottom = systemBar?.getBoundingClientRect().bottom ?? layerTop;
+      const topInset = Math.round(barBottom - layerTop);
       const sideInset = 1;
       const dockGap = 1;
       record.element.style.cssText += `;inset:${topInset}px ${sideInset}px ${bottomInset+dockGap}px ${sideInset}px;width:auto;height:auto;z-index:${++this.z}`;
@@ -103,9 +109,9 @@ export class WindowManager {
 
   restoreSession() {
     if(!this.context.settings.get('restoreSession'))return;
-    let session=[];try{session=JSON.parse(localStorage.getItem('aeris.window-session')||'[]')}catch{}
+    let session=[];try{session=JSON.parse(localStorage.getItem('future.window-session')||'[]')}catch{}
     this.restoring=true;
-    for(const state of session){if(!this.registry.get(state.appId))continue;const record=this.open(state.appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});if(state.maximized)this.zoom(record.id);if(state.fullscreen)this.maximize(record.id);if(state.minimized)record.element.hidden=true}
+    for(const state of session){const app=this.registry.get(state.appId);if(!app||app.internal)continue;const record=this.open(state.appId,{left:state.left,top:state.top,width:state.width,height:state.height,path:state.launchOptions?.path||'',restored:true});if(state.maximized)this.zoom(record.id);if(state.fullscreen)this.maximize(record.id);if(state.minimized)record.element.hidden=true}
     this.restoring=false;
   }
 
@@ -139,5 +145,5 @@ export class WindowManager {
   persistSession(){this.#persistSession()}
   #syncFullscreenChrome(){this.layer.closest('.desktop')?.classList.toggle('has-fullscreen-window',[...this.windows.values()].some(record=>record.fullscreen))}
   #contextWindow(record){return{id:record.id,appId:record.app.id,title:this.context.i18n.t(record.app.title),icon:record.app.icon,color:record.app.color||'grey',path:record.launchOptions?.path||'',minimized:record.element.hidden,focused:record.element.classList.contains('focused'),zIndex:Number(record.element.style.zIndex)||0}}
-  #persistSession(){if(this.restoring||!this.context.settings.get('restoreSession'))return;const session=[...this.windows.values()].map(record=>{const{app,element,maximized,fullscreen,launchOptions}=record,normalStyle=maximized?record.previous:fullscreen?record.fullscreenPrevious:element.style.cssText,style=document.createElement('div').style;style.cssText=normalStyle||element.style.cssText;return{appId:app.id,left:parseFloat(style.left)||0,top:parseFloat(style.top)||48,width:parseFloat(style.width)||element.offsetWidth,height:parseFloat(style.height)||element.offsetHeight,maximized,fullscreen,minimized:element.hidden,launchOptions}});localStorage.setItem('aeris.window-session',JSON.stringify(session))}
+  #persistSession(){if(this.restoring||!this.context.settings.get('restoreSession'))return;const session=[...this.windows.values()].map(record=>{const{app,element,maximized,fullscreen,launchOptions}=record,normalStyle=maximized?record.previous:fullscreen?record.fullscreenPrevious:element.style.cssText,style=document.createElement('div').style;style.cssText=normalStyle||element.style.cssText;return{appId:app.id,left:parseFloat(style.left)||0,top:parseFloat(style.top)||48,width:parseFloat(style.width)||element.offsetWidth,height:parseFloat(style.height)||element.offsetHeight,maximized,fullscreen,minimized:element.hidden,launchOptions}});localStorage.setItem('future.window-session',JSON.stringify(session))}
 }

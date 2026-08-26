@@ -1,11 +1,11 @@
 ---
 name: create-widget
-description: Create, inspect, modify, validate, install, update, and uninstall Aeris desktop widgets when the user asks for a new desktop component or wants to manage an existing generated widget.
+description: Create, inspect, modify, validate, install, update, and uninstall Future desktop widgets when the user asks for a new desktop component or wants to manage an existing generated widget.
 ---
 
-# Create an Aeris desktop widget
+# Create a Future desktop widget
 
-Use this skill only for packages that run through Aeris Widget Runtime. Never edit `DesktopWidgets.js` to add a generated widget. Read and follow the bundled `references/widget-runtime.md` contract before producing source.
+Use this skill only for packages that run through Future Widget Runtime. Never edit `DesktopWidgets.js` to add a generated widget. Read and follow the bundled `references/widget-runtime.md` contract before producing source.
 
 ## Required workflow
 

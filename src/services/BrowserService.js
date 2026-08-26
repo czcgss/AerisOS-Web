@@ -1,4 +1,4 @@
-const STORAGE_KEY='aeris.browser.v1';
+const STORAGE_KEY='future.browser.v1';
 const HOME_URL='about:blank';
 const clone=value=>structuredClone(value);
 const titleFor=url=>{try{return new URL(url).hostname.replace(/^www\./,'')||'New Tab'}catch{return'New Tab'}};
@@ -6,7 +6,7 @@ const normaliseUrl=value=>{
   const input=String(value||'').trim();if(!input)return HOME_URL;
   if(input===HOME_URL)return input;
   const candidate=/^[a-z][a-z\d+.-]*:/i.test(input)?input:/^[^\s]+\.[^\s]+/.test(input)?`https://${input}`:`https://www.google.com/search?q=${encodeURIComponent(input)}`;
-  const url=new URL(candidate);if(!['http:','https:'].includes(url.protocol))throw new Error('Aeris Browser supports HTTP and HTTPS pages.');if(globalThis.location?.origin&&url.origin===globalThis.location.origin)throw new Error('Aeris Browser cannot embed the Aeris system origin.');return url.toString();
+  const url=new URL(candidate);if(!['http:','https:'].includes(url.protocol))throw new Error('Future Browser supports HTTP and HTTPS pages.');if(globalThis.location?.origin&&url.origin===globalThis.location.origin)throw new Error('Future Browser cannot embed the Future system origin.');return url.toString();
 };
 const newTab=url=>{url=normaliseUrl(url);return{id:crypto.randomUUID(),url,title:titleFor(url),entries:[url],entryIndex:0,reloadKey:0,createdAt:Date.now(),updatedAt:Date.now()}};
 

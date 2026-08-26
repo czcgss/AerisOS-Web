@@ -1,9 +1,9 @@
 ---
 name: create-theme
-description: Create, inspect, validate, preview, install, update, apply, and uninstall complete Aeris system themes when the user wants to customize the operating system appearance.
+description: Create, inspect, validate, preview, install, update, apply, and uninstall complete Future system themes when the user wants to customize the operating system appearance.
 ---
 
-# Create an Aeris system theme
+# Create a Future system theme
 
 Use Theme Studio for system-wide themes. A theme is a declarative package, not arbitrary CSS. It must provide a coherent visual system for the shell, built-in apps, extension apps, widgets, notifications, Agent surfaces, and setup/recovery screens.
 

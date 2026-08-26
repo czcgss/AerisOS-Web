@@ -51,8 +51,8 @@ export class ChromiumSessionService{
     connection?.close();
   }
   #launch(){
-    const executable=this.config.executable||candidates().find(existsSync);if(!executable)throw new Error('No supported Chromium browser was found. Set AERIS_CHROMIUM_EXECUTABLE.');
-    const profile=this.config.profile||join(homedir?.()||tmpdir(),'Library','Application Support','AerisOS','Browser');mkdirSync(profile,{recursive:true});
+    const executable=this.config.executable||candidates().find(existsSync);if(!executable)throw new Error('No supported Chromium browser was found. Set FUTURE_CHROMIUM_EXECUTABLE.');
+    const profile=this.config.profile||join(homedir?.()||tmpdir(),'Library','Application Support','FutureOS','Browser');mkdirSync(profile,{recursive:true});
     const visibility=this.config.headless?['--headless=new']:[];
     this.process=spawn(executable,[...visibility,`--remote-debugging-port=${this.config.port}`,`--user-data-dir=${profile}`,'--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-component-update','--hide-scrollbars',`--window-size=${this.config.width},${this.config.height}`,'about:blank'],{stdio:'ignore',detached:false});
     this.process.once('exit',()=>{if(this.state!=='idle'){this.state='failed';this.error='Chromium stopped.'}this.connection=null;this.process=null});

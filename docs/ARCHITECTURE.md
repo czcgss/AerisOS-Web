@@ -1,12 +1,12 @@
-# Aeris architecture
+# Future architecture
 
-Aeris is a browser-hosted operating system built around an actual x86 Linux guest. The browser is the hardware and display host; it is not the source of process or filesystem demo data.
+Future is a browser-hosted operating system built around an actual x86 Linux guest. The browser is the hardware and display host; it is not the source of process or filesystem demo data.
 
 ## Runtime layers
 
 ```text
 Browser host
-├── Aeris kernel
+├── Future kernel
 │   ├── service registry
 │   ├── event bus
 │   └── lifecycle management
@@ -21,7 +21,7 @@ Browser host
 │   ├── kernel processes
 │   ├── procfs / sysfs
 │   ├── shell runtime
-│   └── /mnt/aeris shared filesystem
+│   └── /mnt/future shared filesystem
 ├── System services
 │   ├── guest command broker
 │   ├── process service
@@ -63,13 +63,13 @@ The Alpine runtime separates system control from user terminals. `ttyS0` is a de
 
 `ttyS1`, `ttyS2` and `ttyS3` are independent interactive Linux TTYs. BusyBox `getty` gives each device its own login shell and controlling terminal. The browser connects these UART byte streams to xterm.js, which implements VT/ANSI rendering, keyboard escape sequences, cursor movement, scrollback and selection. Terminal resize events update the guest TTY dimensions through `stty`, allowing full-screen applications to receive the correct geometry.
 
-Terminal tabs map directly to these three emulated serial devices. Commands, shell history, completion, signals and full-screen behavior are handled by Linux rather than reimplemented in the Aeris UI. Closing a terminal session sends a hangup to its TTY process group so `init` can start a clean shell for the next session.
+Terminal tabs map directly to these three emulated serial devices. Commands, shell history, completion, signals and full-screen behavior are handled by Linux rather than reimplemented in the Future UI. Closing a terminal session sends a hangup to its TTY process group so `init` can start a clean shell for the next session.
 
 ## Filesystem
 
-Files exposes the `aeris` user's Home, Desktop, Documents, Downloads and Pictures locations, plus a separately labelled Shared location. Linux mount paths remain an implementation detail and are translated into user-facing breadcrumbs. Desktop icons are backed by `/home/aeris/Desktop`, so filesystem changes are reflected by both the desktop shell and Files.
+Files exposes the `future` user's Home, Desktop, Documents, Downloads and Pictures locations, plus a separately labelled Shared location. Linux mount paths remain an implementation detail and are translated into user-facing breadcrumbs. Desktop icons are backed by `/home/future/Desktop`, so filesystem changes are reflected by both the desktop shell and Files.
 
-All application prompts are rendered by the native Aeris dialog service. Applications do not call browser `prompt`, `alert` or `confirm` APIs. Aeris initializes a v86 9P device and attempts to mount it at `/mnt/aeris`; the user's home directories live inside Alpine and are retained by machine snapshots.
+All application prompts are rendered by the native Future dialog service. Applications do not call browser `prompt`, `alert` or `confirm` APIs. Future initializes a v86 9P device and attempts to mount it at `/mnt/future`; the user's home directories live inside Alpine and are retained by machine snapshots.
 
 ## Persistence model
 
@@ -84,15 +84,15 @@ This is snapshot-based persistence of the complete running computer, not yet a s
 
 ## Installation gate
 
-The desktop shell may be composed while the guest starts, but it remains inert and fully covered by the system installation screen. On a first run, Aeris does not unlock the desktop until Alpine has booted, the local account and home directories exist, the control services are running, and the first recoverable machine snapshot has been committed to IndexedDB. Later page loads use the same gate while restoring the saved snapshot. Boot-stage and v86 download-progress events drive the visible status and progress bar; setup errors leave the desktop locked instead of exposing a partially initialized system.
+The desktop shell may be composed while the guest starts, but it remains inert and fully covered by the system installation screen. On a first run, Future does not unlock the desktop until Alpine has booted, the local account and home directories exist, the control services are running, and the first recoverable machine snapshot has been committed to IndexedDB. Later page loads use the same gate while restoring the saved snapshot. Boot-stage and v86 download-progress events drive the visible status and progress bar; setup errors leave the desktop locked instead of exposing a partially initialized system.
 
-After the installation gate, incomplete systems enter `SetupAssistant` instead of the desktop. The assistant configures language, region, time zone, keyboard layout, accessibility, network disclosure, the local account, privacy defaults and appearance. Completion writes `/home/aeris/.config/aeris/profile.json`, optionally sets the real Linux account password, persists OS preferences and commits another machine checkpoint. Only then is the desktop made interactive. An interrupted assistant keeps its non-sensitive draft locally and never stores the password.
+After the installation gate, incomplete systems enter `SetupAssistant` instead of the desktop. The assistant configures language, region, time zone, keyboard layout, accessibility, network disclosure, the local account, privacy defaults and appearance. Completion writes `/home/future/.config/future/profile.json`, optionally sets the real Linux account password, persists OS preferences and commits another machine checkpoint. Only then is the desktop made interactive. An interrupted assistant keeps its non-sensitive draft locally and never stores the password.
 
 ## Application and Agent baseline
 
-The registry provides eighteen modules: Aeris AI, Files, Calendar, Contacts, Reminders, Notes, Text Editor, Preview, Photos, Trash, Weather, Calculator, Clock, Disk Utility, Terminal, Computer, System Monitor and Settings. Files routes documents to Text Editor or Preview; Disk Utility reads the guest's real filesystems and mounts. Browser, package installation and cloud-dependent categories are not represented by inert mock applications: they require embedding, privilege, account, protocol or permission capabilities before registration.
+The registry provides eighteen modules: Future AI, Files, Calendar, Contacts, Reminders, Notes, Text Editor, Preview, Photos, Trash, Weather, Calculator, Clock, Disk Utility, Terminal, Computer, System Monitor and Settings. Files routes documents to Text Editor or Preview; Disk Utility reads the guest's real filesystems and mounts. Browser, package installation and cloud-dependent categories are not represented by inert mock applications: they require embedding, privilege, account, protocol or permission capabilities before registration.
 
-`AiAgentService` owns provider configuration, Pi Agent sessions, explicit user/assistant turns, browser recovery, and guest persistence. `SystemToolService` exposes application capabilities as validated Agent tools. Each application can be removed from the Agent's active tool set, and high-risk tool definitions pass through an Aeris approval dialog. Raw Pi messages remain the model transcript; the persisted turn model groups intermediate assistant text, tool calls, tool results, and the final summary into one visible answer for each user request.
+`AiAgentService` owns provider configuration, Pi Agent sessions, explicit user/assistant turns, browser recovery, and guest persistence. `SystemToolService` exposes application capabilities as validated Agent tools. Each application can be removed from the Agent's active tool set, and high-risk tool definitions pass through a Future approval dialog. Raw Pi messages remain the model transcript; the persisted turn model groups intermediate assistant text, tool calls, tool results, and the final summary into one visible answer for each user request.
 
 ## Application contract
 

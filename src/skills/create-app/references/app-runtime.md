@@ -1,4 +1,4 @@
-# Internal Aeris App Runtime reference
+# Internal Future App Runtime reference
 
 This reference is part of the `create-app` skill and is loaded for Agent use. Follow it exactly.
 
@@ -31,10 +31,10 @@ Produce one JSON-compatible object:
     "locales/zh.json": "{}",
     "main/index.html": "<main></main>",
     "main/style.css": "main { height: 100%; }",
-    "main/app.js": "Aeris.ready.then(() => {});",
+    "main/app.js": "Future.ready.then(() => {});",
     "activity/index.html": "<main></main>",
     "activity/style.css": "main { height: 100%; }",
-    "activity/app.js": "Aeris.ready.then(() => {});"
+    "activity/app.js": "Future.ready.then(() => {});"
   }
 }
 ```
@@ -53,32 +53,32 @@ HTML cannot contain scripts, frames, objects, embeds, links, or base elements. C
 
 ## SDK v1
 
-`Aeris.ready` is a Promise. Start each script with `Aeris.ready.then(() => { ... })` or await it inside an async function. Never call `Aeris.ready(...)`.
+`Future.ready` is a Promise. Start each script with `Future.ready.then(() => { ... })` or await it inside an async function. Never call `Future.ready(...)`.
 
 Available APIs:
 
 ```js
-await Aeris.ready;
+await Future.ready;
 
-const state = await Aeris.app.getState();
-await Aeris.app.setState(nextState);
-await Aeris.app.patchState(partialState);
+const state = await Future.app.getState();
+await Future.app.setState(nextState);
+await Future.app.patchState(partialState);
 
-const unsubscribeState = Aeris.app.subscribe(nextState => render(nextState));
-const unsubscribeEnvironment = Aeris.environment.subscribe(environment => renderEnvironment(environment));
+const unsubscribeState = Future.app.subscribe(nextState => render(nextState));
+const unsubscribeEnvironment = Future.environment.subscribe(environment => renderEnvironment(environment));
 
-const label = Aeris.i18n.t('title');
-await Aeris.activity.openFullApp();
+const label = Future.i18n.t('title');
+await Future.activity.openFullApp();
 ```
 
-`getState`, `setState`, `patchState`, and `openFullApp` return Promises. Await operations when completion affects the next step. `Aeris.app.subscribe` receives state changes from every mounted surface.
+`getState`, `setState`, `patchState`, and `openFullApp` return Promises. Await operations when completion affects the next step. `Future.app.subscribe` receives state changes from every mounted surface.
 
 The environment contains `appId`, `view`, `locale`, `strings`, the compatibility `theme` base mode, `themeId`, `themeVersion`, the complete semantic `tokens` object, resolved CSS `variables`, `accent`, and the Activity target. Theme packages can change at runtime; always subscribe instead of reading the environment only once.
 
 Use this mutation pattern:
 
 ```js
-Aeris.ready.then(() => {
+Future.ready.then(() => {
   let currentState = null;
 
   const normalizeState = value => ({
@@ -89,27 +89,27 @@ Aeris.ready.then(() => {
     // Render only from the supplied normalized state.
   };
 
-  Aeris.app.subscribe(next => {
+  Future.app.subscribe(next => {
     currentState = normalizeState(next);
     render(currentState);
   });
 
-  Aeris.environment.subscribe(() => {
+  Future.environment.subscribe(() => {
     if (currentState) render(currentState);
   });
 
   document.querySelector('[data-add]').onclick = async () => {
-    const latest = normalizeState(await Aeris.app.getState());
-    await Aeris.app.patchState({ items: [...latest.items, createItem()] });
+    const latest = normalizeState(await Future.app.getState());
+    await Future.app.patchState({ items: [...latest.items, createItem()] });
   };
 });
 ```
 
 Adapt field names instead of copying `items` blindly. Register handlers only after readiness. Render from state subscription. Before read-modify-write, fetch the latest state instead of trusting a stale closure. Show rejected operations as an in-app error.
 
-## Aeris design contract
+## Future design contract
 
-Aeris styling is the default unless the user explicitly asks for another direction.
+Future styling is the default unless the user explicitly asks for another direction.
 
 - Build a compact desktop hierarchy, not a landing page. Use toolbar, sidebar, content, and status regions only when useful.
 - Use `--surface`, `--surface-2`, `--text`, `--muted`, `--accent`, `--line`, `--positive`, `--warning`, `--danger`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--window-radius`, `--glass-blur`, `--font-ui`, and `--font-mono`. These values belong to the active installable system theme; never replace them with a separate app-wide palette.
@@ -124,8 +124,8 @@ Aeris styling is the default unless the user explicitly asks for another directi
 
 ## Pre-validation checks
 
-- Reject `Aeris.ready(`.
-- Reject an unawaited `Aeris.app.getState()` used as an object, spread value, or collection.
+- Reject `Future.ready(`.
+- Reject an unawaited `Future.app.getState()` used as an object, spread value, or collection.
 - Verify every interactive element has a handler registered after readiness.
 - Trace create, edit, toggle, delete, filter, and reset from DOM event to awaited state mutation and subscribed render.
 - Verify Main and Activity normalize the same state schema.

@@ -1,6 +1,6 @@
-# Contributing to Aeris
+# Contributing to Future
 
-Thanks for helping improve Aeris. The project is an experimental browser-hosted operating system, so changes should preserve the boundary between the browser shell, system services, and the Linux guest.
+Thanks for helping improve Future. The project is an experimental browser-hosted operating system, so changes should preserve the boundary between the browser shell, system services, and the Linux guest.
 
 ## Development setup
 
@@ -42,7 +42,7 @@ Before requesting review, update the branch with the latest `develop` and resolv
 - Run `pnpm check`.
 - Test first boot and snapshot restoration when changing v86, setup, persistence, or guest services.
 - Test both English and Simplified Chinese when changing visible copy or layout.
-- Use Aeris dialogs and clipboard services; do not call browser `alert`, `confirm`, or `prompt` from applications.
+- Use Future dialogs and clipboard services; do not call browser `alert`, `confirm`, or `prompt` from applications.
 - Keep applications behind service interfaces instead of importing the v86 platform directly.
 - Do not commit API keys, user data, machine snapshots, downloaded ISO images, dependencies, or build output.
 - Update the README or architecture document when behavior or module ownership changes.

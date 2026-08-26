@@ -1,7 +1,7 @@
 import { validateAppPackage, localePacks } from '../platform/apps/AppPackage.js';
 
-const PACKAGES_KEY='aeris.app-runtime.packages.v1';
-const STATE_PREFIX='aeris.app-runtime.state.v1.';
+const PACKAGES_KEY='future.app-runtime.packages.v1';
+const STATE_PREFIX='future.app-runtime.state.v1.';
 const MAX_STATE_BYTES=128*1024;
 const clone=value=>structuredClone(value);
 const json=value=>JSON.stringify(value).replace(/</g,'\\u003c');
@@ -13,7 +13,7 @@ const sdkBootstrap = `
   let port, environment = {}, state = {}, sequence = 0;
   const pending = new Map(), stateListeners = new Set(), environmentListeners = new Set();
   const request = (method, params = {}) => new Promise((resolve, reject) => {
-    if (!port) return reject(new Error('Aeris SDK is not connected.'));
+    if (!port) return reject(new Error('Future SDK is not connected.'));
     const id = ++sequence; pending.set(id, { resolve, reject }); port.postMessage({ type: 'request', id, method, params });
   });
   let resolveReady;
@@ -40,9 +40,9 @@ const sdkBootstrap = `
     i18n: Object.freeze({ t(key) { return environment.strings?.[key] ?? key; } }),
   });
   const clone = value => structuredClone(value);
-  Object.defineProperty(window, 'Aeris', { value: api, writable: false, configurable: false });
+  Object.defineProperty(window, 'Future', { value: api, writable: false, configurable: false });
   addEventListener('message', event => {
-    if (event.data?.type !== 'aeris:connect' || !event.ports?.[0] || port) return;
+    if (event.data?.type !== 'future:connect' || !event.ports?.[0] || port) return;
     port = event.ports[0];
     port.onmessage = message => {
       const data = message.data || {};
@@ -66,7 +66,7 @@ export class AppRuntimeService {
 
   async prepare(){
     let records=[];try{records=JSON.parse(this.storage?.getItem(PACKAGES_KEY)||'[]')}catch{}
-    for(const record of Array.isArray(records)?records:[]){try{const appPackage=validateAppPackage(record.package);if(this.registry.get(appPackage.manifest.id))throw new Error(`Application id is already in use: ${appPackage.manifest.id}`);this.packages.set(appPackage.manifest.id,{package:appPackage,source:record.source||'user'})}catch(error){console.warn('Skipped invalid Aeris app package.',error)}}
+    for(const record of Array.isArray(records)?records:[]){try{const appPackage=validateAppPackage(record.package);if(this.registry.get(appPackage.manifest.id))throw new Error(`Application id is already in use: ${appPackage.manifest.id}`);this.packages.set(appPackage.manifest.id,{package:appPackage,source:record.source||'user'})}catch(error){console.warn('Skipped invalid Future app package.',error)}}
     for(const source of this.bundledPackages){
       const appPackage=validateAppPackage(source),current=this.packages.get(appPackage.manifest.id);
       if(!this.registry.get(appPackage.manifest.id)&&(!current||current.source==='bundled'))this.packages.set(appPackage.manifest.id,{package:appPackage,source:'bundled'});
@@ -107,16 +107,16 @@ export class AppRuntimeService {
   mount(appId,viewName,root,context={},target={}){
     const record=this.packages.get(appId);if(!record)throw new Error(`Unknown extension application: ${appId}`);
     const appPackage=record.package,view=appPackage.manifest.views[viewName];if(!view)throw new Error(`Unknown extension view: ${viewName}`);
-    root.innerHTML='<div class="aeris-extension-loading" role="status"><i></i><span>Opening app…</span></div>';
-    const iframe=document.createElement('iframe');iframe.className='aeris-extension-frame';iframe.title=this.#localized(appPackage.manifest.name,context.i18n?.locale);iframe.sandbox='allow-scripts';iframe.referrerPolicy='no-referrer';iframe.hidden=true;
+    root.innerHTML='<div class="future-extension-loading" role="status"><i></i><span>Opening app…</span></div>';
+    const iframe=document.createElement('iframe');iframe.className='future-extension-frame';iframe.title=this.#localized(appPackage.manifest.name,context.i18n?.locale);iframe.sandbox='allow-scripts';iframe.referrerPolicy='no-referrer';iframe.hidden=true;
     const channel=new MessageChannel(),mount={iframe,port:channel.port1,context,viewName,target};
     const mounts=this.mounts.get(appId)||new Set();mounts.add(mount);this.mounts.set(appId,mounts);
     channel.port1.onmessage=event=>this.#handleRequest(appId,mount,event.data);
     channel.port1.start();
     iframe.onload=()=>{
       iframe.onload=null;
-      iframe.hidden=false;root.querySelector('.aeris-extension-loading')?.remove();
-      iframe.contentWindow?.postMessage({type:'aeris:connect',state:this.#state(appPackage),environment:this.#environment(appPackage,context,viewName,target)},'*',[channel.port2]);
+      iframe.hidden=false;root.querySelector('.future-extension-loading')?.remove();
+      iframe.contentWindow?.postMessage({type:'future:connect',state:this.#state(appPackage),environment:this.#environment(appPackage,context,viewName,target)},'*',[channel.port2]);
     };
     // Assign srcdoc before insertion. Otherwise the initial about:blank load
     // can consume the only transferable SDK MessagePort before the real app
@@ -161,7 +161,7 @@ export class AppRuntimeService {
       else if(method==='set-state')result=this.#setState(record.package,params.value);
       else if(method==='patch-state')result=this.#setState(record.package,{...this.#state(record.package),...(params.patch||{})});
       else if(method==='open-full-app'){if(typeof mount.context.openFullApp==='function')mount.context.openFullApp(appId);else mount.context.shell?.open(appId);result={opened:true};}
-      else throw new Error(`Unsupported Aeris SDK method: ${method}`);
+      else throw new Error(`Unsupported Future SDK method: ${method}`);
       mount.port.postMessage({type:'response',id,result:clone(result)});
     }catch(error){mount.port.postMessage({type:'response',id,error:error.message||String(error)})}
   }

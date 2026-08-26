@@ -45,10 +45,10 @@ export class SystemMetricsService {
         /^Cached:/ { cached=$2 }
         /^SwapTotal:/ { swapTotal=$2 }
         /^SwapFree:/ { swapFree=$2 }
-        END { if (!available) available=free+buffers+cached; printf "__AERIS_METRICS__%s|%s|%s|%s|%s|%s", total,available,buffers,cached,swapTotal,swapFree }
+        END { if (!available) available=free+buffers+cached; printf "__FUTURE_METRICS__%s|%s|%s|%s|%s|%s", total,available,buffers,cached,swapTotal,swapFree }
       ' /proc/meminfo; read uptime idle < /proc/uptime; read load rest < /proc/loadavg; printf '|%s|%s' "$uptime" "$load"`;
       const { output } = await this.system.exec(command, 12000);
-      const payload = output.split('__AERIS_METRICS__').at(-1)?.trim() || '';
+      const payload = output.split('__FUTURE_METRICS__').at(-1)?.trim() || '';
       const [totalKb, availableKb, buffersKb, cachedKb, swapTotalKb, swapFreeKb, uptimeSeconds, loadAverage] = payload.split('|');
       const total = Number(totalKb), rawAvailable = Number(availableKb);
       if (!payload.includes('|') || !Number.isFinite(total) || total <= 0 || !Number.isFinite(rawAvailable) || rawAvailable < 0) throw new Error('Linux returned an incomplete system metrics sample.');
@@ -96,6 +96,6 @@ export class SystemMetricsService {
     return { ready: false, totalKb, usedKb: 0, availableKb: totalKb, buffersKb: 0, cachedKb: 0, swapTotalKb: 0, swapUsedKb: 0, percent: 0, uptimeSeconds: 0, loadAverage: 0, updatedAt: 0, stale: false, online: false, error: '' };
   }
 
-  #loadCache(){try{const value=JSON.parse(localStorage.getItem('aeris.metrics.last-sample')||'null');return value?.ready&&value.totalKb?{...value,stale:true,online:false,error:''}:null}catch{return null}}
-  #saveCache(){try{localStorage.setItem('aeris.metrics.last-sample',JSON.stringify(this.state))}catch{}}
+  #loadCache(){try{const value=JSON.parse(localStorage.getItem('future.metrics.last-sample')||'null');return value?.ready&&value.totalKb?{...value,stale:true,online:false,error:''}:null}catch{return null}}
+  #saveCache(){try{localStorage.setItem('future.metrics.last-sample',JSON.stringify(this.state))}catch{}}
 }

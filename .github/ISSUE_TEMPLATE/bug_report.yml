@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Aeris problem
+description: Report a reproducible Future problem
 title: '[Bug] '
 labels: ['bug']
 body:

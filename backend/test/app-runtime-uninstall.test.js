@@ -16,11 +16,11 @@ test('only user extension apps can be uninstalled with their saved state',async(
   runtime.install(userPackage);
   assert.equal(runtime.canUninstall('user-counter'),true);
   assert.equal(registry.get('user-counter').uninstallable,true);
-  storage.setItem('aeris.app-runtime.state.v1.user-counter',JSON.stringify({count:9}));
+  storage.setItem('future.app-runtime.state.v1.user-counter',JSON.stringify({count:9}));
 
   assert.equal(runtime.uninstall('user-counter'),true);
   assert.equal(runtime.canUninstall('user-counter'),false);
   assert.equal(registry.get('user-counter'),undefined);
-  assert.equal(storage.getItem('aeris.app-runtime.state.v1.user-counter'),null);
+  assert.equal(storage.getItem('future.app-runtime.state.v1.user-counter'),null);
   assert.throws(()=>runtime.uninstall('counter'),/Bundled applications cannot be uninstalled/);
 });

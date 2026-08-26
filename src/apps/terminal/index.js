@@ -13,14 +13,14 @@ export default{
   id:'terminal',title:'terminal',icon:'terminal',color:'slate',width:920,height:610,singleInstance:true,
   mount(root,{kernel,system,i18n,clipboard,shell,agentEntry}){
     let nextId=1,activeId=null,fitFrame=0,resizeTimer=0,sessions=[];
-    root.innerHTML=`<div class="system-app terminal-pro terminal-native" data-terminal-theme="agnoster"><header><div class="terminal-tabs" data-terminal-tabs></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><main class="terminal-native-host" data-terminal-host></main><footer><span class="terminal-connection"><i></i><b data-terminal-connection></b></span><span>UTF-8</span><span>ash</span></footer><menu class="terminal-context-menu" data-terminal-menu hidden><button data-terminal-copy>${i18n.t('copy')}</button><button data-terminal-paste>${i18n.t('paste')}</button><i></i><button data-terminal-agent>${i18n.t('askAeris')}</button></menu></div>`;
+    root.innerHTML=`<div class="system-app terminal-pro terminal-native" data-terminal-theme="agnoster"><header><div class="terminal-tabs" data-terminal-tabs></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><main class="terminal-native-host" data-terminal-host></main><footer><span class="terminal-connection"><i></i><b data-terminal-connection></b></span><span>UTF-8</span><span>ash</span></footer><menu class="terminal-context-menu" data-terminal-menu hidden><button data-terminal-copy>${i18n.t('copy')}</button><button data-terminal-paste>${i18n.t('paste')}</button><i></i><button data-terminal-agent>${i18n.t('askFuture')}</button></menu></div>`;
     const host=root.querySelector('[data-terminal-host]'),tabs=root.querySelector('[data-terminal-tabs]'),menu=root.querySelector('[data-terminal-menu]');
     const dispose=resource=>typeof resource==='function'?resource():resource?.dispose?.();
     const active=()=>sessions.find(session=>session.id===activeId);
     const setStatus=()=>{
       const ready=system.ready,state=root.querySelector('[data-terminal-state]'),dot=root.querySelector('[data-terminal-state-dot]'),connection=root.querySelector('[data-terminal-connection]');
       state.textContent=i18n.t(ready?'terminalReady':'terminalWaiting');
-      connection.textContent=ready?'aeris@aeris':'Linux offline';
+      connection.textContent=ready?'future@future':'Linux offline';
       dot.classList.toggle('offline',!ready);
       root.querySelector('.terminal-connection i').classList.toggle('offline',!ready)
     };

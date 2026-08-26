@@ -10,7 +10,7 @@ const MAX_PACKAGE_BYTES = 512 * 1024;
 
 const plainObject = value => value && typeof value === 'object' && !Array.isArray(value);
 const copy = value => structuredClone(value);
-const fail = message => { throw new Error(`Invalid Aeris app package: ${message}`); };
+const fail = message => { throw new Error(`Invalid Future app package: ${message}`); };
 
 const safePath = value => {
   const path=String(value||'').replace(/^\.\//,'');
@@ -31,8 +31,8 @@ const validateViewSource=(viewName,view,files)=>{
   if(/@import\b|url\(\s*['"]?https?:/i.test(css))fail(`views.${viewName} CSS may not load external resources`);
   const forbidden=/\b(?:localStorage|sessionStorage|indexedDB|fetch|XMLHttpRequest|WebSocket|EventSource|alert|confirm|prompt)\b|window\s*\.\s*(?:parent|top|opener|open)\b|document\s*\.\s*cookie\b/;
   const match=script.match(forbidden);if(match)fail(`views.${viewName} script uses restricted browser API “${match[0]}”`);
-  if(!/\bAeris\s*\.\s*ready\b/.test(script))fail(`views.${viewName} script must wait for Aeris.ready`);
-  if(!/\bAeris\s*\.\s*app\s*\.\s*subscribe\s*\(/.test(script))fail(`views.${viewName} script must subscribe to shared app state`);
+  if(!/\bFuture\s*\.\s*ready\b/.test(script))fail(`views.${viewName} script must wait for Future.ready`);
+  if(!/\bFuture\s*\.\s*app\s*\.\s*subscribe\s*\(/.test(script))fail(`views.${viewName} script must subscribe to shared app state`);
   try{new Function(script)}catch(error){fail(`views.${viewName} script has invalid JavaScript: ${error.message}`)}
 };
 
@@ -63,7 +63,7 @@ export function validateAppPackage(source) {
   const localePaths={en:'locales/en.json',zh:'locales/zh.json'};
   for(const path of Object.values(localePaths)){
     if(typeof files[path]!=='string')fail(`missing locale file “${path}”`);
-    try{const pack=JSON.parse(files[path]);if(!plainObject(pack))fail(`locale file “${path}” must contain an object`)}catch(error){if(error.message.startsWith('Invalid Aeris'))throw error;fail(`locale file “${path}” is not valid JSON`)}
+    try{const pack=JSON.parse(files[path]);if(!plainObject(pack))fail(`locale file “${path}” must contain an object`)}catch(error){if(error.message.startsWith('Invalid Future'))throw error;fail(`locale file “${path}” is not valid JSON`)}
   }
 
   const permissions=[...new Set((manifest.permissions||[]).map(String))];

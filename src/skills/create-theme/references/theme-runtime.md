@@ -1,4 +1,4 @@
-# Aeris Theme Package v1
+# Future Theme Package v1
 
 Theme Studio accepts a complete JSON object with this structure:
 
@@ -58,8 +58,8 @@ Constraints:
 - Icon container shape is `rounded`, `squircle`, or `circle`; icon scale is 0.8–1.15.
 - Actual system glyphs may be redesigned through `icons.glyphs`. Each value is path data for a 24×24 SVG viewBox, begins with `M`, contains no markup, and is limited to 1,600 characters. Never provide raw `<svg>` or `<path>` elements.
 - `icons.mode` is `outline` or `solid`. Outline sets may choose `strokeWidth` from 0.8–3, `linecap` from `round`, `square`, or `butt`, and `linejoin` from `round`, `bevel`, or `miter`.
-- Supported host icon ids are: `logo`, `grid`, `list`, `info`, `warning`, `star`, `sparkles`, `skill`, `aerisAi`, `message`, `history`, `arrowUp`, `stopSquare`, `wrench`, `files`, `globe`, `note`, `terminal`, `settings`, `vm`, `calc`, `search`, `wifi`, `battery`, `bell`, `close`, `minus`, `maximize`, `panelRight`, `compactView`, `focus`, `chevron`, `back`, `refresh`, `home`, `desktop`, `folder`, `document`, `copy`, `delete`, `image`, `play`, `pause`, `power`, `plus`, `upload`, `download`, `check`, `lock`, `user`, `moon`, `sun`, `cloud`, `rain`, `snow`, `storm`, `wind`, `volume`, `music`, `previous`, `next`, `shuffle`, `repeat`, `memory`, `accessibility`, `eye`, `keyboard`, `privacy`, `location`, `chart`, `calendar`, `contacts`, `reminder`, `textedit`, `browser`, `clock`, `timer`, `package`, `disk`, `preview`, `display`, and `paperclip`.
-- Omitted glyph ids fall back to the Aeris built-in icon, so a focused icon set is valid. A complete redesign should cover every icon visible in the requested surfaces and keep a coherent visual grammar.
+- Supported host icon ids are: `logo`, `grid`, `list`, `info`, `warning`, `star`, `sparkles`, `skill`, `futureAi`, `message`, `history`, `arrowUp`, `stopSquare`, `wrench`, `files`, `globe`, `note`, `terminal`, `settings`, `vm`, `calc`, `search`, `wifi`, `battery`, `bell`, `close`, `minus`, `maximize`, `panelRight`, `compactView`, `focus`, `chevron`, `back`, `refresh`, `home`, `desktop`, `folder`, `document`, `copy`, `delete`, `image`, `play`, `pause`, `power`, `plus`, `upload`, `download`, `check`, `lock`, `user`, `moon`, `sun`, `cloud`, `rain`, `snow`, `storm`, `wind`, `volume`, `music`, `previous`, `next`, `shuffle`, `repeat`, `memory`, `accessibility`, `eye`, `keyboard`, `privacy`, `location`, `chart`, `calendar`, `contacts`, `reminder`, `textedit`, `browser`, `clock`, `timer`, `package`, `disk`, `preview`, `display`, and `paperclip`.
+- Omitted glyph ids fall back to the Future built-in icon, so a focused icon set is valid. A complete redesign should cover every icon visible in the requested surfaces and keep a coherent visual grammar.
 - Blur is 0–48, saturation 0.6–1.8, transparency 0.65–1, shadow strength 0–1.5, and motion scale 0–1.5.
 - Wallpaper supports gradients and colors only. URLs, imports, scripts, and external resources are forbidden.
 - Theme packages cannot contain arbitrary CSS or JavaScript.
