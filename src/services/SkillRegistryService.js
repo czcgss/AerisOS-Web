@@ -50,9 +50,9 @@ export class SkillRegistryService {
     }
     return null;
   }
-  enabledSkills(){return [...this.skills.values()].filter(skill=>skill.enabled).map(skill=>({name:skill.name,description:skill.description,content:skill.content,filePath:skill.filePath,disableModelInvocation:false}));}
+  enabledSkills(){return [...this.skills.values()].filter(skill=>skill.enabled).sort((a,b)=>a.name.localeCompare(b.name)).map(skill=>({name:skill.name,description:skill.description,content:skill.content,filePath:skill.filePath,disableModelInvocation:false}));}
   prompt(){const catalog=formatSkillsForSystemPrompt(this.enabledSkills());return catalog?`${catalog}\n\nUse the future_load_skill tool to read a matching skill before following it. Skill-owned tools become available only after that load completes.`:'';}
-  loadedPrompt(sessionId){return [...(this.loadedBySession.get(sessionId)||[])].map(name=>this.skills.get(name)).filter(skill=>skill?.enabled&&skill.content).map(skill=>formatSkillInvocation({...skill,content:this.#invocationContent(skill)})).join('\n\n');}
+  loadedPrompt(sessionId){return [...(this.loadedBySession.get(sessionId)||[])].sort().map(name=>this.skills.get(name)).filter(skill=>skill?.enabled&&skill.content).map(skill=>formatSkillInvocation({...skill,content:this.#invocationContent(skill)})).join('\n\n');}
 
   async load(sessionId,name){
     const skill=this.skills.get(String(name));if(!skill?.enabled)throw new Error(`Skill is unavailable or disabled: ${name}`);

@@ -22,9 +22,9 @@ export class MultiAgentOrchestratorService{
   setCapabilitySources({toolService,skillRegistry,isToolAppEnabled}={}){if(toolService)this.toolService=toolService;if(skillRegistry)this.skillRegistry=skillRegistry;if(isToolAppEnabled)this.isToolAppEnabled=isToolAppEnabled}
   directory(){
     const tools=this.toolService?.list?.()||[],apps=new Map((this.toolService?.apps?.()||[]).map(app=>[app.id,app])),skills=new Map((this.skillRegistry?.list?.()||[]).filter(skill=>skill.enabled).map(skill=>[skill.name,skill]));
-    return this.registry.list({enabledOnly:true}).map(({id,name,description,toolApps,skills:skillNames})=>{
-      const appCapabilities=(toolApps||[]).filter(appId=>this.isToolAppEnabled(appId)).map(appId=>{const app=apps.get(appId),operations=tools.filter(tool=>tool.appId===appId).map(({operation,label,description,risk})=>({operation,label,description,risk}));return app&&operations.length?{id:appId,title:app.title,operations}:null}).filter(Boolean);
-      const skillCapabilities=(skillNames||[]).map(skillName=>skills.get(skillName)).filter(Boolean).map(({name:skillName,description:skillDescription,toolCount})=>({name:skillName,description:skillDescription,toolCount}));
+    return this.registry.list({enabledOnly:true}).sort((a,b)=>a.id.localeCompare(b.id)).map(({id,name,description,toolApps,skills:skillNames})=>{
+      const appCapabilities=(toolApps||[]).filter(appId=>this.isToolAppEnabled(appId)).sort().map(appId=>{const app=apps.get(appId),operations=tools.filter(tool=>tool.appId===appId).map(({operation,label,description,risk})=>({operation,label,description,risk})).sort((a,b)=>a.operation.localeCompare(b.operation));return app&&operations.length?{id:appId,title:app.title,operations}:null}).filter(Boolean);
+      const skillCapabilities=(skillNames||[]).sort().map(skillName=>skills.get(skillName)).filter(Boolean).map(({name:skillName,description:skillDescription,toolCount})=>({name:skillName,description:skillDescription,toolCount}));
       return{id,name,description,toolApps:appCapabilities.map(app=>app.id),skills:skillCapabilities.map(skill=>skill.name),appCapabilities,skillCapabilities};
     })
   }
