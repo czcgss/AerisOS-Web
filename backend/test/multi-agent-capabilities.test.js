@@ -16,8 +16,8 @@ test('main Agent capability directory follows live Agent, Tool, and Skill config
     ],
   },skillRegistry={list:()=>[{name:'web-research',description:'Research and compare web sources.',enabled:true,toolCount:1}]};
   const service=new MultiAgentOrchestratorService({registry,toolService,skillRegistry,isToolAppEnabled:id=>enabledApps.has(id),storage:null});
-  const initial=service.directory(),research=initial.find(agent=>agent.id==='research');assert.deepEqual(research.toolApps,['browser']);assert.deepEqual(research.skills,['web-research']);assert.deepEqual(research.appCapabilities[0].operations.map(item=>item.operation),['navigate','extract_content']);
-  const prompt=service.prompt();assert.match(prompt,/research \(Research\)[\s\S]*browser: navigate \(Navigate browser\), extract_content \(Read browser page content\)/);assert.match(prompt,/web-research: Research and compare web sources/);assert.match(service.mainTool('session',()=> 'turn').description,/Live Agent capability directory:[\s\S]*browser: navigate/);
+  const initial=service.directory(),research=initial.find(agent=>agent.id==='research');assert.deepEqual(research.toolApps,['browser']);assert.deepEqual(research.skills,['web-research']);assert.deepEqual(research.appCapabilities[0].operations.map(item=>item.operation),['extract_content','navigate']);
+  const prompt=service.prompt();assert.match(prompt,/research \(Research\)[\s\S]*browser: extract_content \(Read browser page content\), navigate \(Navigate browser\)/);assert.match(prompt,/web-research: Research and compare web sources/);assert.match(service.mainTool('session',()=> 'turn').description,/Live Agent capability directory:[\s\S]*browser: extract_content/);
   enabledApps.delete('browser');assert.deepEqual(service.directory().find(agent=>agent.id==='research').toolApps,[]);assert.match(service.prompt(),/research \(Research\)[\s\S]*Effective app tools:\n    - none/);
   agents=agents.map(agent=>agent.id==='research'?{...agent,toolApps:['terminal'],skills:[]}:agent);assert.deepEqual(service.directory().find(agent=>agent.id==='research').toolApps,['terminal']);
 });

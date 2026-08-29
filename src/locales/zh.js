@@ -7,7 +7,7 @@ export default {
   processes: '进程', performance: '性能', systemLog: '系统日志', running: '运行中', stopped: '已停止', booting: '正在启动 Linux…',
   kernelReady: 'Linux 内核已就绪', powerOn: '开机', powerOff: '关机', restart: '重新启动', pause: '暂停', resume: '继续',
   language: '语言与地区', appearance: '外观', virtualMachine: '虚拟机', system: '系统', about: '关于',
-  displayLanguage: '显示语言', addLanguage: '导入语言包', theme: '主题', light: '浅色', dark: '深色', accent: '强调色',
+  displayLanguage: '显示语言', addLanguage: '导入语言包', theme: '主题', light: '浅色', dark: '深色', glass: '伏秋玻璃深色', glassLight: '伏秋玻璃浅色', accent: '强调色',
   terminalHint: '交互式 TTY 会话直接运行在伏秋 Linux 客体中。', filesHint: '这些位置由伏秋 Linux 文件服务管理。',
   newFile: '新建文件', newFolder: '新建文件夹', refresh: '刷新', save: '保存', delete: '删除', open: '打开', folder: '文件夹', file: '文件',
   localMusic: '本地音乐', musicLibrary: '音乐资料库', searchMusic: '搜索音乐', allSongs: '所有歌曲', openMusicFolder: '打开音乐文件夹', importMusic: '导入音乐', importMusicCopy: '从这台电脑导入音频。', importMusicSheetCopy: '可以导入单独歌曲或选择文件夹，文件夹会成为一级资料库分类。', chooseMusicFiles: '选择歌曲', chooseMusicFolder: '选择文件夹', importingMusic: '正在导入…', noSupportedMusic: '未选择支持的音频文件。', musicImported: '音乐已加入资料库。', readyToPlay: '准备播放', chooseSong: '选择一首歌曲', upNext: '歌曲', songs: '首歌曲', loadingMusic: '正在载入音乐资料库…', noMusic: '音乐资料库还是空的', musicEmptyCopy: '导入歌曲或文件夹，一级文件夹会自动成为分类。', shuffle: '随机播放', repeat: '循环播放', askFutureMusicPrompt: '帮我处理当前歌曲或本地音乐资料库。',
