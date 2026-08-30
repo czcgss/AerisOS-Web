@@ -11,7 +11,7 @@ const theme={
 
 export default{
   id:'terminal',title:'terminal',icon:'terminal',color:'slate',width:920,height:610,singleInstance:true,
-  mount(root,{kernel,system,i18n,clipboard,shell,agentEntry}){
+  mount(root,{kernel,system,i18n,clipboard,shell,agentEntry,agentContext}){
     let nextId=1,activeId=null,fitFrame=0,resizeTimer=0,sessions=[];
     root.innerHTML=`<div class="system-app terminal-pro terminal-native" data-terminal-theme="agnoster"><header><div class="terminal-tabs" data-terminal-tabs></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><main class="terminal-native-host" data-terminal-host></main><footer><span class="terminal-connection"><i></i><b data-terminal-connection></b></span><span>UTF-8</span><span>ash</span></footer><menu class="terminal-context-menu" data-terminal-menu hidden><button data-terminal-copy>${i18n.t('copy')}</button><button data-terminal-paste>${i18n.t('paste')}</button><i></i><button data-terminal-agent>${i18n.t('askFuture')}</button></menu></div>`;
     const host=root.querySelector('[data-terminal-host]'),tabs=root.querySelector('[data-terminal-tabs]'),menu=root.querySelector('[data-terminal-menu]');
@@ -45,6 +45,7 @@ export default{
       sessions.forEach(session=>session.pane.hidden=session.id!==id);
       drawTabs();
       const session=active();
+      if(session)agentContext.set({appId:'terminal',label:i18n.t('terminal'),resource:{kind:'terminal-session',id:String(session.id),name:session.title||`${i18n.t('terminal')} ${session.id}`,metadata:{port:session.port,ready:system.ready}}});
       resize();
       setTimeout(()=>session?.terminal.focus())
     };

@@ -33,6 +33,7 @@
 .compact-agent-composer label em{color:var(--muted);font-size:8px;font-style:normal;white-space:nowrap}
 .compact-agent-footer>small{font-size:8px}
 .compact-agent-context-menu>div>button{font-size:10px}
+.compact-agent-context-menu>div>button>span:last-child{display:flex;min-width:0;flex:1;flex-direction:column}.compact-agent-context-menu>div>button strong,.compact-agent-context-menu>div>button small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compact-agent-context-menu>div>button strong{font-size:9px}.compact-agent-context-menu>div>button small{color:var(--muted);font-size:7px}
 .compact-agent-approval small{font-size:9px}
 .compact-agent-approval strong,.compact-agent-query>strong{font-size:10px}
 .compact-agent-approval button,.compact-agent-query button{font-size:9px}

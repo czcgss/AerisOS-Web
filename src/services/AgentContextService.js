@@ -3,6 +3,7 @@ const MAX_SELECTION_TEXT = 6000;
 const clean = value => value == null ? '' : String(value).trim();
 const normalizeResource = resource => resource && typeof resource === 'object' ? {
   kind: clean(resource.kind || resource.type || 'item'),
+  entityType: clean(resource.entityType),
   id: clean(resource.id),
   uri: clean(resource.uri),
   name: clean(resource.name || resource.title),
@@ -12,20 +13,21 @@ const normalizeResource = resource => resource && typeof resource === 'object' ?
 } : null;
 
 export class AgentContextService {
-  constructor(registry = null, i18n = null) { this.current = null; this.focusedWindow = null; this.registry = registry; this.i18n = i18n; }
+  constructor(registry = null, i18n = null) { this.current = null; this.focusedWindow = null; this.windowContexts = new Map(); this.registry = registry; this.i18n = i18n; }
   start() {
     this.offFocus = this.kernel.bus.on('window:context-focused', window => {
       if (!window) { this.focusedWindow = null; return; }
       if (window.appId === 'ai') return;
       this.focusedWindow = structuredClone(window);
-      if (this.current?.appId === window.appId) this.set({ ...this.current, windowId: window.id });
+      if (this.current?.appId === window.appId && (!this.current.windowId || this.current.windowId === window.id)) this.set({ ...this.current, windowId: window.id });
       else this.focusWindow(window);
     });
-    this.offClose = this.kernel.bus.on('window:closed', ({appId,remaining}) => { if(!remaining)this.clear(appId) });
+    this.offClose = this.kernel.bus.on('window:closed', ({id,appId,remaining}) => { this.windowContexts.delete(clean(id));if(!remaining)this.clear(appId) });
     this.kernel.bus.emit('agent:context-changed', this.snapshot());
   }
   stop() { this.offFocus?.();this.offClose?.(); }
   snapshot() { return this.current ? structuredClone(this.current) : null; }
+  forWindow(windowId) { const value=this.windowContexts.get(clean(windowId));return value?structuredClone(value):null; }
 
   set(value = {}) {
     const next = {
@@ -43,14 +45,22 @@ export class AgentContextService {
     const comparable = value => JSON.stringify(value ? { ...value, updatedAt: 0 } : null);
     if (comparable(next) === comparable(this.current)) return this.snapshot();
     this.current = next;
+    if(next.windowId)this.windowContexts.set(next.windowId,structuredClone(next));
     this.kernel.bus.emit('agent:context-changed', this.snapshot());
     return this.snapshot();
   }
 
   focusWindow(window) {
     if (!window || window.appId === 'ai') return this.focusDesktop();
-    const app = this.registry?.get(window.appId), name = window.title || (app ? this.i18n?.t(app.title) || app.title : window.appId);
     this.focusedWindow = structuredClone(window);
+    return this.selectWindow(window);
+  }
+
+  selectWindow(window) {
+    if (!window || window.appId === 'ai') return this.focusDesktop();
+    const app = this.registry?.get(window.appId), name = window.title || (app ? this.i18n?.t(app.title) || app.title : window.appId);
+    const remembered=this.forWindow(window.id);
+    if(remembered?.appId===window.appId)return this.set({...remembered,windowId:window.id});
     return this.set({ appId: window.appId, windowId: window.id, label: name, resource: { kind: 'application-window', id: window.id, uri: `future://windows/${window.id}`, name, path: window.path, metadata: { appId: window.appId, windowId: window.id, minimized: !!window.minimized } } });
   }
 
