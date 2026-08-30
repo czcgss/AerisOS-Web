@@ -70,3 +70,9 @@ test('the system task tray opens the Agent task workspace without a desktop app'
   service.open({source:'system-task-tray',workspace:'tasks'});await Promise.resolve();
   assert.equal(events[0][1].id,'ai');assert.equal(events[1][1].workspace,'tasks');assert.equal(events[1][1].settings,false);
 });
+
+test('contextual Agent entries preserve their independent window presentation',()=>{
+  const bus=new EventBus(),events=[],service=new AgentEntryService({snapshot:()=>({appId:'notes'}),set(){}});service.kernel={bus};service.start();
+  bus.on('ai:compact-entry',detail=>events.push(detail));service.open({source:'pointer-focus',mode:'compact',presentation:'contextual',anchor:{x:420,y:260}});
+  assert.equal(events.length,1);assert.equal(events[0].presentation,'contextual');assert.deepEqual(events[0].anchor,{x:420,y:260});assert.deepEqual(events[0].context,{appId:'notes'});
+});

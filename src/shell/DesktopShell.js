@@ -3,6 +3,7 @@ import { WindowManager } from './WindowManager.js';
 import { SetupAssistant } from './SetupAssistant.js';
 import { DesktopWidgets } from './DesktopWidgets.js';
 import { CompactAgentPanel } from './CompactAgentPanel.js';
+import { PointerAgentTrigger } from './PointerAgentTrigger.js';
 
 export class DesktopShell {
   constructor(root, context, registry) { this.root=root; this.context=context; this.registry=registry; this.launcherOpen=false;this.bootActivities=[];this.lastBootActivity=Date.now();this.desktopRenderSequence=0;this.desktopRefreshTimer=0;this.pendingAppUpdates=new Map(); }
@@ -24,7 +25,7 @@ export class DesktopShell {
     const menuButtons=this.root.querySelectorAll('.app-menu>button');if(menuButtons[0])menuButtons[0].dataset.shell='launcher';if(menuButtons[1])menuButtons[1].dataset.shell='system-menu';
     this.windowManager=new WindowManager(this.root.querySelector('[data-window-layer]'),this.registry,{...this.context,i18n});this.#renderDock();
     this.offRegistry=this.registry.subscribe(change=>{if(change.type==='unregistered'){this.windowManager.closeApp(change.app.id);if(change.app.id==='ai')this.compactAgent?.close();this.root.querySelectorAll(`.system-bar [data-open-app="${CSS.escape(change.app.id)}"]`).forEach(node=>node.remove());this.#renderDesktop()}this.#renderDock();if(this.launcherOpen){this.launcherOpen=false;this.toggleLauncher()}});
-    this.widgets=new DesktopWidgets(this.root.querySelector('.desktop'),this.context);this.widgets.mount();if(this.registry.get('ai')){this.compactAgent=new CompactAgentPanel(this.root.querySelector('.desktop'),this.context);this.compactAgent.mount()}this.#bind();if(settings.get('setupComplete'))this.windowManager.restoreSession();this.#renderDesktop();this.#clock();this.clockTimer=setInterval(()=>this.#clock(),30000);
+    this.widgets=new DesktopWidgets(this.root.querySelector('.desktop'),this.context);this.widgets.mount();if(this.registry.get('ai')){this.compactAgent=new CompactAgentPanel(this.root.querySelector('.desktop'),this.context);this.compactAgent.mount();this.pointerAgent=new PointerAgentTrigger(this.root.querySelector('.desktop'),this.context,this.windowManager);this.pointerAgent.mount()}this.#bind();if(settings.get('setupComplete'))this.windowManager.restoreSession();this.#renderDesktop();this.#clock();this.clockTimer=setInterval(()=>this.#clock(),30000);
     setTimeout(()=>this.context.machine.start().catch(error=>this.#bootError(error)),650);
   }
 
