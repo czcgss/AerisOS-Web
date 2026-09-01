@@ -1,5 +1,5 @@
 import { Agent } from '@earendil-works/pi-agent-core';
-import { createModels, createProvider } from '@earendil-works/pi-ai';
+import { Type, createModels, createProvider } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { compactAgentEvent, compactAgentMessage, compactAgentMessages, shouldCompactLiveProtocol } from './AgentMessageCompaction.js';
 import { agentAttachmentInput, attachmentMetadata, compactAttachmentMessages, compactAttachmentsForStorage } from './AgentAttachments.js';
@@ -52,12 +52,13 @@ const reconcileTurnResponses = (recorded, completedRun) => {
   });
 };
 export class AiAgentService {
-  constructor(toolService = null, storage = globalThis.localStorage, agentContext = null, skillRegistry = null, multiAgent = null) {
+  constructor(toolService = null, storage = globalThis.localStorage, agentContext = null, skillRegistry = null, multiAgent = null, modeRegistry = null) {
     this.toolService = toolService;
     this.storage = storage;
     this.agentContext = agentContext;
     this.skillRegistry = skillRegistry;
     this.multiAgent = multiAgent;
+    this.modeRegistry = modeRegistry;
     this.ready = false;
     this.loading = false;
     this.error = '';
@@ -101,6 +102,7 @@ export class AiAgentService {
         id: session.id,
         title: session.title,
         origin: session.origin,
+        agentMode:session.agentMode||'general',
         automation: clone(session.automation),
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
@@ -179,11 +181,21 @@ export class AiAgentService {
       triggerType:String(options.automation?.triggerType||''),
       triggerReason:String(options.automation?.triggerReason||''),
     }:null;
-    const session = { id: crypto.randomUUID(), title: String(options.title||'New chat').trim().slice(0,80)||'New chat', origin, automation, createdAt: stamp, updatedAt: stamp, messages: [], turns: [], skills: [] };
+    const agentMode=this.modeRegistry?.get(options.agentMode)?.id||'general',session = { id: crypto.randomUUID(), title: String(options.title||'New chat').trim().slice(0,80)||'New chat', origin, agentMode, automation, createdAt: stamp, updatedAt: stamp, messages: [], turns: [], skills: [] };
     this.state.sessions.unshift(session);
     this.persist();
     this.#emit('ai:changed', { sessionId: session.id });
     return session.id;
+  }
+
+  modeOptions(){return this.modeRegistry?.list({selectableOnly:true})||[{id:'general',name:'General',nameKey:'agentModeGeneral',selectable:true}]}
+
+  setSessionMode(id,modeId){
+    const session=this.#session(id),mode=this.modeRegistry?.get(modeId);
+    if(!mode?.selectable)throw new Error('This Agent mode cannot be selected directly.');
+    if(session.messages.length||session.turns.length||this.sessionRuns.has(id)||this.agents.get(id)?.state.isStreaming)throw new Error('The Agent mode is locked after a conversation starts.');
+    if(session.agentMode===mode.id)return;
+    this.agents.get(id)?.abort();this.agents.delete(id);session.agentMode=mode.id;session.updatedAt=now();this.persist();this.#emit('ai:changed',{sessionId:id,agentMode:mode.id});
   }
 
   renameSession(id, title) {
@@ -240,8 +252,8 @@ export class AiAgentService {
     const selected=this.#selectedModelConfig();
     if (!selected.provider.apiKey) throw new Error('Add an API key in AI settings first.');
     if (!selected.provider.baseUrl || !selected.model.id) throw new Error('The AI provider configuration is incomplete.');
-    if(skillName)await this.skillRegistry?.load(id,skillName);else await this.skillRegistry?.ensureSession(id);
-    const agent = this.#agent(id), session=this.#session(id);if(this.skillRegistry){agent.state.systemPrompt=this.#systemPrompt(this.state.config.systemPrompt,id);this.#refreshAgentTools(id)}
+    const session=this.#session(id),mode=this.#mode(id);if(mode.capabilities.skills){if(skillName)await this.skillRegistry?.load(id,skillName);else await this.skillRegistry?.ensureSession(id)}else skillName='';
+    const agent = this.#agent(id);if(this.skillRegistry){agent.state.systemPrompt=this.#systemPrompt(this.state.config.systemPrompt,id);this.#refreshAgentTools(id)}
     // A follow-up queued after Pi has performed its final queue poll but before
     // isStreaming is cleared will never be consumed. Treat each visible user
     // turn as a separate run and wait for the previous run to become truly idle.
@@ -258,14 +270,14 @@ export class AiAgentService {
     const turn={id:crypto.randomUUID(),createdAt:timestamp,updatedAt:timestamp,status:'running',source:source==='automation'?'automation':'user',user:clone(visibleUserMessage),responses:[],messageIndex:null,error:''};
     session.turns.push(turn);session.updatedAt=userMessage.timestamp;
     this.activeTurns.set(id,turn.id);
-    this.multiAgent?.beginTurn(id,turn.id,prompt||files.map(file=>file.name).join(', '));
+    if(mode.capabilities.workflows)this.multiAgent?.beginTurn(id,turn.id,prompt||files.map(file=>file.name).join(', '));
     this.#saveState();
     this.#emit('ai:agent-event', { sessionId:id, turnId:turn.id, prompt, event:{type:'turn_created'} });
     try {
       await agent.prompt(userMessage);
     } catch (error) {
       turn.status='failed';turn.error=error.message||String(error);turn.updatedAt=now();
-      this.multiAgent?.finishTurn(turn.id,'failed',turn.error);
+      if(mode.capabilities.workflows)this.multiAgent?.finishTurn(turn.id,'failed',turn.error);
       if(this.activeTurns.get(id)===turn.id)this.activeTurns.delete(id);
       this.#saveState();
       this.kernel?.bus.emit('ai:task-status',{sessionId:id,turnId:turn.id,status:'failed',error:turn.error});
@@ -418,8 +430,10 @@ export class AiAgentService {
           // visible turn with a partial or cleared assistant response. A
           // streamed non-empty message wins over an empty provider end frame.
           turn.responses=reconcileTurnResponses(turn.responses,event.messages);
-          turn.status=agent.state.errorMessage?'failed':'completed';turn.error=agent.state.errorMessage||'';turn.updatedAt=now();
-          this.multiAgent?.finishTurn(turn.id,turn.status,turn.error);
+          turn.status=agent.state.errorMessage?'failed':'completed';turn.error=agent.state.errorMessage||'';
+          if(this.#mode(id).id==='writing'&&!turn.responses.some(message=>message?.role==='toolResult'&&message?.toolName==='future_writing')){turn.status='failed';turn.error='Writing mode did not submit a writing operation.'}
+          turn.updatedAt=now();
+          if(this.#mode(id).capabilities.workflows)this.multiAgent?.finishTurn(turn.id,turn.status,turn.error);
         }
         this.activeTurns.delete(id);
         this.streamingAssistantMessages.delete(id);
@@ -448,12 +462,13 @@ export class AiAgentService {
   }
 
   #systemPrompt(configuredPrompt,sessionId='') {
-    const skills=this.skillRegistry?.prompt()||'',loadedSkills=this.skillRegistry?.loadedPrompt(sessionId)||'';
-    const collaboration=this.multiAgent?.prompt()||'';
-    return buildAgentSystemPrompt({configuredPrompt,collaboration,skills,loadedSkills});
+    const mode=this.#mode(sessionId),skills=mode.capabilities.skills?(this.skillRegistry?.prompt()||''):'',loadedSkills=mode.capabilities.skills?(this.skillRegistry?.loadedPrompt(sessionId)||''):'';
+    const collaboration=mode.capabilities.collaboration?(this.multiAgent?.prompt()||''):'';
+    const prompt=buildAgentSystemPrompt({configuredPrompt,collaboration,skills,loadedSkills});return mode.systemPrompt?`${prompt}\n\n<agent_mode id="${mode.id}">\n${mode.systemPrompt}\n</agent_mode>`:prompt;
   }
 
   #activeTools(sessionId='') {
+    const mode=this.#mode(sessionId);if(mode.id==='writing')return[this.#writingTool()];if(!mode.capabilities.tools)return[];
     // The Main Agent is an orchestrator, not an application operator. It may
     // inspect/load a Skill to understand its workflow, but all capability
     // execution belongs to an isolated registered worker Agent.
@@ -462,12 +477,15 @@ export class AiAgentService {
     return [...skillTools,...(delegate?[delegate]:[])];
   }
 
+  #writingTool(){return{name:'future_writing',label:'Writing',description:'Submit the exact text for the focused input. You MUST call this tool exactly once in Writing mode. Use append to continue or insert at the current input position. Use replace only when the user explicitly asks to rewrite, translate, or replace the current content. The content must contain only the text to write: never include explanations, progress narration, simulated command output, Markdown fences, or follow-up questions.',executionMode:'sequential',parameters:Type.Object({type:Type.Union([Type.Literal('append'),Type.Literal('replace')],{description:'Whether to continue at the current position or replace the current input content.'}),content:Type.String({description:'Exact final text to place in the focused input.'})},{additionalProperties:false}),execute:async(toolCallId,input)=>{const operation=input.type==='replace'?'replace':'append',content=String(input.content??'');if(!content.trim())throw new Error('Writing content cannot be empty.');return{content:[{type:'text',text:'Writing proposal submitted for user approval.'}],details:{toolCallId,name:'future_writing',label:'Writing',operation,phase:'completed',result:{type:operation,content}}}}}}
+
   #refreshAgentTools(sessionId='') {
     if(sessionId){const agent=this.agents.get(sessionId);if(agent)agent.state.tools=this.#activeTools(sessionId);return}
     this.agents.forEach((agent,id)=>{agent.state.tools=this.#activeTools(id)});
   }
 
   #refreshAgentRuntime(){this.agents.forEach((agent,id)=>{agent.state.systemPrompt=this.#systemPrompt(this.state.config.systemPrompt,id);agent.state.tools=this.#activeTools(id)})}
+  #mode(sessionId=''){const session=this.state.sessions.find(item=>item.id===sessionId);return this.modeRegistry?.get(session?.agentMode)||{id:'general',systemPrompt:'',capabilities:{tools:true,skills:true,collaboration:true,workflows:true}}}
 
   #normalise(saved) {
     const source=saved?.config||{},legacyProvider={...defaultProvider(),baseUrl:String(source.baseUrl||defaultProvider().baseUrl),apiKey:String(source.apiKey||''),models:[{...defaultProvider().models[0],id:String(source.model||LEGACY_DEFAULT_MODEL),name:String(source.model||LEGACY_DEFAULT_MODEL),reasoningEffort:REASONING_EFFORTS.has(source.reasoningEffort)?source.reasoningEffort:'medium'}]};
@@ -481,6 +499,7 @@ export class AiAgentService {
       id: String(item.id),
       title: String(item.title || 'New chat'),
       origin:item.origin==='automation'?'automation':'user',
+      agentMode:this.modeRegistry?.get(item.agentMode)?.id||'general',
       automation:item.origin==='automation'?{id:String(item.automation?.id||''),name:String(item.automation?.name||item.title||''),triggerType:String(item.automation?.triggerType||''),triggerReason:String(item.automation?.triggerReason||'')}:null,
       createdAt: Number(item.createdAt) || now(),
       updatedAt: Number(item.updatedAt) || now(),

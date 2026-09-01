@@ -10,7 +10,7 @@ export class GuestSystemService {
   get ready(){return this._ready||!!(this.machine.guestReady&&this.machine.status==='running')}
   set ready(value){this._ready=!!value}
   start() {
-    this.kernel.bus.on('guest:ready', () => { this.ready = true; this.kernel.bus.emit('system:ready');setTimeout(()=>this.#warmDirectories(),250);setTimeout(()=>this.ensureNetwork({updateRepositories:false}).catch(()=>{}),700); });
+    this.kernel.bus.on('guest:ready', () => { this.ready = true; this.kernel.bus.emit('system:ready');setTimeout(()=>this.#warmDirectories(),1600);setTimeout(()=>this.ensureNetwork({updateRepositories:false}).catch(()=>{}),2800); });
     this.kernel.bus.on('machine:status', status => { if (status !== 'running') {this.ready = false;this.#setNetwork({status:'offline',address:'',gateway:'',dns:'',error:''});} });
     addEventListener('online',()=>{if(this.ready)this.ensureNetwork({updateRepositories:false}).catch(()=>{})});
     addEventListener('offline',()=>this.#setNetwork({status:'offline',error:'Host network unavailable'}));

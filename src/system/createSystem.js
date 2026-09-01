@@ -30,6 +30,7 @@ import { AppInstallationService } from '../services/AppInstallationService.js';
 import { FactoryResetService } from '../services/FactoryResetService.js';
 import { AgentContextService } from '../services/AgentContextService.js';
 import { AgentEntryService } from '../services/AgentEntryService.js';
+import { AgentModeRegistryService } from '../services/AgentModeRegistryService.js';
 import { AgentQueryService } from '../services/AgentQueryService.js';
 import { AppRegistry } from '../apps/AppRegistry.js';
 import { AppRuntimeService } from '../apps/AppRuntimeService.js';
@@ -112,6 +113,7 @@ export async function createSystem(root) {
   const skillRegistry=kernel.register('skillRegistry',new SkillRegistryService({storage:localStorage,packageStore:new SkillPackageStore(),pythonRuntime:pythonSkillRuntime,bundledSkills:[createAppSkill(appStudio,queryUser),createWidgetSkill(widgetStudio),createThemeSkill(themeStudio)]}));
   const skillStudio=kernel.register('skillStudio',new SkillStudioService(skillRegistry));skillRegistry.registerBundled(skillCreatorSkill(skillStudio));
   const agentContext=kernel.register('agentContext',new AgentContextService(registry,i18n));
+  const agentModes=kernel.register('agentModes',new AgentModeRegistryService());
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
   const operationHistoryService=new OperationHistoryService(localStorage),systemTaskService=new SystemTaskService(localStorage),automationService=new AutomationService({storage:localStorage,tasks:systemTaskService});
@@ -123,7 +125,7 @@ export async function createSystem(root) {
   themeStudio.setApprovalService(tools);
   const agentRegistry=kernel.register('agentRegistry',new AgentRegistryService({storage:localStorage}));
   const multiAgent=kernel.register('multiAgent',new MultiAgentOrchestratorService({registry:agentRegistry,storage:localStorage,toolService:tools,skillRegistry}));
-  const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent));
+  const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent,agentModes));
   const factoryReset=kernel.register('factoryReset',new FactoryResetService({machine,skillRegistry,browserAutomation}));
   const operationHistory=kernel.register('operationHistory',operationHistoryService);
   const systemTasks=kernel.register('systemTasks',systemTaskService);
@@ -133,7 +135,7 @@ export async function createSystem(root) {
   appInstallation.setRuntimeServices({ai:{clearData:async()=>{await aiAgent.clearData();systemTasks.clearData();operationHistory.clear();automations.clearData()}},music,weather,browser:{clearData:async()=>{browser.clearData();await browserAutomation.disconnect().catch(()=>{})}}});
   multiAgent.setCapabilitySources({isToolAppEnabled:appId=>aiAgent.isToolAppEnabled(appId)});
   multiAgent.setRunner(options=>aiAgent.runIsolatedAgent(options));
-  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,factoryReset,system,metrics,entities,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
+  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,factoryReset,system,metrics,entities,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentModes,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
   window.future={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,entities,shell};
   await kernel.boot();

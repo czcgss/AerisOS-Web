@@ -9,7 +9,7 @@ export class SystemMetricsService {
 
   start() {
     this.offReady=this.kernel.bus.on('system:ready', () => {
-      this.refresh().catch(() => {});
+      clearTimeout(this.readyTimer);this.readyTimer=setTimeout(()=>this.refresh().catch(()=>{}),2100);
       this.#schedule();
     });
     this.offStatus=this.kernel.bus.on('machine:status', status => {
@@ -29,7 +29,7 @@ export class SystemMetricsService {
     }
   }
 
-  stop() { clearInterval(this.timer);clearTimeout(this.retryTimer);this.offReady?.();this.offStatus?.(); }
+  stop() { clearInterval(this.timer);clearTimeout(this.retryTimer);clearTimeout(this.readyTimer);this.offReady?.();this.offStatus?.(); }
 
   snapshot() { return structuredClone(this.state); }
 

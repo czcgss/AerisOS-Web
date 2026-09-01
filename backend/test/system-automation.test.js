@@ -8,6 +8,9 @@ import {AgentRegistryService} from '../../src/services/AgentRegistryService.js';
 import {AppRegistry} from '../../src/apps/AppRegistry.js';
 import {AgentEntryService} from '../../src/services/AgentEntryService.js';
 import {AppInstallationService} from '../../src/services/AppInstallationService.js';
+import {locateSystemAgentCommand} from '../../src/shell/SystemAgentCommand.js';
+import {TerminalAgentInput,isTerminalAgentTrigger,isTerminalCompositionKey,normalizeTerminalAgentInput,routeTerminalAgentData,shouldActivateTerminalAgentTrigger} from '../../src/apps/terminal/TerminalAgentInput.js';
+import {AgentModeRegistryService} from '../../src/services/AgentModeRegistryService.js';
 
 const memoryStorage=()=>{const values=new Map();return{values,getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,String(value)),removeItem:key=>values.delete(key)}};
 
@@ -73,6 +76,53 @@ test('the system task tray opens the Agent task workspace without a desktop app'
 
 test('contextual Agent entries preserve their independent window presentation',()=>{
   const bus=new EventBus(),events=[],service=new AgentEntryService({snapshot:()=>({appId:'notes'}),set(){}});service.kernel={bus};service.start();
-  bus.on('ai:compact-entry',detail=>events.push(detail));service.open({source:'pointer-focus',mode:'compact',presentation:'contextual',anchor:{x:420,y:260}});
-  assert.equal(events.length,1);assert.equal(events[0].presentation,'contextual');assert.deepEqual(events[0].anchor,{x:420,y:260});assert.deepEqual(events[0].context,{appId:'notes'});
+  const writingTarget={operation:'replace',apply(){return true}};
+  bus.on('ai:compact-entry',detail=>events.push(detail));service.open({source:'pointer-focus',mode:'compact',presentation:'contextual',anchor:{x:420,y:260},agentMode:'writing',writingTarget});
+  assert.equal(events.length,1);assert.equal(events[0].presentation,'contextual');assert.deepEqual(events[0].anchor,{x:420,y:260});assert.deepEqual(events[0].context,{appId:'notes'});assert.equal(events[0].agentMode,'writing');assert.equal(events[0].writingTarget,writingTarget);
+});
+
+test('the system input protocol recognizes branded Agent commands',()=>{
+  assert.deepEqual(locateSystemAgentCommand('@future rewrite this',20),{start:0,promptStart:8,end:20,prompt:'rewrite this'});
+  assert.equal(locateSystemAgentCommand('ordinary text'),null);
+  const value='Existing note\n@伏秋 总结以上内容',command=locateSystemAgentCommand(value,value.length);
+  assert.equal(command.prompt,'总结以上内容');assert.equal(command.start,14);
+  const inline='Keep this paragraph. @future continue writing',inlineCommand=locateSystemAgentCommand(inline,inline.length);
+  assert.equal(inlineCommand.prompt,'continue writing');assert.equal(inline.slice(0,inlineCommand.start),'Keep this paragraph. ');
+});
+
+test('the terminal enters Agent mode after the branded command separator',()=>{
+  assert.equal(isTerminalAgentTrigger('@future '),true);
+  assert.equal(isTerminalAgentTrigger('@伏秋 '),true);
+  assert.equal(isTerminalAgentTrigger('  @future '),true);
+  assert.equal(isTerminalAgentTrigger('@future'),false);
+  assert.equal(isTerminalAgentTrigger('echo @future'),false);
+  assert.equal(isTerminalAgentTrigger('@future explain this'),false);
+  const state={line:'',active:false,draft:''};
+  assert.equal(routeTerminalAgentData(state,'@future ').output,'@future \u0015');
+  assert.equal(state.active,true);
+  assert.equal(routeTerminalAgentData(state,'list files').output,'');
+  const submitted=routeTerminalAgentData(state,'\r');
+  assert.equal(submitted.output,'');
+  assert.equal(submitted.submitted,'list files');
+  assert.equal(state.active,false);
+  const pasted={line:'',active:false,draft:''},paste='\u001b[200~@future explain this\u001b[201~';
+  const normalized=normalizeTerminalAgentInput(paste);
+  assert.equal(normalized.input,'@future explain this');
+  assert.equal(normalized.passthrough,false);
+  const pasteStart=routeTerminalAgentData(pasted,normalized.input);
+  assert.equal(pasteStart.output,'@future \u0015');
+  assert.equal(pasted.active,true);
+  assert.equal(pasted.draft,'explain this');
+  assert.equal(normalizeTerminalAgentInput('\u001b[200~ls -la\u001b[201~').passthrough,true);
+});
+
+test('writing mode is registered without system capabilities and ignores IME process keys',()=>{
+  const modes=new AgentModeRegistryService(),writing=modes.get('writing');
+  assert.deepEqual(writing.capabilities,{tools:false,skills:false,collaboration:false,workflows:false});
+  assert.equal(writing.selectable,false);assert.deepEqual(modes.list({selectableOnly:true}).map(mode=>mode.id),['general','chat']);
+  assert.equal(isTerminalCompositionKey({isComposing:true,key:'n'}),true);
+  assert.equal(isTerminalCompositionKey({keyCode:229,key:'n'}),true);
+  assert.equal(isTerminalCompositionKey({key:'n'}),false);
+  assert.equal(shouldActivateTerminalAgentTrigger('@future',{key:' '}),true);assert.equal(shouldActivateTerminalAgentTrigger('@future',{key:' ',isComposing:true}),false);
+  const chinese={line:'',active:false,draft:''};routeTerminalAgentData(chinese,'@future ');routeTerminalAgentData(chinese,'查看进程');assert.equal(routeTerminalAgentData(chinese,'\r').submitted,'查看进程');
 });

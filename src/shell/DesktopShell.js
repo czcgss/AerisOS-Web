@@ -4,6 +4,7 @@ import { SetupAssistant } from './SetupAssistant.js';
 import { DesktopWidgets } from './DesktopWidgets.js';
 import { CompactAgentPanel } from './CompactAgentPanel.js';
 import { PointerAgentTrigger } from './PointerAgentTrigger.js';
+import { SystemAgentCommand } from './SystemAgentCommand.js';
 
 export class DesktopShell {
   constructor(root, context, registry) { this.root=root; this.context=context; this.registry=registry; this.launcherOpen=false;this.bootActivities=[];this.lastBootActivity=Date.now();this.desktopRenderSequence=0;this.desktopRefreshTimer=0;this.pendingAppUpdates=new Map(); }
@@ -25,7 +26,7 @@ export class DesktopShell {
     const menuButtons=this.root.querySelectorAll('.app-menu>button');if(menuButtons[0])menuButtons[0].dataset.shell='launcher';if(menuButtons[1])menuButtons[1].dataset.shell='system-menu';
     this.windowManager=new WindowManager(this.root.querySelector('[data-window-layer]'),this.registry,{...this.context,i18n});this.#renderDock();
     this.offRegistry=this.registry.subscribe(change=>{if(change.type==='unregistered'){this.windowManager.closeApp(change.app.id);if(change.app.id==='ai')this.compactAgent?.close();this.root.querySelectorAll(`.system-bar [data-open-app="${CSS.escape(change.app.id)}"]`).forEach(node=>node.remove());this.#renderDesktop()}this.#renderDock();if(this.launcherOpen){this.launcherOpen=false;this.toggleLauncher()}});
-    this.widgets=new DesktopWidgets(this.root.querySelector('.desktop'),this.context);this.widgets.mount();if(this.registry.get('ai')){this.compactAgent=new CompactAgentPanel(this.root.querySelector('.desktop'),this.context);this.compactAgent.mount();this.pointerAgent=new PointerAgentTrigger(this.root.querySelector('.desktop'),this.context,this.windowManager);this.pointerAgent.mount()}this.#bind();if(settings.get('setupComplete'))this.windowManager.restoreSession();this.#renderDesktop();this.#clock();this.clockTimer=setInterval(()=>this.#clock(),30000);
+    this.widgets=new DesktopWidgets(this.root.querySelector('.desktop'),this.context);this.widgets.mount();if(this.registry.get('ai')){this.compactAgent=new CompactAgentPanel(this.root.querySelector('.desktop'),this.context);this.compactAgent.mount();this.pointerAgent=new PointerAgentTrigger(this.root.querySelector('.desktop'),this.context,this.windowManager);this.pointerAgent.mount();this.systemAgentCommand=new SystemAgentCommand(this.root.querySelector('.desktop'),this.context,this.windowManager)}this.#bind();if(settings.get('setupComplete'))this.windowManager.restoreSession();this.#renderDesktop();this.#clock();this.clockTimer=setInterval(()=>this.#clock(),30000);
     setTimeout(()=>this.context.machine.start().catch(error=>this.#bootError(error)),650);
   }
 
@@ -120,7 +121,7 @@ export class DesktopShell {
   #renderBootActivity(){const screen=this.root.querySelector('[data-boot-screen]'),log=screen?.querySelector('[data-boot-log]');if(!log)return;const i18n=this.context.i18n,last=this.bootActivities.at(-1),isComplete=item=>item&&(/\[\s*ok\s*\]\s*$/i.test(item.label)||item.kind==='stage'),lastCompleted=isComplete(last),previous=lastCompleted?last:[...this.bootActivities.slice(0,-1)].reverse().find(isComplete),current=lastCompleted?i18n.t(screen.dataset.mode==='restore'?'waitingForRestoreStep':'waitingForNextStep'):(last?.label||i18n.t('checkingSystem')),completedRow=screen.querySelector('[data-boot-completed]');completedRow.hidden=!previous;if(previous)screen.querySelector('[data-boot-previous]').textContent=previous.label;screen.querySelector('[data-boot-current]').textContent=current;screen.querySelector('.boot-summary .current').classList.toggle('waiting',Boolean(lastCompleted));log.innerHTML=this.bootActivities.map(item=>`<div class="boot-log-row boot-log-${item.kind}"><i></i><span>${this.#escape(item.label)}</span><time data-activity-time="${item.timestamp}"></time></div>`).join('')}
   #updateBootHeartbeat(){const screen=this.root.querySelector('[data-boot-screen]'),heartbeat=screen?.querySelector('[data-boot-heartbeat]');if(!heartbeat||document.body.classList.contains('system-ready'))return;const seconds=Math.max(0,Math.floor((Date.now()-this.lastBootActivity)/1000)),i18n=this.context.i18n;let text=seconds<5?i18n.t('activityNow'):i18n.t(seconds<30?'lastActivitySeconds':seconds<90?'guestBusySeconds':'startupMayBeStalled').replace('{seconds}',seconds);heartbeat.textContent=text;screen.querySelectorAll('[data-activity-time]').forEach(node=>{const age=Math.max(0,Math.floor((Date.now()-Number(node.dataset.activityTime))/1000));node.textContent=age<5?i18n.t('now'):i18n.t('secondsAgo').replace('{seconds}',age)});const stalled=seconds>=90;screen.classList.toggle('boot-stalled',stalled);const stall=screen.querySelector('[data-boot-stall]');if(stalled){const minutes=Math.floor(seconds/60);stall.hidden=false;stall.textContent=seconds>=300?i18n.t('startupStalledMinutes').replace('{minutes}',minutes):i18n.t('startupMayBeStalled').replace('{seconds}',seconds)}else stall.hidden=true}
   #guestReady(detail){
-    this.#renderDesktop(true);
+    this.#renderDesktop(false);clearTimeout(this.desktopReadyRefreshTimer);this.desktopReadyRefreshTimer=setTimeout(()=>this.#renderDesktop(true),1900);
     if(this.context.settings.get('setupComplete'))return this.#finishBoot(detail);
     if(this.setupAssistant||this.setupAssistantPending)return;
     this.setupAssistantPending=true;
@@ -146,6 +147,7 @@ export class DesktopShell {
       desktop?.removeAttribute('inert');
       desktop?.removeAttribute('aria-hidden');
       document.body.classList.add('system-ready');
+      if(this.systemAgentCommand&&!this.systemAgentCommandMounted){this.systemAgentCommand.mount();this.systemAgentCommandMounted=true}
       this.bootFinishPending=false;
       this.bootFinished=true;
       this.toast(this.context.i18n.t('systemReady'));
