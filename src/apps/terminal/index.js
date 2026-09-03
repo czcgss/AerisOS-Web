@@ -2,6 +2,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import {acquireTerminalPort,releaseTerminalPort,terminalFontFamily} from './session.js';
+import {TerminalAgentInput} from './TerminalAgentInput.js';
 
 const theme={
   background:'#0f181f',foreground:'#d9e2e8',cursor:'#67c58b',cursorAccent:'#0f181f',selectionBackground:'#356b7eaa',
@@ -11,12 +12,16 @@ const theme={
 
 export default{
   id:'terminal',title:'terminal',icon:'terminal',color:'slate',width:920,height:610,singleInstance:true,
-  mount(root,{kernel,system,i18n,clipboard,shell,agentEntry}){
+  mount(root,{kernel,system,i18n,clipboard,shell,agentEntry,agentContext,window}){
     let nextId=1,activeId=null,fitFrame=0,resizeTimer=0,sessions=[];
     root.innerHTML=`<div class="system-app terminal-pro terminal-native" data-terminal-theme="agnoster"><header><div class="terminal-tabs" data-terminal-tabs></div><div class="terminal-session-meta"><i data-terminal-state-dot></i><span data-terminal-state></span></div></header><main class="terminal-native-host" data-terminal-host></main><footer><span class="terminal-connection"><i></i><b data-terminal-connection></b></span><span>UTF-8</span><span>ash</span></footer><menu class="terminal-context-menu" data-terminal-menu hidden><button data-terminal-copy>${i18n.t('copy')}</button><button data-terminal-paste>${i18n.t('paste')}</button><i></i><button data-terminal-agent>${i18n.t('askFuture')}</button></menu></div>`;
     const host=root.querySelector('[data-terminal-host]'),tabs=root.querySelector('[data-terminal-tabs]'),menu=root.querySelector('[data-terminal-menu]');
     const dispose=resource=>typeof resource==='function'?resource():resource?.dispose?.();
     const active=()=>sessions.find(session=>session.id===activeId);
+    const commandKey=session=>`terminal:${window?.id||'main'}:${session.port}`;
+    const commandAnchor=pane=>{const rect=pane.getBoundingClientRect();return{x:rect.left+16,y:rect.bottom-12}};
+    const agentInput=new TerminalAgentInput({host:root.closest('.desktop'),i18n,agentEntry,agentContext});
+    const routeInput=(session,data)=>agentInput.route(data,{key:commandKey(session),windowId:window?.id||root.closest('.window')?.dataset.id||'',anchor:commandAnchor(session.pane),write:value=>system.writeTerminal(value,session.port)});
     const setStatus=()=>{
       const ready=system.ready,state=root.querySelector('[data-terminal-state]'),dot=root.querySelector('[data-terminal-state-dot]'),connection=root.querySelector('[data-terminal-connection]');
       state.textContent=i18n.t(ready?'terminalReady':'terminalWaiting');
@@ -45,15 +50,16 @@ export default{
       sessions.forEach(session=>session.pane.hidden=session.id!==id);
       drawTabs();
       const session=active();
+      if(session)agentContext.set({appId:'terminal',label:i18n.t('terminal'),resource:{kind:'terminal-session',id:String(session.id),name:session.title||`${i18n.t('terminal')} ${session.id}`,metadata:{port:session.port,ready:system.ready}}});
       resize();
       setTimeout(()=>session?.terminal.focus())
     };
     const copy=async()=>{const text=active()?.terminal.getSelection()||'';if(text&&await clipboard.copyText(text))shell.toast(i18n.t('copiedToClipboard'));menu.hidden=true};
-    const paste=()=>{const text=clipboard.value||'';if(text)system.writeTerminal(text,active()?.port);menu.hidden=true;active()?.terminal.focus()};
+    const paste=()=>{const text=clipboard.value||'',session=active();if(text&&session){const output=routeInput(session,text);if(output)system.writeTerminal(output,session.port)}menu.hidden=true;session?.terminal.focus()};
     const shortcut=(session,event)=>{
       const key=event.key.toLowerCase(),copyKey=(event.metaKey||event.ctrlKey&&event.shiftKey)&&key==='c',pasteKey=(event.metaKey||event.ctrlKey&&event.shiftKey)&&key==='v';
       if(event.ctrlKey&&!event.metaKey&&!event.shiftKey&&key==='c'){
-        if(event.type==='keydown')system.writeTerminal('\u0003',session.port);
+        if(event.type==='keydown'){const output=routeInput(session,'\u0003');if(output)system.writeTerminal(output,session.port)}
         return false
       }
       if(copyKey&&session.terminal.hasSelection()){if(event.type==='keydown')copy();return false}
@@ -68,7 +74,8 @@ export default{
       const terminal=new Terminal({allowTransparency:true,convertEol:false,cursorBlink:true,cursorStyle:'bar',fontFamily:terminalFontFamily(),fontSize:14,fontWeight:'400',fontWeightBold:'700',letterSpacing:0,lineHeight:1.08,scrollback:10000,smoothScrollDuration:0,theme});
       const fit=new FitAddon();terminal.loadAddon(fit);terminal.open(pane);
       const session={id,port,owner,pane,terminal,fit,disposables:[]};sessions.push(session);
-      session.disposables.push(terminal.onData(data=>system.writeTerminal(data,port)));
+      const triggerKeydown=event=>agentInput.activateTrigger(event,{key:commandKey(session),windowId:window?.id||root.closest('.window')?.dataset.id||'',anchor:commandAnchor(pane),write:data=>system.writeTerminal(data,port)});pane.addEventListener('keydown',triggerKeydown,true);session.disposables.push(()=>pane.removeEventListener('keydown',triggerKeydown,true));
+      session.disposables.push(terminal.onData(data=>{const output=routeInput(session,data);if(output)system.writeTerminal(output,port)}));
       session.disposables.push(terminal.onTitleChange(title=>{session.title=title;drawTabs()}));
       session.disposables.push(kernel.bus.on('terminal:data',detail=>{if(detail.port===port)terminal.write(detail.data)}));
       terminal.attachCustomKeyEventHandler(event=>shortcut(session,event));
@@ -79,6 +86,7 @@ export default{
     }
     function closeSession(id){
       const session=sessions.find(item=>item.id===id);if(!session)return;
+      agentInput.release(commandKey(session));
       session.disposables.forEach(dispose);
       session.terminal.dispose();session.pane.remove();releaseTerminalPort(session.port,session.owner);system.resetTerminal(session.port);
       sessions=sessions.filter(item=>item.id!==id);
@@ -94,6 +102,6 @@ export default{
     const offStatus=kernel.bus.on('machine:status',setStatus);
     const offTheme=kernel.bus.on('theme:changed',()=>{sessions.forEach(session=>session.terminal.options.fontFamily=terminalFontFamily());resize()});
     createSession();setStatus();
-    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();offTheme();const resets=sessions.map(session=>{session.disposables.forEach(dispose);session.terminal.dispose();releaseTerminalPort(session.port,session.owner);return system.resetTerminal(session.port)});sessions=[];return Promise.allSettled(resets)}
+    return()=>{cancelAnimationFrame(fitFrame);clearTimeout(resizeTimer);observer.disconnect();offDataReady();offStatus();offTheme();agentInput.destroy();const resets=sessions.map(session=>{session.disposables.forEach(dispose);session.terminal.dispose();releaseTerminalPort(session.port,session.owner);return system.resetTerminal(session.port)});sessions=[];return Promise.allSettled(resets)}
   }
 };

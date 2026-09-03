@@ -12,7 +12,22 @@ const styleText=value=>String(value||'').replace(/<\/style/gi,'<\\/style');
 const sdkBootstrap = `
 (() => {
   let port, environment = {}, state = {}, sequence = 0;
-  const pending = new Map(), stateListeners = new Set(), environmentListeners = new Set();
+  const pending = new Map(), writingTargets = new Map(), stateListeners = new Set(), environmentListeners = new Set();
+  const agentCommand = target => {
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) || target.type === 'password' || target.disabled || target.readOnly) return null;
+    const value = target.value || '', end = target.selectionStart ?? value.length, before = value.slice(0, end), lower = before.toLowerCase(), english = lower.lastIndexOf('@future '), chinese = before.lastIndexOf('@伏秋 '), commandStart = Math.max(english, chinese);
+    if (commandStart < 0) return null; const promptStart = commandStart + (commandStart === english ? 8 : 4), prompt = value.slice(promptStart, end).trim(); return { prompt, commandStart, promptStart, end };
+  };
+  let commandHint = null, commandHighlights = [];
+  const hideCommandHint = () => { commandHint?.remove(); commandHint = null; commandHighlights.splice(0).forEach(node => node.remove()); };
+  const showCommandHint = (target, command) => {
+    hideCommandHint(); const rect = target.getBoundingClientRect(), style = getComputedStyle(target), mirror = document.createElement('div'), highlighted = document.createElement('span'), marker = document.createElement('span');
+    Object.assign(mirror.style, { position:'fixed', visibility:'hidden', pointerEvents:'none', boxSizing:style.boxSizing, width:rect.width+'px', height:'auto', left:(rect.left-target.scrollLeft)+'px', top:(rect.top-target.scrollTop)+'px', padding:style.padding, border:style.border, font:style.font, letterSpacing:style.letterSpacing, lineHeight:style.lineHeight, textIndent:style.textIndent, textTransform:style.textTransform, whiteSpace:target instanceof HTMLInputElement?'pre':'pre-wrap', overflowWrap:'break-word', wordBreak:style.wordBreak });
+    mirror.append(document.createTextNode(target.value.slice(0,command.commandStart))); highlighted.textContent = target.value.slice(command.commandStart,command.end); mirror.append(highlighted); marker.textContent = '\u200b'; mirror.append(marker); document.body.appendChild(mirror); const point = marker.getBoundingClientRect(), ranges = [...highlighted.getClientRects()]; mirror.remove();
+    commandHighlights = ranges.map(range => { const node=document.createElement('i'), left=Math.max(rect.left,range.left), top=Math.max(rect.top,range.top), right=Math.min(rect.right,range.right), bottom=Math.min(rect.bottom,range.bottom); node.className='future-system-agent-command-highlight'; node.style.cssText='left:'+left+'px;top:'+top+'px;width:'+Math.max(0,right-left)+'px;height:'+Math.max(0,bottom-top)+'px'; document.body.appendChild(node); return node; });
+    commandHint = document.createElement('div'); commandHint.className = 'future-system-agent-command-hint'; commandHint.innerHTML = '<i>✦</i><b>Future</b><em>↵</em>'; document.body.appendChild(commandHint); const width = Math.min(90,commandHint.getBoundingClientRect().width||64), left = point.left+7+width>innerWidth?point.left-width-7:point.left+7; commandHint.style.left = Math.max(5,Math.min(left,innerWidth-width-5))+'px'; commandHint.style.top = Math.max(5,Math.min(point.bottom-19,innerHeight-24))+'px';
+  };
+  const commandStyle = document.createElement('style'); commandStyle.textContent = '.future-system-agent-command-active{outline:2px solid var(--accent)!important;outline-offset:2px!important;box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 12%,transparent)!important;caret-color:var(--accent)!important}.future-system-agent-command-highlight{position:fixed;z-index:2147483645;border-radius:3px;background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:inset 0 -1px color-mix(in srgb,var(--accent) 58%,transparent);pointer-events:none}.future-system-agent-command-hint{position:fixed;z-index:2147483647;height:18px;display:flex;align-items:center;gap:4px;padding:0 5px 0 3px;border:1px solid color-mix(in srgb,var(--accent) 24%,rgba(90,110,125,.18));border-radius:6px;background:color-mix(in srgb,var(--surface) 90%,transparent);box-shadow:0 4px 12px rgba(31,54,80,.16);backdrop-filter:blur(14px);color:var(--accent);font:700 8px var(--font-ui);pointer-events:none}.future-system-agent-command-hint i{width:14px;height:14px;display:grid;place-items:center;flex:none;border-radius:4px;background:color-mix(in srgb,var(--accent) 13%,transparent);font-size:8px;font-style:normal}.future-system-agent-command-hint b{font:inherit;flex:none}.future-system-agent-command-hint em{color:var(--muted);font:inherit;font-size:7px;flex:none}'; document.head.appendChild(commandStyle);
   const request = (method, params = {}) => new Promise((resolve, reject) => {
     if (!port) return reject(new Error('Future SDK is not connected.'));
     const id = ++sequence; pending.set(id, { resolve, reject }); port.postMessage({ type: 'request', id, method, params });
@@ -50,6 +65,7 @@ const sdkBootstrap = `
       if (data.type === 'response') { const task = pending.get(data.id); if (!task) return; pending.delete(data.id); data.error ? task.reject(new Error(data.error)) : task.resolve(data.result); }
       if (data.type === 'state') { state = clone(data.value || {}); stateListeners.forEach(listener => listener(clone(state))); }
       if (data.type === 'environment') applyEnvironment(data.value);
+      if (data.type === 'agent-writing') { const record=writingTargets.get(data.id); if (!record) return; writingTargets.delete(data.id); if (data.approved && record.target?.isConnected) { const text=String(data.text||''),replace=data.operation==='replace'; record.target.focus(); record.target.setRangeText(text,replace?0:record.offset,replace?record.target.value.length:record.offset,'end'); record.target.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:text})); } }
     };
     state = clone(event.data.state || {}); applyEnvironment(event.data.environment || {}); port.start(); resolveReady(api);
     stateListeners.forEach(listener => listener(clone(state)));
@@ -57,6 +73,17 @@ const sdkBootstrap = `
   addEventListener('contextmenu', event => {
     event.preventDefault();
     port?.postMessage({ type: 'event', name: 'contextmenu', x: event.clientX, y: event.clientY });
+  }, true);
+  addEventListener('input', event => {
+    const target = event.target, command = agentCommand(target); target?.classList?.toggle('future-system-agent-command-active', Boolean(command)); command ? showCommandHint(target, command) : hideCommandHint();
+  }, true);
+  addEventListener('focusout', event => { event.target?.classList?.remove('future-system-agent-command-active'); hideCommandHint(); }, true);
+  addEventListener('keydown', event => {
+    if (event.isComposing || event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target, command = agentCommand(target); if (!command?.prompt) return;
+    event.preventDefault(); event.stopImmediatePropagation(); const rect = target.getBoundingClientRect(), original = target.value, surrounding = original.slice(0,command.commandStart)+original.slice(command.end), writingTargetId = 'writing-'+(++sequence); target.value = surrounding; target.setSelectionRange(command.commandStart,command.commandStart); writingTargets.set(writingTargetId,{target,offset:command.commandStart}); target.classList.remove('future-system-agent-command-active'); hideCommandHint();
+    target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteByCut', data: null }));
+    port?.postMessage({ type: 'event', name: 'agent-command', prompt: command.prompt, writingTargetId, operation: surrounding.trim()?'insert':'replace', rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom } });
   }, true);
 })();`;
 
@@ -152,6 +179,11 @@ export class AppRuntimeService {
       if(message.name==='contextmenu'){
         const rect=mount.iframe.getBoundingClientRect();
         mount.iframe.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:rect.left+(Number(message.x)||0),clientY:rect.top+(Number(message.y)||0),button:2,buttons:2}));
+      }
+      if(message.name==='agent-command'){
+        const rect=mount.iframe.getBoundingClientRect(),inputRect=message.rect||{},windowId=mount.context.window?.id||'';
+        const writingTargetId=String(message.writingTargetId||'');
+        this.kernel?.bus.emit('system:agent-command',{prompt:String(message.prompt||''),source:'extension-input-command',appId,windowId,anchor:{x:rect.left+(Number(inputRect.right)||rect.width),y:rect.top+(Number(inputRect.bottom)||0)},writingTarget:writingTargetId?{suggestedOperation:message.operation==='replace'?'replace':'append',apply:(text,operation)=>{mount.port.postMessage({type:'agent-writing',id:writingTargetId,approved:true,operation:operation==='replace'?'replace':'append',text:String(text??'')});return true},reject:()=>mount.port.postMessage({type:'agent-writing',id:writingTargetId,approved:false})}:null});
       }
       return;
     }

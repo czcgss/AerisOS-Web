@@ -437,7 +437,10 @@ export class V86Machine {
     }
     this.#bootStage('systemReady', 100, restored ? 'restore' : 'install');
     this.kernel.bus.emit('guest:ready', { restored });
-    if (restored) this.scheduleCheckpoint(2000);
+    // A restored snapshot is already durable. Saving the entire virtual
+    // machine again just after the desktop unlocks serializes hundreds of
+    // megabytes while the user is beginning to interact with the UI. Normal
+    // change-triggered, visibility and periodic checkpoints cover later work.
   }
   #bootStage(label, progress, mode = this.bootMode || 'checking') {
     this.bootProgress=Math.max(this.bootProgress||0,progress||0);

@@ -9,7 +9,7 @@
   </p>
 </div>
 
-FutureOS (Chinese name: **伏秋**) is a modular, browser-hosted operating-system environment built around an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86). It combines a desktop shell, window manager, system applications, Linux-backed files and terminals, persistent machine state, and an Agent that can use structured application capabilities.
+FutureOS is a modular, browser-hosted operating-system environment built around an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86). It combines a desktop shell, window manager, system applications, Linux-backed files and terminals, persistent machine state, and an Agent that can use structured application capabilities.
 
 All Future-owned implementation code was written by AI through iterative product direction, review, and manual testing by a human. Third-party projects retain their original authorship and licenses.
 
@@ -68,6 +68,7 @@ Open **Future AI → Settings → Model** and configure an OpenAI-compatible bas
 Future AI is designed as an operating-system capability, not an assistant layered on top of the desktop. It shares the system's application model, context, permissions, notifications, persistence, and live interface surfaces, allowing a request to become an observable system workflow instead of an opaque chat response.
 
 - **System context:** invoke the Agent globally or from an App, then explicitly attach the active window, file, resource, date, text, or another open App.
+- **Semantic system objects:** Calendar events, dates, notes, reminders, files, and folders expose stable `future://` identities, typed relationships, and discoverable App actions without bypassing App permissions.
 - **Native App actions:** Apps expose validated tools for querying and changing real application data. Users control which Apps the Agent may operate.
 - **Dynamic capabilities:** enabled Agents, App tools, imported Skills, and generated extensions are discovered at runtime rather than hard-coded into a single prompt.
 - **Multi-Agent orchestration:** a Main Agent plans and delegates isolated work to capability-specific Agents. The Worktree shows ownership, progress, tool activity, and results for each task.

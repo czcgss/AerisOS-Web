@@ -10,8 +10,9 @@ const duration = seconds => {
 
 export default {
   id: 'monitor', title: 'monitor', icon: 'memory', color: 'aqua', width: 940, height: 640, singleInstance: true,
-  mount(root, { machine, system, metrics, i18n, kernel }) {
+  mount(root, { machine, system, metrics, i18n, kernel, agentContext }) {
     let query = '', rows = [], processLoading = false, processError = '';
+    const reportContext=()=>agentContext.set({appId:'monitor',label:i18n.t('monitor'),resource:{kind:'system-monitor',id:'processes',name:i18n.t('processes'),metadata:{query,processCount:rows.length,memory:metrics.snapshot()}}});
     const processState = status => {
       const code = String(status || '').charAt(0).toUpperCase();
       return { R: i18n.t('processRunning'), S: i18n.t('processSleeping'), D: i18n.t('processWaiting'), T: i18n.t('processStopped'), Z: i18n.t('processZombie'), W: i18n.t('processWaiting') }[code] || i18n.t('processUnknown');
@@ -61,12 +62,12 @@ export default {
       catch(error) { processError=error.message||'unavailable';drawProcesses(); }
       finally { processLoading = false; }
     };
-    root.querySelector('[data-process-search]').oninput = event => { query = event.target.value; drawProcesses(); };
+    root.querySelector('[data-process-search]').oninput = event => { query = event.target.value; drawProcesses();reportContext(); };
     root.querySelector('[data-refresh-processes]').onclick = () => { updateProcesses(); metrics.refresh(); };
     const fastTimer = setInterval(updateFastStats, 1000), processTimer = setInterval(updateProcesses, 5000);
     const offReady = kernel.bus.on('guest:ready', () => { updateProcesses(); metrics.refresh(); });
     const offMetrics = kernel.bus.on('metrics:update', drawMetrics);
-    drawMetrics(metrics.snapshot()); updateFastStats(); updateProcesses();
+    drawMetrics(metrics.snapshot()); updateFastStats(); updateProcesses();reportContext();
     return () => { clearInterval(fastTimer); clearInterval(processTimer); offReady(); offMetrics(); };
   },
 };

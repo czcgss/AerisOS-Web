@@ -12,6 +12,10 @@ import { MultiAgentOrchestratorService } from '../services/MultiAgentOrchestrato
 import { SystemMetricsService } from '../services/SystemMetricsService.js';
 import { SystemToolService } from '../services/SystemToolService.js';
 import { UserDataService } from '../services/UserDataService.js';
+import { SystemEntityService } from '../entities/SystemEntityService.js';
+import { createCalendarEntityProviders, createNotesEntityProvider, createRemindersEntityProvider } from '../entities/providers/ProductivityEntityProviders.js';
+import { createFileEntityProviders } from '../entities/providers/FileEntityProvider.js';
+import { createBrowserEntityProvider, createContactsEntityProvider, createMusicEntityProvider, createPhotosEntityProvider, createWeatherEntityProvider } from '../entities/providers/BuiltinEntityProviders.js';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { WeatherService } from '../services/WeatherService.js';
 import { NotificationService } from '../services/NotificationService.js';
@@ -26,6 +30,7 @@ import { AppInstallationService } from '../services/AppInstallationService.js';
 import { FactoryResetService } from '../services/FactoryResetService.js';
 import { AgentContextService } from '../services/AgentContextService.js';
 import { AgentEntryService } from '../services/AgentEntryService.js';
+import { AgentModeRegistryService } from '../services/AgentModeRegistryService.js';
 import { AgentQueryService } from '../services/AgentQueryService.js';
 import { AppRegistry } from '../apps/AppRegistry.js';
 import { AppRuntimeService } from '../apps/AppRuntimeService.js';
@@ -81,11 +86,14 @@ export async function createSystem(root) {
   const system=kernel.register('system',new GuestSystemService(machine));
   const metrics=kernel.register('metrics',new SystemMetricsService(system,machine));
   const userdata=kernel.register('userdata',new UserDataService(system));
+  const entities=kernel.register('entities',new SystemEntityService());
+  [...createCalendarEntityProviders(userdata),createNotesEntityProvider(userdata),createRemindersEntityProvider(userdata),...createFileEntityProviders(system)].forEach(provider=>entities.register(provider));
   const clipboard=kernel.register('clipboard',new ClipboardService());
   const weather=kernel.register('weather',new WeatherService(settings));
   const music=kernel.register('music',new MusicService(system));
   const browser=kernel.register('browser',new BrowserService({storage:localStorage}));
   const browserAutomation=kernel.register('browserAutomation',new BrowserAutomationService());
+  [createContactsEntityProvider(userdata),createMusicEntityProvider(music),createBrowserEntityProvider(browser),createPhotosEntityProvider(system,userdata),createWeatherEntityProvider(weather)].forEach(provider=>entities.register(provider));
   const registry=new AppRegistry();
   const widgetRegistry=new WidgetRegistry();
   builtinWidgets.forEach(widget=>widgetRegistry.register(widget));
@@ -105,10 +113,11 @@ export async function createSystem(root) {
   const skillRegistry=kernel.register('skillRegistry',new SkillRegistryService({storage:localStorage,packageStore:new SkillPackageStore(),pythonRuntime:pythonSkillRuntime,bundledSkills:[createAppSkill(appStudio,queryUser),createWidgetSkill(widgetStudio),createThemeSkill(themeStudio)]}));
   const skillStudio=kernel.register('skillStudio',new SkillStudioService(skillRegistry));skillRegistry.registerBundled(skillCreatorSkill(skillStudio));
   const agentContext=kernel.register('agentContext',new AgentContextService(registry,i18n));
+  const agentModes=kernel.register('agentModes',new AgentModeRegistryService());
   const agentEntry=kernel.register('agentEntry',new AgentEntryService(agentContext));
   const notifications=kernel.register('notifications',new NotificationService(userdata,i18n));
   const operationHistoryService=new OperationHistoryService(localStorage),systemTaskService=new SystemTaskService(localStorage),automationService=new AutomationService({storage:localStorage,tasks:systemTaskService});
-  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,themeRuntime,weather,metrics,machine,music,browser,browserAutomation,registry,i18n,operationHistory:operationHistoryService,automations:automationService,systemTasks:systemTaskService}));
+  const tools=kernel.register('tools',new SystemToolService({userdata,system,settings,themeRuntime,weather,metrics,machine,music,browser,browserAutomation,registry,i18n,entities,operationHistory:operationHistoryService,automations:automationService,systemTasks:systemTaskService}));
   skillRegistry.setApprovalService(tools);
   skillStudio.setApprovalService(tools);
   appStudio.setApprovalService(tools);
@@ -116,7 +125,7 @@ export async function createSystem(root) {
   themeStudio.setApprovalService(tools);
   const agentRegistry=kernel.register('agentRegistry',new AgentRegistryService({storage:localStorage}));
   const multiAgent=kernel.register('multiAgent',new MultiAgentOrchestratorService({registry:agentRegistry,storage:localStorage,toolService:tools,skillRegistry}));
-  const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent));
+  const aiAgent=kernel.register('aiAgent',new AiAgentService(tools,localStorage,agentContext,skillRegistry,multiAgent,agentModes));
   const factoryReset=kernel.register('factoryReset',new FactoryResetService({machine,skillRegistry,browserAutomation}));
   const operationHistory=kernel.register('operationHistory',operationHistoryService);
   const systemTasks=kernel.register('systemTasks',systemTaskService);
@@ -126,9 +135,9 @@ export async function createSystem(root) {
   appInstallation.setRuntimeServices({ai:{clearData:async()=>{await aiAgent.clearData();systemTasks.clearData();operationHistory.clear();automations.clearData()}},music,weather,browser:{clearData:async()=>{browser.clearData();await browserAutomation.disconnect().catch(()=>{})}}});
   multiAgent.setCapabilitySources({isToolAppEnabled:appId=>aiAgent.isToolAppEnabled(appId)});
   multiAgent.setRunner(options=>aiAgent.runIsolatedAgent(options));
-  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,factoryReset,system,metrics,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
+  const context={kernel,settings,themeRuntime,themeStudio,i18n,dialog,machine,factoryReset,system,metrics,entities,tools,aiAgent,agentNotifications,agentRegistry,multiAgent,agentContext,agentModes,agentEntry,queryUser,userdata,clipboard,weather,music,browser,browserAutomation,notifications,systemTasks,automations,operationHistory,registry,appRuntime,appInstallation,appStudio,skillRegistry,skillStudio,pythonSkillRuntime,widgetRegistry,widgetRuntime,widgetStudio};
   const shell=new DesktopShell(root,context,registry);context.shell=shell;shell.mount();
-  window.future={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,shell};
+  window.future={kernel,services:kernel.services,apps:registry,widgets:widgetRegistry,entities,shell};
   await kernel.boot();
   return window.future;
 }

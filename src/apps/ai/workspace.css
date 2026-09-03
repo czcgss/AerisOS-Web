@@ -675,8 +675,10 @@
 }
 
 /* The toolbar owns a high stacking context so its dropdown can escape the
-   workspace. The applications sheet is a modal surface and must sit above
-   that toolbar; otherwise the toolbar clips the sheet header. */
+   workspace. Modal surfaces must sit above that toolbar; otherwise it clips
+   the top of their sheets. */
+.ai-settings-backdrop[data-ai-close-settings] { z-index: 13; }
+.ai-settings-root { z-index: 14; }
 .ai-settings-backdrop[data-ai-close-applications] { z-index: 13; }
 .ai-applications-panel { z-index: 14; }
 

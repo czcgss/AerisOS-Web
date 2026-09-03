@@ -37,8 +37,8 @@ const mutableFuturePath = value => {
 };
 
 export class SystemToolService {
-  constructor({ userdata, system, settings, themeRuntime, weather, metrics, machine, music, browser, browserAutomation, registry, i18n, operationHistory=null, automations=null, systemTasks=null }) {
-    Object.assign(this, { userdata, system, settings, themeRuntime, weather, metrics, machine, music, browser, browserAutomation, registry, i18n, operationHistory, automations, systemTasks });
+  constructor({ userdata, system, settings, themeRuntime, weather, metrics, machine, music, browser, browserAutomation, registry, i18n, entities=null, operationHistory=null, automations=null, systemTasks=null }) {
+    Object.assign(this, { userdata, system, settings, themeRuntime, weather, metrics, machine, music, browser, browserAutomation, registry, i18n, entities, operationHistory, automations, systemTasks });
     this.definitions = new Map();
     this.executions = new Map();
     this.approvals = new Map();
@@ -58,6 +58,7 @@ export class SystemToolService {
 
   list() { return [...this.definitions.values()].map(({ execute, parameters, ...metadata }) => ({ ...metadata })); }
   metadata(name) {
+    if(name==='future_entities')return{name:'future_entities',appId:'',operation:'query_entities',label:'System entities',description:'Discover and resolve permitted Future system entities and their available App actions.',risk:'safe'};
     const item=this.definitions.get(name);
     if(item){const {execute,parameters,...metadata}=item;return {...metadata};}
     const appId=String(name||'').replace(/^future_/,'');
@@ -90,6 +91,7 @@ export class SystemToolService {
     }
     return [...grouped.values()].map(item => ({ ...item, risks: [...item.risks] }));
   }
+  entityTypes(appIds=[]){return this.entities?.listTypes({appIds})||[]}
 
   agentTools(owner={}) {
     if(typeof owner==='string')owner={sessionId:owner};
@@ -130,6 +132,25 @@ export class SystemToolService {
         } finally { signal?.removeEventListener('abort',onAbort); }
       },
     }});
+  }
+
+  entityAgentTool(owner={}){
+    if(!this.entities)return null;
+    const allowedAppIds=[...new Set((owner.allowedAppIds||[]).map(String))],available=this.entities.listTypes({appIds:allowedAppIds});
+    if(!allowedAppIds.length)return null;
+    if(!available.length)return null;
+    const object=properties=>Type.Object(properties,{additionalProperties:false}),optionalString=description=>Type.Optional(Type.String({description}));
+    return{
+      name:'future_entities',label:'System entities',executionMode:'parallel',
+      description:`Discover structured Future objects before using App actions. This read-only tool is restricted to the worker's permitted Apps. Available entity types: ${available.map(item=>item.type).join(', ')}. Search returns stable future:// URIs, relationships, properties, and available actions that map to existing App tools.`,
+      parameters:object({operation:Type.String({enum:['search','get','related']}),query:optionalString('Text to search across permitted entities'),types:Type.Optional(Type.Array(Type.String({enum:available.map(item=>item.type)}),{maxItems:12})),uri:optionalString('Stable future:// entity URI for get or related'),relationship:optionalString('Optional relationship predicate to follow'),date:optionalString('Optional YYYY-MM-DD filter'),path:optionalString('Optional Future directory scope for filesystem entities'),includeCompleted:Type.Optional(Type.Boolean()),limit:Type.Optional(Type.Number({minimum:1,maximum:50}))}),
+      execute:async(toolCallId,input)=>{
+        const operation=String(input.operation||''),filters={date:input.date||'',path:input.path||'',includeCompleted:!!input.includeCompleted},limit=Math.max(1,Math.min(50,Number(input.limit)||20));let result;
+        if(operation==='search')result=await this.entities.search({query:input.query||'',types:input.types||[],appIds:allowedAppIds,filters,limit});
+        else{if(!input.uri)throw new Error(`Entity URI is required for ${operation}.`);result=operation==='get'?await this.entities.get(input.uri,{appIds:allowedAppIds}):await this.entities.related(input.uri,{relationship:input.relationship||'',appIds:allowedAppIds,limit})}
+        return toolResult(JSON.stringify(result,null,2),{toolCallId,name:'future_entities',label:'System entities',operation,phase:'completed',result});
+      },
+    };
   }
 
   #setExecution(state) {

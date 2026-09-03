@@ -1,10 +1,10 @@
 import {calculateExpression as calculate,calculatorContentMarkup} from './view.js';
 export default{
   id:'calculator',title:'calculator',icon:'calc',color:'grey',width:520,height:470,singleInstance:true,
-  mount(root,{i18n}){
+  mount(root,{i18n,agentContext}){
     let expression='',history=[],scientific=false;
     const numeric=()=>{try{return calculate(expression.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-'))}catch{return Number(expression)||0}};
-    const render=()=>{root.innerHTML=`<div class="system-app calculator-pro" tabindex="0">${calculatorContentMarkup({i18n,expression,history,scientific})}</div>`;bind();setTimeout(()=>root.querySelector('.calculator-pro')?.focus())};
+    const render=()=>{root.innerHTML=`<div class="system-app calculator-pro" tabindex="0">${calculatorContentMarkup({i18n,expression,history,scientific})}</div>`;bind();agentContext.set({appId:'calculator',label:i18n.t('calculator'),resource:{kind:'calculation',id:'current',name:expression||i18n.t('calculator'),metadata:{expression,mode:scientific?'scientific':'basic',history:history.slice(0,5)}}});setTimeout(()=>root.querySelector('.calculator-pro')?.focus())};
     const apply=key=>{if(key==='C')expression='';else if(key==='⌫')expression=expression.slice(0,-1);else if(key==='='){const source=expression;try{expression=String(calculate(source.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-')));history.unshift({expression:source,result:expression});history=history.slice(0,12)}catch{expression=i18n.t('calculatorError')}}else{if(expression===i18n.t('calculatorError'))expression='';expression+=key}render()};
     const unary=operation=>{const value=numeric(),functions={sin:Math.sin,cos:Math.cos,tan:Math.tan,sqrt:Math.sqrt,square:number=>number**2,inverse:number=>1/number};const result=functions[operation](value);if(Number.isFinite(result)){history.unshift({expression:`${operation}(${value})`,result:String(result)});expression=String(result)}else expression=i18n.t('calculatorError');render()};
     const bind=()=>{root.querySelectorAll('[data-key]').forEach(button=>button.onclick=()=>apply(button.dataset.key));root.querySelectorAll('[data-unary]').forEach(button=>button.onclick=()=>unary(button.dataset.unary));root.querySelectorAll('[data-calc-mode]').forEach(button=>button.onclick=()=>{scientific=button.dataset.calcMode==='scientific';render()});root.querySelectorAll('[data-history]').forEach(button=>button.onclick=()=>{expression=button.dataset.history;render()});root.querySelector('[data-calc-clear-history]').onclick=()=>{history=[];render()}};
