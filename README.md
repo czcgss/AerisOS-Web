@@ -9,7 +9,7 @@
   </p>
 </div>
 
-FutureOS (Chinese name: **伏秋**) is a modular, browser-hosted operating-system environment built around an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86). It combines a desktop shell, window manager, system applications, Linux-backed files and terminals, persistent machine state, and an Agent that can use structured application capabilities.
+FutureOS is a modular, browser-hosted operating-system environment built around an actual 32-bit Alpine Linux guest running locally through [v86](https://github.com/copy/v86). It combines a desktop shell, window manager, system applications, Linux-backed files and terminals, persistent machine state, and an Agent that can use structured application capabilities.
 
 All Future-owned implementation code was written by AI through iterative product direction, review, and manual testing by a human. Third-party projects retain their original authorship and licenses.
 
